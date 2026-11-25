@@ -2,6 +2,20 @@
 
 > เริ่มไฟล์นี้ 2026-11-23 (ก่อนหน้านี้บันทึกอยู่ใน `HANDOFF.md` และ `docs/*.md`)
 
+## v1.0.1 (2026-11-25)
+
+### English
+- **Windows Installer + Portable builds:** GitHub Releases now include both the Windows NSIS Installer (`KaizerHUD-Studio_1.0.1_x64-setup.exe`) and the standalone Portable executable (`kaizerhud-portable.exe`).
+- **Automatic bilingual Release Notes:** Every tagged release now includes an English/Thai download table explaining what each `.exe` and `.jar` file is for alongside generated commit notes.
+- **Streamlined server plugins:** Removed the optional `KaizerMultiBarGeyser` extension; only `KaizerMultiBar` (`2.1.0`) and `KaizerUI` (`1.0.0`) are shipped and maintained.
+- **Clearer audience-separated documentation:** `README.md` is now English-only as a clean entry point, while [docs/USER_GUIDE.md](docs/USER_GUIDE.md), [plugins/README.md](plugins/README.md), and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) separate non-developer setup from developer build instructions (bilingual EN + TH).
+
+### ภาษาไทย
+- **เพิ่มตัวติดตั้ง Windows คู่กับตัวพกพา:** หน้า GitHub Releases จะสร้างให้ทั้งไฟล์ติดตั้ง (`KaizerHUD-Studio_1.0.1_x64-setup.exe`) และไฟล์แบบพกพา (`kaizerhud-portable.exe`)
+- **คำอธิบายไฟล์ดาวน์โหลดอัตโนมัติ (ไทย + อังกฤษ):** หน้า Release จะแนบตารางอธิบายหน้าที่ของแต่ละไฟล์ (`.exe` / `.jar`) ให้อัตโนมัติทุกครั้งที่อัปเดตเวอร์ชัน
+- **ตัด `KaizerMultiBarGeyser` ออก:** เหลือปลั๊กอินที่ต้องใช้งานและดูแลเพียง 2 ตัว คือ `KaizerMultiBar` (`2.1.0`) และ `KaizerUI` (`1.0.0`)
+- **แยกเอกสารตามกลุ่มผู้ใช้งาน:** หน้าแรก `README.md` ปรับเป็นภาษาอังกฤษล้วนสำหรับนำทาง และแยกคู่มือผู้ใช้ทั่วไป ([docs/USER_GUIDE.md](docs/USER_GUIDE.md)), ปลั๊กอิน ([plugins/README.md](plugins/README.md)), และนักพัฒนา ([docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)) ออกจากกันอย่างชัดเจน (ไทย + อังกฤษ)
+
 ## 2026-11-24 (41) — Import Java HUD: รองรับแพ็กชุดใหม่ 3 ตัว (PrimeHUD v2, SeasonsBossbar, HappyHUD-erocavontic-anime)
 - **SeasonsBossbar (`CustomNameplates` boss bar ใหม่ใน `javahud.rs`):**
   - เพิ่ม `Plugin::Nameplates` ตรวจจับ `CustomNameplates/configs/bossbar.yml` (และ `bossbars/*.yml`) ได้ทั้งฝั่ง ItemsAdder และ Oraxen

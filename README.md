@@ -2,7 +2,7 @@
 
 Visual HUD & GUI Studio for **Minecraft Bedrock JSON UI** (via GeyserMC) and **Minecraft Java Edition** — 100% free and open source under **GPL-3.0**.
 
-> **[Download Latest Release](https://github.com/tomzangsad/KaizerHUD-Studio/releases/latest)** (Windows Installer / Portable `.exe` + server plugins `.jar`) · **[User Guide (EN / TH)](docs/USER_GUIDE.md)** · **[Plugin Setup (EN / TH)](plugins/README.md)** · **[Developer & Build Guide](docs/DEVELOPMENT.md)**
+> **[Download Latest Release](https://github.com/tomzangsad/KaizerHUD-Studio/releases/latest)** (Windows Installer / Portable `.exe` + server plugins `.jar`) · **[Wiki (EN / TH)](https://github.com/tomzangsad/KaizerHUD-Studio/wiki)** · **[User Guide (EN / TH)](docs/USER_GUIDE.md)** · **[Plugin Setup (EN / TH)](plugins/README.md)** · **[Developer & Build Guide](docs/DEVELOPMENT.md)**
 
 ---
 

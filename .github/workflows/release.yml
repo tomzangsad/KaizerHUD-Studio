@@ -47,14 +47,19 @@ jobs:
       - name: Build KaizerUI
         working-directory: plugins/KaizerUI
         run: mvn -B clean package
+      - name: Collect plugin jars
+        run: |
+          mkdir -p dist-plugins
+          cp plugins/KaizerMultiBar/target/KaizerMultiBar-*.jar dist-plugins/
+          cp plugins/KaizerMultiBarGeyser/target/KaizerMultiBarGeyser-*.jar dist-plugins/
+          cp plugins/KaizerUI/target/KaizerUI-*.jar dist-plugins/
+          rm -f dist-plugins/original-*.jar
+          ls -la dist-plugins/
       - name: Upload plugin jars artifact
         uses: actions/upload-artifact@v4
         with:
           name: kaizer-plugins
-          path: |
-            plugins/KaizerMultiBar/target/KaizerMultiBar-*.jar
-            plugins/KaizerMultiBarGeyser/target/KaizerMultiBarGeyser-*.jar
-            plugins/KaizerUI/target/KaizerUI-*.jar
+          path: dist-plugins/*.jar
 
   release:
     name: Publish GitHub Release
@@ -71,4 +76,4 @@ jobs:
           generate_release_notes: true
           files: |
             dist/kaizerhud-windows/kaizerhud.exe
-            dist/kaizer-plugins/*.jar
+            dist/kaizer-plugins/**/*.jar

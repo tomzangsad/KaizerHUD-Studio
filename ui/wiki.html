@@ -1,0 +1,3071 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KaizerMC HUD — Wiki & User Guide</title>
+    <meta name="description"
+        content="Complete guide for using KaizerMC HUD Converter tool. Learn all features: Image, Text, Bar, Player Head, XP, Nameplate elements and more." />
+    <link rel="shortcut icon" href="img/favicon.png" type="image/x-icon" />
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box
+        }
+
+        :root {
+            --bg: #0a0e1a;
+            --bg2: #111827;
+            --bg3: #1e293b;
+            --bg4: #334155;
+            --border: #1e293b;
+            --accent: #6c5ce7;
+            --accent2: #a78bfa;
+            --text: #f1f5f9;
+            --text2: #94a3b8;
+            --text3: #64748b;
+            --green: #6ee7b7;
+            --yellow: #fcd34d;
+            --red: #fca5a5;
+            --blue: #7dd3fc;
+            --radius: 12px
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+            overflow-x: hidden
+        }
+
+        a {
+            color: var(--accent2);
+            text-decoration: none;
+            transition: .2s
+        }
+
+        a:hover {
+            color: #c4b5fd
+        }
+
+        ::selection {
+            background: var(--accent);
+            color: #fff
+        }
+
+        .wiki-header {
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+            border-bottom: 1px solid rgba(108, 92, 231, .3);
+            padding: 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(20px)
+        }
+
+        .header-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px
+        }
+
+        .header-brand img {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px
+        }
+
+        .header-brand h1 {
+            font-size: 1.3rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #c4b5fd, #6c5ce7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent
+        }
+
+        .lang-toggle {
+            display: flex;
+            gap: 0;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden
+        }
+
+        .lang-btn {
+            padding: 6px 16px;
+            font-size: .8rem;
+            font-weight: 600;
+            background: transparent;
+            color: var(--text2);
+            border: none;
+            cursor: pointer;
+            transition: .2s
+        }
+
+        .lang-btn.active {
+            background: var(--accent);
+            color: #fff
+        }
+
+        .lang-btn:hover:not(.active) {
+            background: rgba(108, 92, 231, .2)
+        }
+
+        .back-btn {
+            padding: 6px 16px;
+            border-radius: 8px;
+            background: rgba(108, 92, 231, .15);
+            color: var(--accent2);
+            border: 1px solid rgba(108, 92, 231, .3);
+            font-size: .8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: .2s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px
+        }
+
+        .back-btn:hover {
+            background: rgba(108, 92, 231, .3);
+            transform: translateY(-1px)
+        }
+
+        .wiki-layout {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            gap: 0;
+            min-height: calc(100vh - 70px)
+        }
+
+        .wiki-sidebar {
+            width: 260px;
+            flex-shrink: 0;
+            border-right: 1px solid var(--border);
+            padding: 20px 0;
+            position: sticky;
+            top: 70px;
+            height: calc(100vh - 70px);
+            overflow-y: auto
+        }
+
+        .wiki-sidebar::-webkit-scrollbar {
+            width: 4px
+        }
+
+        .wiki-sidebar::-webkit-scrollbar-thumb {
+            background: var(--bg4);
+            border-radius: 4px
+        }
+
+        .sidebar-group {
+            margin-bottom: 20px;
+            padding: 0 16px
+        }
+
+        .sidebar-title {
+            font-size: .65rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text3);
+            margin-bottom: 8px;
+            padding-left: 8px
+        }
+
+        .sidebar-link {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 12px;
+            border-radius: 8px;
+            color: var(--text2);
+            font-size: .82rem;
+            font-weight: 500;
+            transition: .15s;
+            cursor: pointer
+        }
+
+        .sidebar-link:hover {
+            background: rgba(108, 92, 231, .1);
+            color: var(--text)
+        }
+
+        .sidebar-link.active {
+            background: rgba(108, 92, 231, .15);
+            color: var(--accent2);
+            font-weight: 600
+        }
+
+        .sidebar-link .ico {
+            font-size: 1rem;
+            width: 22px;
+            text-align: center;
+            flex-shrink: 0
+        }
+
+        .wiki-content {
+            flex: 1;
+            padding: 32px 40px 80px;
+            max-width: calc(100% - 260px);
+            overflow-x: hidden
+        }
+
+        .section {
+            margin-bottom: 48px;
+            animation: fadeUp .4s ease
+        }
+
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(12px)
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0)
+            }
+        }
+
+        .section-title {
+            font-size: 1.6rem;
+            font-weight: 800;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px
+        }
+
+        .section-title .emoji {
+            font-size: 1.4rem
+        }
+
+        .section-desc {
+            color: var(--text2);
+            font-size: .9rem;
+            margin-bottom: 20px;
+            max-width: 720px
+        }
+
+        .card {
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            margin-bottom: 16px;
+            transition: .2s
+        }
+
+        .card:hover {
+            border-color: rgba(108, 92, 231, .3);
+            box-shadow: 0 4px 20px rgba(108, 92, 231, .08)
+        }
+
+        .card-title {
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
+
+        .card p,
+        .card li {
+            color: var(--text2);
+            font-size: .85rem;
+            line-height: 1.8
+        }
+
+        .card ul {
+            padding-left: 20px;
+            margin-top: 8px
+        }
+
+        .card ul li {
+            margin-bottom: 4px
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: .7rem;
+            font-weight: 700
+        }
+
+        .badge-image {
+            background: rgba(59, 130, 246, .15);
+            color: #7dd3fc;
+            border: 1px solid rgba(59, 130, 246, .3)
+        }
+
+        .badge-text {
+            background: rgba(16, 185, 129, .15);
+            color: #6ee7b7;
+            border: 1px solid rgba(16, 185, 129, .3)
+        }
+
+        .badge-head {
+            background: rgba(168, 85, 247, .15);
+            color: #c4b5fd;
+            border: 1px solid rgba(168, 85, 247, .3)
+        }
+
+        .badge-bar {
+            background: rgba(245, 158, 11, .15);
+            color: #fcd34d;
+            border: 1px solid rgba(245, 158, 11, .3)
+        }
+
+        .badge-xp {
+            background: rgba(236, 72, 153, .15);
+            color: #f9a8d4;
+            border: 1px solid rgba(236, 72, 153, .3)
+        }
+
+        .badge-np {
+            background: rgba(20, 184, 166, .15);
+            color: #5eead4;
+            border: 1px solid rgba(20, 184, 166, .3)
+        }
+
+        .kbd {
+            display: inline-block;
+            padding: 2px 8px;
+            background: var(--bg3);
+            border: 1px solid var(--bg4);
+            border-radius: 4px;
+            font-size: .75rem;
+            font-family: 'Inter', monospace;
+            font-weight: 600;
+            color: var(--text);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, .3)
+        }
+
+        .prop-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-top: 12px;
+            font-size: .82rem
+        }
+
+        .prop-table th {
+            text-align: left;
+            padding: 8px 12px;
+            background: var(--bg3);
+            color: var(--text);
+            font-weight: 600;
+            border-bottom: 1px solid var(--border)
+        }
+
+        .prop-table th:first-child {
+            border-radius: 8px 0 0 0
+        }
+
+        .prop-table th:last-child {
+            border-radius: 0 8px 0 0
+        }
+
+        .prop-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text2)
+        }
+
+        .prop-table tr:last-child td {
+            border-bottom: none
+        }
+
+        .tip {
+            background: rgba(108, 92, 231, .08);
+            border: 1px solid rgba(108, 92, 231, .2);
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin: 12px 0;
+            font-size: .82rem;
+            color: var(--accent2);
+            display: flex;
+            align-items: flex-start;
+            gap: 8px
+        }
+
+        .tip .ico {
+            flex-shrink: 0;
+            font-size: 1rem
+        }
+
+        .warn {
+            background: rgba(245, 158, 11, .08);
+            border: 1px solid rgba(245, 158, 11, .2);
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin: 12px 0;
+            font-size: .82rem;
+            color: var(--yellow)
+        }
+
+        .code-block {
+            background: #0d1117;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            margin: 12px 0;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: .78rem;
+            line-height: 1.7;
+            color: #c9d1d9;
+            white-space: pre
+        }
+
+        .code-block .comment {
+            color: #8b949e
+        }
+
+        .code-block .key {
+            color: #7ee787
+        }
+
+        .code-block .value {
+            color: #79c0ff
+        }
+
+        .code-block .bool {
+            color: #ff7b72
+        }
+
+        .code-block .number {
+            color: #79c0ff
+        }
+
+        .code-block .string {
+            color: #a5d6ff
+        }
+
+        .code-block .property {
+            color: #7ee787
+        }
+
+        .faq-q {
+            font-size: 1.05rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            color: var(--text)
+        }
+
+        .faq-q .q-icon {
+            color: var(--accent2);
+            font-weight: 900;
+            flex-shrink: 0
+        }
+
+        .step-list {
+            padding-left: 0;
+            list-style: none;
+            margin-top: 8px
+        }
+
+        .step-list li {
+            padding: 6px 0 6px 24px;
+            position: relative;
+            color: var(--text2);
+            font-size: .85rem
+        }
+
+        .step-list li::before {
+            content: attr(data-step);
+            position: absolute;
+            left: 0;
+            color: var(--accent2);
+            font-weight: 700;
+            font-size: .8rem
+        }
+
+        .warn-red {
+            background: rgba(239, 68, 68, .08);
+            border: 1px solid rgba(239, 68, 68, .2);
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin: 12px 0;
+            font-size: .82rem;
+            color: var(--red);
+            display: flex;
+            align-items: flex-start;
+            gap: 8px
+        }
+
+        body:not(.lang-th) .lang-th {
+            display: none
+        }
+
+        body.lang-th .lang-en {
+            display: none
+        }
+
+        .hero-banner {
+            background: linear-gradient(135deg, rgba(108, 92, 231, .12) 0%, rgba(167, 139, 250, .08) 100%);
+            border: 1px solid rgba(108, 92, 231, .2);
+            border-radius: 16px;
+            padding: 32px;
+            margin-bottom: 32px;
+            text-align: center
+        }
+
+        .hero-banner h2 {
+            font-size: 1.8rem;
+            font-weight: 900;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #c4b5fd, #6c5ce7, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent
+        }
+
+        .hero-banner p {
+            color: var(--text2);
+            font-size: .95rem;
+            max-width: 600px;
+            margin: 0 auto
+        }
+
+        .tutorial-card {
+            margin-bottom: 24px;
+        }
+
+        .tutorial-gif {
+            margin: 16px 0;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid var(--border);
+            background: var(--bg3);
+        }
+
+        .tutorial-gif img {
+            width: 100%;
+            max-width: 100%;
+            height: auto;
+            display: block;
+            image-rendering: auto;
+        }
+
+        .tutorial-card .card-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .tutorial-card .badge {
+            min-width: 28px;
+            height: 28px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: .85rem;
+        }
+
+        .fullscreen-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            width: 36px;
+            height: 36px;
+            background: rgba(0, 0, 0, .7);
+            border: 1px solid rgba(255, 255, 255, .2);
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: .2s;
+            z-index: 10;
+        }
+
+        .fullscreen-btn:hover {
+            background: rgba(108, 92, 231, .9);
+            border-color: var(--accent);
+            transform: scale(1.1);
+        }
+
+        .fullscreen-btn svg {
+            width: 20px;
+            height: 20px;
+            fill: #fff;
+        }
+
+        .tutorial-gif {
+            margin: 16px 0;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid var(--border);
+            background: var(--bg3);
+            position: relative;
+        }
+
+        .gif-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, .95);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .gif-overlay.active {
+            display: flex;
+        }
+
+        .gif-overlay img {
+            max-width: 95%;
+            max-height: 95%;
+            object-fit: contain;
+            border-radius: 12px;
+        }
+
+        .gif-overlay .close-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 44px;
+            height: 44px;
+            background: rgba(255, 255, 255, .1);
+            border: 1px solid rgba(255, 255, 255, .2);
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            color: #fff;
+            transition: .2s;
+        }
+
+        .gif-overlay .close-btn:hover {
+            background: rgba(239, 68, 68, .8);
+        }
+
+        @media(max-width:768px) {
+            .wiki-sidebar {
+                display: none
+            }
+
+            .wiki-content {
+                max-width: 100%;
+                padding: 20px 16px
+            }
+
+            .header-inner {
+                padding: 12px 16px
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header class="wiki-header">
+        <div class="header-inner">
+            <div class="header-brand">
+                <img src="img/favicon.png" alt="Logo" onerror="this.style.display='none'" />
+                <h1>KaizerMC HUD Wiki</h1>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center">
+                <div class="lang-toggle">
+                    <button class="lang-btn active" onclick="setLang('en')">EN</button>
+                    <button class="lang-btn" onclick="setLang('th')">TH</button>
+                </div>
+                <a href="index.html" class="back-btn">← Editor</a>
+            </div>
+        </div>
+    </header>
+    <div class="wiki-layout">
+        <nav class="wiki-sidebar" id="sidebar"></nav>
+        <main class="wiki-content" id="wiki-content">
+
+            <!-- HERO -->
+            <div class="hero-banner">
+                <h2 class="lang-en">KaizerMC HUD Converter — Complete Guide</h2>
+                <h2 class="lang-th">KaizerMC HUD Converter — คู่มือการใช้งานฉบับสมบูรณ์</h2>
+                <p class="lang-en">Learn how to use every feature of the visual HUD editor for Minecraft Bedrock.
+                    Design, preview, and export your custom HUD as a resource pack.</p>
+                <p class="lang-th">เรียนรู้การใช้งานทุกฟีเจอร์ของตัวแก้ไข HUD แบบ Visual สำหรับ Minecraft Bedrock ออกแบบ
+                    ดูตัวอย่าง และ Export HUD ของคุณเป็น Resource Pack</p>
+            </div>
+
+            <div class="section" id="overview">
+                <h2 class="section-title"><span class="emoji">📖</span><span class="lang-en">Overview</span><span
+                        class="lang-th">ภาพรวม</span></h2>
+                <div class="card">
+                    <div class="lang-en">
+                        <p><strong>KaizerMC HUD Converter</strong> is a visual drag-and-drop editor that generates
+                            Minecraft Bedrock JSON UI code for custom HUD overlays. It outputs a ready-to-use
+                            <code>.mcpack</code> resource pack + plugin config file inside an <code>output.zip</code>.
+                        </p>
+                        <p style="margin-top:8px"><strong>What you can do:</strong></p>
+                        <ul>
+                            <li>Add background images, scoreboard texts, status bars, player heads, XP labels, and
+                                nameplates</li>
+                            <li>Position elements with anchors, offsets, and a 3×3 grid reference</li>
+                            <li>Set visibility conditions via PlaceholderAPI (PAPI)</li>
+                            <li>Upload bar textures and auto-slice them into 16 fill steps</li>
+                            <li>Preview your HUD in real-time at Bedrock screen resolution (480×270)</li>
+                            <li>Export everything as a single ZIP containing .mcpack + KaizerMultiBar config</li>
+                        </ul>
+                    </div>
+                    <div class="lang-th">
+                        <p><strong>KaizerMC HUD Converter</strong> คือตัวแก้ไข HUD แบบลากวาง (Drag &amp; Drop)
+                            ที่สร้างโค้ด JSON UI ของ Minecraft Bedrock สำหรับ HUD ที่กำหนดเอง ระบบจะสร้าง Resource Pack
+                            <code>.mcpack</code> + ไฟล์ Config ของปลั๊กอินพร้อมใช้งานใน <code>output.zip</code>
+                        </p>
+                        <p style="margin-top:8px"><strong>สิ่งที่คุณทำได้:</strong></p>
+                        <ul>
+                            <li>เพิ่มรูปภาพพื้นหลัง, ข้อความ Scoreboard, แถบสถานะ (Bar), หัวผู้เล่น, ป้ายเลเวล XP และ
+                                Nameplate</li>
+                            <li>จัดตำแหน่ง Element ด้วย Anchor, Offset และตาราง 3×3</li>
+                            <li>ตั้งเงื่อนไขการแสดงผลผ่าน PlaceholderAPI (PAPI)</li>
+                            <li>อัปโหลด Texture ของ Bar และตัดอัตโนมัติเป็น 16 ขั้นตอน</li>
+                            <li>ดูตัวอย่าง HUD แบบ Real-time ที่ความละเอียด Bedrock (480×270)</li>
+                            <li>Export ทุกอย่างเป็น ZIP เดียว บรรจุ .mcpack + KaizerMultiBar config</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 16px;">
+                    <div class="card-title"><span class="emoji">🖱️</span><span class="lang-en">Manual Positioning
+                            Required</span><span class="lang-th">ต้องจัดวางตำแหน่งด้วยตัวเอง</span></div>
+                    <div class="lang-en">
+                        <p><strong>Important:</strong> Just like using design tools (e.g., Photoshop or Canva), <strong
+                                style="color:var(--primary)">you must manually drag, drop, and resize elements</strong>
+                            on the preview screen to build your HUD. The editor gives you complete freedom, so you have
+                            to arrange the layout exactly how you want it to appear in-game.</p>
+                    </div>
+                    <div class="lang-th">
+                        <p><strong>ข้อควรทราบ:</strong> การใช้งานเครื่องมือนี้จะเหมือนกับโปรแกรมออกแบบ (เช่น Photoshop
+                            หรือ Canva) <strong style="color:var(--primary)">คุณต้องคลิกลาก จัดวางตำแหน่ง และปรับขนาด
+                                Element ต่างๆ ด้วยตัวเองทั้งหมด</strong> บนหน้าจอ Preview เครื่องมือนี้ให้อิสระเต็มที่
+                            คุณจึงต้องเป็นคนออกแบบและจัดหน้าตา HUD ให้ออกมาตามที่ต้องการ</p>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 16px;">
+                    <div class="card-title"><span class="emoji">🛠️</span><span class="lang-en">How it Works (Text-based
+                            Images)</span><span class="lang-th">หลักการทำงาน (ข้อความรูปภาพ)</span></div>
+                    <img src="img/customnameplate.png" alt="HUD Example"
+                        style="max-width: 100%; border-radius: 8px; margin-bottom: 12px; border: 1px solid var(--border);"
+                        onerror="this.style.display='none'">
+
+                    <div class="lang-en">
+                        <p>The plugin takes advantage of the ability to create <strong>text-based images</strong>,
+                            including bossbar and actionbar displays. You can design basic HUDs directly with this
+                            plugin.</p>
+                        <div class="tip"><span class="ico">💡</span> For more advanced HUD features and complex logic,
+                            we recommend using <strong>BetterHud</strong> for additional customization.</div>
+                    </div>
+
+                    <div class="lang-th">
+                        <p>ปลั๊กอินนี้ใช้เทคนิคการสร้าง <strong>ข้อความรูปภาพ (Text-based images)</strong>
+                            โดยแสดงผลผ่านระบบ Bossbar และ Actionbar เป็นหลัก คุณสามารถใช้เครื่องมือนี้ช่วยออกแบบและโค้ด
+                            HUD พื้นฐานได้อย่างง่ายดาย</p>
+                        <div class="tip"><span class="ico">💡</span> หากคุณต้องการทำ HUD
+                            ที่มีความซับซ้อนสูงหรือมีลูกเล่นขั้นแอดวานซ์ เราขอแนะนำให้ใช้งานปลั๊กอิน
+                            <strong>BetterHud</strong> สำหรับการปรับแต่งในระดับที่สูงกว่าครับ
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" id="interface">
+                <h2 class="section-title"><span class="emoji">🖥️</span><span class="lang-en">Interface
+                        Layout</span><span class="lang-th">โครงสร้างหน้าจอ</span></h2>
+                <div class="card">
+                    <div class="lang-en">
+                        <p>The editor has <strong>3 main panels</strong>:</p>
+                        <table class="prop-table">
+                            <tr>
+                                <th>Panel</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td><strong>Left — Elements</strong></td>
+                                <td>Lists all elements you've added. Click to select, use ↑↓ buttons to reorder layers.
+                                    Also contains Namespace input, Widgets upload, Save/Load buttons.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Center — Preview</strong></td>
+                                <td>Visual preview of the Bedrock HUD (480×270). Shows elements at their anchored
+                                    positions. Add-element buttons and zoom controls are in the toolbar above.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Right — Properties</strong></td>
+                                <td>Shows editable properties for the selected element: name, position, anchor, offset,
+                                    size, and type-specific settings.</td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="lang-th">
+                        <p>ตัวแก้ไขมี <strong>3 แผงหลัก</strong>:</p>
+                        <table class="prop-table">
+                            <tr>
+                                <th>แผง</th>
+                                <th>รายละเอียด</th>
+                            </tr>
+                            <tr>
+                                <td><strong>ซ้าย — Elements</strong></td>
+                                <td>แสดงรายการ Element ทั้งหมดที่เพิ่มเข้ามา คลิกเพื่อเลือก ใช้ปุ่ม ↑↓
+                                    เลื่อนลำดับเลเยอร์</td>
+                            </tr>
+                            <tr>
+                                <td><strong>กลาง — Preview</strong></td>
+                                <td>ดูตัวอย่าง HUD ของ Bedrock (480×270) แสดง Element ที่ตำแหน่ง Anchor</td>
+                            </tr>
+                            <tr>
+                                <td><strong>ขวา — Properties</strong></td>
+                                <td>แสดงคุณสมบัติที่แก้ไขได้ของ Element ที่เลือก</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" id="el-groups">
+                <h2 class="section-title"><span class="emoji">📁</span><span class="lang-en">Element
+                        Groups</span><span class="lang-th">Element Groups (ระบบจัดกลุ่ม)</span></h2>
+                <div class="card">
+                    <div class="lang-en">
+                        <p>Keep your HUD project organized by sorting elements into <strong>Groups</strong>. This
+                            feature is intended for editor organization and management only.</p>
+                        <ul>
+                            <li><strong>Dropdown Menu:</strong> Located at the top of the Elements list. Click it to
+                                switch between different groups.</li>
+                            <li><strong>Add Group (+):</strong> Click the plus button to create a new group.</li>
+                            <li><strong>Delete Group (✕):</strong> Removes the current group. All elements inside will
+                                be moved back to the default "Main" group.</li>
+                            <li><strong>Assigning Elements:</strong> To move an element into a group, select it and
+                                change the <strong>General -> Group</strong> property in the right panel.</li>
+                        </ul>
+                    </div>
+                    <div class="lang-th">
+                        <p>จัดระเบียบโปรเจค HUD ของคุณให้เป็นหมวดหมู่ด้วย <strong>ระบบ Group</strong>
+                            (มีไว้เพื่อช่วยจัดระเบียบในหน้าต่างแก้ไขเท่านั้น ไม่มีผลต่อไฟล์ Export)</p>
+                        <ul>
+                            <li><strong>กล่องเลือก Group:</strong> อยู่ด้านบนสุดของแผงรายชื่อ Elements
+                                ใช้สำหรับสลับดูชิ้นส่วนใน Group ต่างๆ</li>
+                            <li><strong>ปุ่ม + (สร้างกลุ่ม):</strong> กดเพื่อตั้งชื่อและสร้าง Group ใหม่</li>
+                            <li><strong>ปุ่ม ✕ (ลบกลุ่ม):</strong> ลบ Group ปัจจุบันทิ้ง (ชิ้นส่วนด้านในจะไม่หาย
+                                แต่จะย้ายกลับไปหน้ารวม "Main" อัตโนมัติ)</li>
+                            <li><strong>วิธีย้ายชิ้นส่วน:</strong> คลิกเลือกชิ้นส่วนที่ต้องการ แล้วไปเปลี่ยนชื่อ Group
+                                ในแผงขวามือหัวข้อ <strong>General -> Group</strong></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" id="el-image">
+                <h2 class="section-title"><span class="emoji">🖼</span><span class="lang-en">Image Element</span><span
+                        class="lang-th">Image Element (รูปภาพ)</span></h2>
+                <div class="card">
+                    <div class="card-title"><span class="badge badge-image">Image</span></div>
+                    <div class="lang-en">
+                        <p>Background images or decorative textures for your HUD. Click the <strong>"Image"</strong>
+                            button in the toolbar and select a PNG/JPEG/WebP file.</p>
+                        <p style="margin-top:8px;font-size:0.9rem;color:var(--text2)">
+                            <strong>What does this do?</strong> This element is used to add static graphics to your
+                            screen. You can use it to create backgrounds for your UI, custom borders, crosshairs,
+                            decorative icons, or any picture that doesn't change based on game stats.
+                        </p>
+                        <table class="prop-table">
+                            <tr>
+                                <th>Property</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td>Change Image</td>
+                                <td>Replace the current texture with a new file</td>
+                            </tr>
+                            <tr>
+                                <td>Texture Path</td>
+                                <td>Path inside the resource pack (auto-filled as
+                                    <code>textures/{namespace}/{filename}</code>)
+                                </td>
+                            </tr>
+                        </table>
+                        <div class="tip"><span class="ico">💡</span> The image will be bundled into the exported .mcpack
+                            at the specified texture path.</div>
+                        <div class="tip"><span class="ico">👁️</span> <strong>Visibility:</strong> Supports show/hide
+                            via PAPI conditions.</div>
+                    </div>
+                    <div class="lang-th">
+                        <p>รูปภาพพื้นหลังหรือ Texture ตกแต่งสำหรับ HUD คลิกปุ่ม <strong>"Image"</strong>
+                            ในแถบเครื่องมือแล้วเลือกไฟล์ PNG/JPEG/WebP</p>
+                        <p style="margin-top:8px;font-size:0.9rem;color:var(--text2)">
+                            <strong>ฟีเจอร์นี้คืออะไร?</strong> ชิ้นส่วนนี้ใช้สำหรับเพิ่มกราฟิกภาพนิ่งลงบนหน้าจอ
+                            คุณสามารถใช้สร้างพื้นหลังเมนู กรอบ UI สวยๆ เป้าเล็ง (Crosshair) ไอคอนตกแต่ง หรือรูปภาพใดๆ
+                            ก็ตามที่ไม่ได้มีการเปลี่ยนแปลงค่าตามสถานะในเกม
+                        </p>
+                        <table class="prop-table">
+                            <tr>
+                                <th>คุณสมบัติ</th>
+                                <th>รายละเอียด</th>
+                            </tr>
+                            <tr>
+                                <td>Change Image</td>
+                                <td>เปลี่ยน Texture ปัจจุบันเป็นไฟล์ใหม่</td>
+                            </tr>
+                            <tr>
+                                <td>Texture Path</td>
+                                <td>ที่อยู่ไฟล์ใน Resource Pack (ระบบใส่อัตโนมัติ)</td>
+                            </tr>
+                        </table>
+                        <div class="tip"><span class="ico">💡</span> รูปภาพจะถูกรวมเข้าไปใน .mcpack ที่ Export
+                            ตามเส้นทาง Texture ที่กำหนด</div>
+                        <div class="tip"><span class="ico">👁️</span> <strong>Visibility:</strong>
+                            รองรับการซ่อน/แสดงด้วยเงื่อนไข PAPI</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" id="el-text">
+                <h2 class="section-title"><span class="emoji">📝</span><span class="lang-en">Scoreboard Text
+                        Element</span><span class="lang-th">Scoreboard Text (ข้อความ)</span></h2>
+                <div class="card">
+                    <div class="card-title"><span class="badge badge-text">Text</span></div>
+                    <div class="lang-en">
+                        <p>Displays dynamic text from PlaceholderAPI. Click <strong>"Text"</strong> in the toolbar.</p>
+                        <p style="margin-top:8px;font-size:0.9rem;color:var(--text2)">
+                            <strong>What does this do?</strong> This is your main tool for showing live server data to
+                            the player. Use it to display things like the player's name, their exact health numbers
+                            (e.g., "20/20"), amount of money, server ping, or current biome by typing in the
+                            corresponding PlaceholderAPI variables.
+                        </p>
+                        <table class="prop-table">
+                            <tr>
+                                <th>Property</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td>Index</td>
+                                <td>Collection index (0–15). Each text element needs a unique index.</td>
+                            </tr>
+                            <tr>
+                                <td>PAPI</td>
+                                <td>PlaceholderAPI placeholder, e.g. <code>%player_health%</code></td>
+                            </tr>
+                            <tr>
+                                <td>Pad Length</td>
+                                <td>Text padding length (default 30). Controls display width.</td>
+                            </tr>
+                            <tr>
+                                <td>Font Size</td>
+                                <td>small / normal / large</td>
+                            </tr>
+                            <tr>
+                                <td>Color (R, G, B)</td>
+                                <td>Text color as float values 0.0–1.0</td>
+                            </tr>
+                            <tr>
+                                <td>Shadow</td>
+                                <td>Enable text shadow for better readability</td>
+                            </tr>
+                            <tr>
+                                <td>Text Anchor</td>
+                                <td>Text alignment within its container (separate from position anchor)</td>
+                            </tr>
+                        </table>
+                        <div class="tip"><span class="ico">💡</span> PAPI placeholder is <strong>required</strong> —
+                            export will fail validation without it.</div>
+                        <div class="tip"><span class="ico">👁️</span> <strong>Visibility:</strong> Supports show/hide
+                            via PAPI conditions.</div>
+                    </div>
+                    <div class="lang-th">
+                        <p>แสดงข้อความแบบ Dynamic จาก PlaceholderAPI คลิก <strong>"Text"</strong> ในแถบเครื่องมือ</p>
+                        <p style="margin-top:8px;font-size:0.9rem;color:var(--text2)">
+                            <strong>ฟีเจอร์นี้คืออะไร?</strong> นี่คือเครื่องมือหลักสำหรับดึงข้อมูลแบบ Real-time
+                            จากเซิร์ฟเวอร์มาโชว์ให้ผู้เล่นเห็น ใช้แสดงชื่อผู้เล่น ตัวเลขเลือดที่แม่นยำ (เช่น "20/20")
+                            จำนวนเงิน ปิง (Ping) ของเซิร์ฟเวอร์ หรือชื่อไบโอม โดยการพิมพ์ตัวแปร PlaceholderAPI ลงไป
+                        </p>
+                        <table class="prop-table">
+                            <tr>
+                                <th>คุณสมบัติ</th>
+                                <th>รายละเอียด</th>
+                            </tr>
+                            <tr>
+                                <td>Index</td>
+                                <td>เลข Collection Index (0–15) แต่ละ Text ต้องมี Index ไม่ซ้ำกัน</td>
+                            </tr>
+                            <tr>
+                                <td>PAPI</td>
+                                <td>Placeholder ของ PlaceholderAPI เช่น <code>%player_health%</code></td>
+                            </tr>
+                            <tr>
+                                <td>Pad Length</td>
+                                <td>ความยาว Padding (ค่าเริ่มต้น 30)</td>
+                            </tr>
+                            <tr>
+                                <td>Font Size</td>
+                                <td>small / normal / large</td>
+                            </tr>
+                            <tr>
+                                <td>Color (R, G, B)</td>
+                                <td>สีตัวอักษร ค่า float 0.0–1.0</td>
+                            </tr>
+                            <tr>
+                                <td>Shadow</td>
+                                <td>เปิดเงาข้อความ</td>
+                            </tr>
+                            <tr>
+                                <td>Text Anchor</td>
+                                <td>การจัดตำแหน่งข้อความภายใน Container</td>
+                            </tr>
+                        </table>
+                        <div class="tip"><span class="ico">💡</span> PAPI Placeholder <strong>จำเป็นต้องกรอก</strong> —
+                            Export จะ Validate ไม่ผ่านถ้าไม่กรอก</div>
+                        <div class="tip"><span class="ico">👁️</span> <strong>Visibility:</strong>
+                            รองรับการซ่อน/แสดงด้วยเงื่อนไข PAPI</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" id="el-head">
+                <h2 class="section-title"><span class="emoji">👤</span><span class="lang-en">Player Head
+                        (Paperdoll)</span><span class="lang-th">Player Head (หัวผู้เล่น)</span></h2>
+                <div class="card">
+                    <div class="card-title"><span class="badge badge-head">Head</span></div>
+                    <div class="lang-en">
+                        <p>Displays the player's 3D paper doll model. Click <strong>"Head"</strong> in the toolbar.</p>
+                        <p style="margin-top:8px;font-size:0.9rem;color:var(--text2)">
+                            <strong>What does this do?</strong> This renders a live, animated 3D model of the player's
+                            skin directly on the HUD (often called a "Paperdoll"). It automatically updates to show the
+                            armor the player is wearing, items they are holding, and moves as the player animates.
+                        </p>
+                        <table class="prop-table">
+                            <tr>
+                                <th>Property</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td>Doll Size (W, H)</td>
+                                <td>Scale of the inner 3D model. Default: 75 × 205</td>
+                            </tr>
+                            <tr>
+                                <td>Doll Offset (X, Y)</td>
+                                <td>Position offset of the 3D model within the container. Default: 1, 18</td>
+                            </tr>
+                        </table>
+                        <div class="tip"><span class="ico">💡</span> "Size" in Position controls the clipping box. "Doll
+                            Size" controls how zoomed-in the model is.</div>
+                        <div class="tip"><span class="ico">👁️</span> <strong>Visibility:</strong> Supports show/hide
+                            via PAPI conditions.</div>
+                    </div>
+                    <div class="lang-th">
+                        <p>แสดงโมเดล 3D Paper Doll ของผู้เล่น คลิก <strong>"Head"</strong> ในแถบเครื่องมือ</p>
+                        <p style="margin-top:8px;font-size:0.9rem;color:var(--text2)">
+                            <strong>ฟีเจอร์นี้คืออะไร?</strong> ฟีเจอร์นี้จะเรนเดอร์โมเดล 3D สกินของผู้เล่นแบบขยับได้
+                            (มักเรียกว่า "Paperdoll") ขึ้นมาติดบนหน้าจอ HUD ทันที
+                            มันจะอัปเดตอัตโนมัติตามชุดเกราะที่ผู้เล่นใส่ ไอเทมที่ถืออยู่ และขยับท่าทางตามตัวละครจริง
+                        </p>
+                        <table class="prop-table">
+                            <tr>
+                                <th>คุณสมบัติ</th>
+                                <th>รายละเอียด</th>
+                            </tr>
+                            <tr>
+                                <td>Doll Size (W, H)</td>
+                                <td>ขนาด (Scale) ของโมเดล 3D ค่าเริ่มต้น: 75 × 205</td>
+                            </tr>
+                            <tr>
+                                <td>Doll Offset (X, Y)</td>
+                                <td>ตำแหน่ง Offset ของโมเดล 3D ค่าเริ่มต้น: 1, 18</td>
+                            </tr>
+                        </table>
+                        <div class="tip"><span class="ico">💡</span> "Size" ใน Position ควบคุมกรอบตัด ส่วน "Doll Size"
+                            ควบคุมระดับซูมของโมเดล</div>
+                        <div class="tip"><span class="ico">👁️</span> <strong>Visibility:</strong>
+                            รองรับการซ่อน/แสดงด้วยเงื่อนไข PAPI</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" id="el-bar">
+                <h2 class="section-title"><span class="emoji">▬</span><span class="lang-en">Status Bar
+                        Element</span><span class="lang-th">Status Bar (แถบสถานะ)</span></h2>
+                <div class="card">
+                    <div class="card-title"><span class="badge badge-bar">Bar</span></div>
+                    <div class="lang-en">
+                        <p>Displays a fill-based status bar (HP, food, armor, air, XP). Click <strong>"Bar"</strong> and
+                            upload a texture PNG.</p>
+                        <p style="margin-top:8px;font-size:0.9rem;color:var(--text2)">
+                            <strong>What does this do?</strong> This element takes a single image and automatically
+                            slices it into a progress bar that fills up or depletes based on player stats. It's perfect
+                            for creating custom visual Health bars, Mana bars, Stamina gauges, or custom class energy
+                            meters that react to PAPI values.
+                        </p>
+                        <table class="prop-table">
+                            <tr>
+                                <th>Property</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td>Bar Type</td>
+                                <td>HP, Food, Armor, Air, EXP, or Custom</td>
+                            </tr>
+                            <tr>
+                                <td>Tag Prefix</td>
+                                <td>Auto-filled 1–2 char tag. Editable only for Custom.</td>
+                            </tr>
+                            <tr>
+                                <td>PAPI / Max</td>
+                                <td>PlaceholderAPI value and maximum (Custom bars only)</td>
+                            </tr>
+                            <tr>
+                                <td>Texture Path</td>
+                                <td>Where sliced textures are stored in the pack</td>
+                            </tr>
+                            <tr>
+                                <td>Deplete Direction</td>
+                                <td>Left→Right, Right→Left, Center Out, Top→Bottom, Bottom→Top</td>
+                            </tr>
+                            <tr>
+                                <td>Size (16)</td>
+                                <td>Size at full fill (step 16/16)</td>
+                            </tr>
+                            <tr>
+                                <td>Size (1)</td>
+                                <td>Size at minimum fill (step 1/16)</td>
+                            </tr>
+                            <tr>
+                                <td>Preview Slider</td>
+                                <td>See examples of how Bar works (1–16).</td>
+                            </tr>
+                            <tr>
+                                <td>Upload Texture</td>
+                                <td>Auto-slices into 16 progressive fill images</td>
+                            </tr>
+                        </table>
+                        <p style="margin-top:12px"><strong>Bar Effects (HP &amp; Food):</strong> HP: Freezing,
+                            Absorption, Health Boost, Regeneration, Wither, Poison | Food: Hunger, Saturation</p>
+                        <div class="warn">⚠️ Each Bar Type can only be used once. Duplicates will fail validation.</div>
+                        <div class="tip"><span class="ico">👁️</span> <strong>Visibility:</strong> Supports show/hide
+                            via PAPI conditions.</div>
+                    </div>
+                    <div class="lang-th">
+                        <p>แสดงแถบสถานะแบบเติม (HP, อาหาร, เกราะ, อากาศ, XP) คลิก <strong>"Bar"</strong> แล้วอัปโหลด
+                            Texture PNG</p>
+                        <p style="margin-top:8px;font-size:0.9rem;color:var(--text2)">
+                            <strong>ฟีเจอร์นี้คืออะไร?</strong> เครื่องมือนี้จะนำรูปภาพยาวๆ 1
+                            รูปไปคำนวณและตัดแบ่งเป็นหลอดสถานะที่จะเพิ่มหรือลดตามค่าของผู้เล่น มันตอบโจทย์มากสำหรับสร้าง
+                            หลอดเลือด (HP) หลอดมานา (Mana) หลอดความเหนื่อย (Stamina) หรือเกจพลังพิเศษต่างๆ
+                            ที่ผูกค่าความยาวไว้กับตัวแปร PAPI
+                        </p>
+                        <table class="prop-table">
+                            <tr>
+                                <th>คุณสมบัติ</th>
+                                <th>รายละเอียด</th>
+                            </tr>
+                            <tr>
+                                <td>Bar Type</td>
+                                <td>HP, Food, Armor, Air, EXP หรือ Custom</td>
+                            </tr>
+                            <tr>
+                                <td>Tag Prefix</td>
+                                <td>ตัวอักษร 1–2 ตัว แก้ไขได้เฉพาะ Custom</td>
+                            </tr>
+                            <tr>
+                                <td>PAPI / Max</td>
+                                <td>ค่า PlaceholderAPI และค่าสูงสุด (เฉพาะ Custom)</td>
+                            </tr>
+                            <tr>
+                                <td>Deplete Dir.</td>
+                                <td>ซ้าย→ขวา, ขวา→ซ้าย, กลางออก, บน→ล่าง, ล่าง→บน</td>
+                            </tr>
+                            <tr>
+                                <td>Size (16/1)</td>
+                                <td>ขนาดเมื่อเต็ม / ขนาดเมื่อน้อยสุด</td>
+                            </tr>
+                            <tr>
+                                <td>Preview Slider</td>
+                                <td>ดูตัวอย่าง การทำงานของ Bar (1–16)</td>
+                            </tr>
+                            <tr>
+                                <td>Upload Texture</td>
+                                <td>ตัดอัตโนมัติเป็น 16 รูปแบบเติมต่อเนื่อง</td>
+                            </tr>
+                        </table>
+                        <p style="margin-top:12px"><strong>Bar Effects:</strong> HP: Freezing, Absorption, Health Boost,
+                            Regeneration, Wither, Poison | Food: Hunger, Saturation</p>
+                        <div class="warn">⚠️ แต่ละ Bar Type ใช้ได้ครั้งเดียว หากซ้ำกันจะ Validate ไม่ผ่าน</div>
+                        <div class="tip"><span class="ico">👁️</span> <strong>Visibility:</strong>
+                            รองรับการซ่อน/แสดงด้วยเงื่อนไข PAPI</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" id="el-xp">
+                <h2 class="section-title"><span class="emoji">❇</span><span class="lang-en">XP Level Label</span><span
+                        class="lang-th">XP Level Label (ป้ายเลเวล XP)</span></h2>
+                <div class="card">
+                    <div class="card-title"><span class="badge badge-xp">XP</span></div>
+                    <div class="lang-en">
+                        <p>Displays the vanilla XP level number. Click <strong>"XP"</strong>. Properties: Font Size
+                            (small/normal/large), Color (RGB float 0–1, default green 0.5,1.0,0.1), Shadow (default on).
+                        </p>
+                        <p style="margin-top:8px;font-size:0.9rem;color:var(--text2)">
+                            <strong>What does this do?</strong> This creates a highly specialized number label that
+                            precisely mimics the look of the classic Minecraft XP level (with its signature green color
+                            and text shadow). You use this when you want to relocate the exact Vanilla XP number to a
+                            custom position.
+                        </p>
+                        <div class="tip"><span class="ico">👁️</span> <strong>Visibility:</strong> Supports show/hide
+                            via PAPI conditions.</div>
+                    </div>
+                    <div class="lang-th">
+                        <p>แสดงตัวเลขเลเวล XP ของ Vanilla คลิก <strong>"XP"</strong> คุณสมบัติ: Font Size, Color (RGB
+                            float, เริ่มต้นสีเขียว), Shadow (เริ่มต้นเปิด)</p>
+                        <p style="margin-top:8px;font-size:0.9rem;color:var(--text2)">
+                            <strong>ฟีเจอร์นี้คืออะไร?</strong> เครื่องมือนี้จะสร้างตัวเลขพิเศษที่จำลองรูปลักษณ์ของ
+                            เลเวล XP แบบดั้งเดิมของ Minecraft (ที่มีเอกลักษณ์เป็นสีเขียวและมีเงา) ขึ้นมา
+                            คุณจะใช้ชิ้นส่วนนี้ก็ต่อเมื่อต้องการย้ายค่าตัวเลขเลเวล Vanilla
+                            ไปไว้ในตำแหน่งอื่นที่คุณต้องการ
+                        </p>
+                        <div class="tip"><span class="ico">👁️</span> <strong>Visibility:</strong>
+                            รองรับการซ่อน/แสดงด้วยเงื่อนไข PAPI</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" id="el-nameplate">
+                <h2 class="section-title"><span class="emoji">⬜</span><span class="lang-en">Nameplate
+                        Element</span><span class="lang-th">Nameplate (ป้ายชื่อ)</span></h2>
+                <div class="card">
+                    <div class="card-title"><span class="badge badge-np">Nameplate</span></div>
+                    <img src="img/customnameplate.png" alt="Nameplate Example"
+                        style="max-width: 100%; border-radius: 8px; margin-bottom: 16px; border: 1px solid var(--border);"
+                        onerror="this.style.display='none'">
+                    <div class="lang-en">
+                        <p>A text slot fixed to <strong>top-right</strong>, designed for right-side HUD info (party
+                            members, stats). Has same text properties as Text but position is <strong>locked to
+                                top_right</strong>.</p>
+                        <p style="margin-top:8px;font-size:0.9rem;color:var(--text2)">
+                            <strong>What does this do?</strong> This element automatically draws a semi-transparent
+                            black background behind its text, and the background gracefully resizes depending on how
+                            long the text is. It is typically used for creating dynamic lists or floating labels, just
+                            like the default player name tag boxes.
+                        </p>
+                        <div class="tip"><span class="ico">💡</span> Each nameplate auto-increments its collection
+                            index. Use for multiple right-side info lines.</div>
+                        <div class="tip"><span class="ico">👁️</span> <strong>Visibility:</strong> Supports show/hide
+                            via PAPI conditions.</div>
+                    </div>
+                    <div class="lang-th">
+                        <p>ช่องข้อความตรึงไว้ที่มุม <strong>บนขวา</strong> สำหรับข้อมูล HUD ด้านขวา มีคุณสมบัติเหมือน
+                            Text แต่ตำแหน่ง <strong>ล็อคที่ top_right</strong></p>
+                        <p style="margin-top:8px;font-size:0.9rem;color:var(--text2)">
+                            <strong>ฟีเจอร์นี้คืออะไร?</strong>
+                            ชิ้นส่วนนี้จะสร้างกล่องพื้นหลังสีดำโปร่งแสงซ้อนอยู่หลังข้อความ
+                            และตัวกล่องจะยืดหดขยายขนาดได้เองตามความยาวของข้อความอัตโนมัติ
+                            นิยมใช้สำหรับสร้างรายชื่อผู้เล่นในปาร์ตี้ หรือกล่องข้อความลอยตัว คล้ายๆ
+                            กับป้ายชื่อตัวละครในเกม
+                        </p>
+                        <div class="tip"><span class="ico">💡</span> แต่ละ Nameplate จะเพิ่ม Collection Index อัตโนมัติ
+                        </div>
+                        <div class="tip"><span class="ico">👁️</span> <strong>Visibility:</strong>
+                            รองรับการซ่อน/แสดงด้วยเงื่อนไข PAPI</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" id="prop-general">
+                <h2 class="section-title"><span class="emoji">⚙️</span><span class="lang-en">General
+                        Properties</span><span class="lang-th">คุณสมบัติทั่วไป</span></h2>
+                <div class="card">
+                    <div class="lang-en">
+                        <p>Every element has a <strong>Name</strong> field (display only). Actions:
+                            <strong>Duplicate</strong> (creates copy) and <strong>Delete</strong> (removes permanently).
+                        </p>
+                    </div>
+                    <div class="lang-th">
+                        <p>ทุก Element มีช่อง <strong>Name</strong> (แสดงผลเท่านั้น) ปุ่ม: <strong>Duplicate</strong>
+                            (สร้างสำเนา) และ <strong>Delete</strong> (ลบถาวร)</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" id="prop-position">
+                <h2 class="section-title"><span class="emoji">📍</span><span class="lang-en">Position
+                        Properties</span><span class="lang-th">คุณสมบัติตำแหน่ง</span></h2>
+                <div class="card">
+                    <div class="lang-en">
+                        <table class="prop-table">
+                            <tr>
+                                <th>Property</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td>Anchor Grid</td>
+                                <td>3×3 grid to pick anchor point (top_left, center, bottom_right, etc.)</td>
+                            </tr>
+                            <tr>
+                                <td>Offset (X, Y)</td>
+                                <td>Pixel offset from anchor. Arrow keys = 0.1, Ctrl+Arrow = 1.0</td>
+                            </tr>
+                            <tr>
+                                <td>Linked Position</td>
+                                <td>Inherit position from another element for stacking</td>
+                            </tr>
+                            <tr>
+                                <td>Lock Position</td>
+                                <td>Prevents movement via drag or arrow keys</td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="lang-th">
+                        <table class="prop-table">
+                            <tr>
+                                <th>คุณสมบัติ</th>
+                                <th>รายละเอียด</th>
+                            </tr>
+                            <tr>
+                                <td>Anchor Grid</td>
+                                <td>ตาราง 3×3 เลือกจุดยึด (top_left, center, bottom_right ฯลฯ)</td>
+                            </tr>
+                            <tr>
+                                <td>Offset (X, Y)</td>
+                                <td>ระยะห่างจาก Anchor ลูกศร = 0.1, Ctrl+ลูกศร = 1.0</td>
+                            </tr>
+                            <tr>
+                                <td>Linked Position</td>
+                                <td>สืบทอดตำแหน่งจาก Element อื่น</td>
+                            </tr>
+                            <tr>
+                                <td>Lock Position</td>
+                                <td>ป้องกันเลื่อนด้วยลากหรือลูกศร</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" id="prop-display">
+                <h2 class="section-title"><span class="emoji">🎨</span><span class="lang-en">Display
+                        Properties</span><span class="lang-th">คุณสมบัติการแสดงผล</span></h2>
+                <div class="card">
+                    <div class="lang-en">
+                        <p><strong>Layer</strong>: Rendering order (higher = on top). <strong>Alpha</strong>:
+                            Transparency 0.0–1.0.</p>
+                    </div>
+                    <div class="lang-th">
+                        <p><strong>Layer</strong>: ลำดับแสดงผล (สูง = อยู่บน) <strong>Alpha</strong>: ความโปร่งใส
+                            0.0–1.0</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" id="prop-visibility">
+                <h2 class="section-title"><span class="emoji">👁️</span><span class="lang-en">Visibility
+                        Conditions</span><span class="lang-th">เงื่อนไขการแสดงผล</span></h2>
+                <div class="card">
+                    <div class="lang-en">
+                        <p>Show/hide any element based on PlaceholderAPI. Works on <strong>all types</strong>.</p>
+                        <table class="prop-table">
+                            <tr>
+                                <th>Property</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td>Enable Condition</td>
+                                <td>Toggle visibility logic</td>
+                            </tr>
+                            <tr>
+                                <td>PAPI Placeholder</td>
+                                <td>e.g. <code>%mmocore_party_count%</code></td>
+                            </tr>
+                            <tr>
+                                <td>Operator</td>
+                                <td>==, !=, &gt;, &lt;, &gt;=, &lt;=, in (match any in list)</td>
+                            </tr>
+                            <tr>
+                                <td>Compare Value</td>
+                                <td>Value to compare against (use comma <code>a,b,c</code> for 'in' operator)</td>
+                            </tr>
+                            <tr>
+                                <td>Invert Result</td>
+                                <td>Hide when true instead of show</td>
+                            </tr>
+                        </table>
+                        <h4 style="margin-top:16px;font-size:1.05rem">Operator Breakdown:</h4>
+                        <table class="prop-table" style="font-size:0.9rem">
+                            <tr>
+                                <th>Operator</th>
+                                <th>Meaning & Usage</th>
+                            </tr>
+                            <tr>
+                                <td><code>==</code></td>
+                                <td>Shows when values are <b>exactly identical</b>.<br><i>e.g., PAPI=10, Value=10 ➡️
+                                        Show</i></td>
+                            </tr>
+                            <tr>
+                                <td><code>!=</code></td>
+                                <td>Shows when values are <b>different</b>.<br><i>e.g., PAPI=5, Value=10 ➡️ Show</i>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><code>&gt;</code></td>
+                                <td>Shows when target PAPI is <b>greater than</b> Value.<br><i>e.g., PAPI=15, Value=10
+                                        ➡️ Show</i></td>
+                            </tr>
+                            <tr>
+                                <td><code>&lt;</code></td>
+                                <td>Shows when target PAPI is <b>less than</b> Value.<br><i>e.g., PAPI=5, Value=10 ➡️
+                                        Show</i></td>
+                            </tr>
+                            <tr>
+                                <td><code>&gt;=</code></td>
+                                <td>Shows when PAPI is <b>greater than or equal</b> to Value.<br><i>e.g., PAPI=10,
+                                        Value=10 ➡️ Show</i></td>
+                            </tr>
+                            <tr>
+                                <td><code>&lt;=</code></td>
+                                <td>Shows when PAPI is <b>less than or equal</b> to Value.<br><i>e.g., PAPI=10, Value=10
+                                        ➡️ Show</i></td>
+                            </tr>
+                        </table>
+
+                        <h4 style="margin-top:24px;font-size:1.1rem;color:var(--accent2);"><span
+                                class="emoji">🛠️</span> Example: Party HUD (MMOCore / MythicHUD)</h4>
+                        <p style="font-size:0.9rem;margin-top:8px;">Here is an example of setting up visibility
+                            conditions for a Party System (similar to MythicHUD). If you want an icon to appear only
+                            when <b>Party Member 1 is an Archer</b>:</p>
+
+                        <div
+                            style="background:var(--bg3); border-radius:8px; padding:16px; margin-top:12px; border:1px solid var(--border);">
+                            <p style="font-size:0.85rem;font-weight:700;margin-bottom:8px;">Example 1: Show element only
+                                if Party Member 1 exists</p>
+                            <ul style="font-size:0.85rem;">
+                                <li><b>PAPI Placeholder:</b> <code>%mmocore_party_count%</code></li>
+                                <li><b>Operator:</b> <code>>=</code></li>
+                                <li><b>Compare Value:</b> <code>1</code></li>
+                            </ul>
+
+                            <p style="font-size:0.85rem;font-weight:700;margin-top:16px;margin-bottom:8px;">Example 2:
+                                Show Class Icon (e.g., Archer)</p>
+                            <ul style="font-size:0.85rem;">
+                                <li><b>PAPI Placeholder:</b>
+                                    <code>%parseother_unsafe_{mmocore_party_member_1}_{mmocore_class}%</code>
+                                </li>
+                                <li><b>Operator:</b> <code>==</code></li>
+                                <li><b>Compare Value:</b> <code>archer</code></li>
+                            </ul>
+
+                            <p style="font-size:0.85rem;font-weight:700;margin-top:16px;margin-bottom:8px;">MythicHUD
+                                Reference equivalent:</p>
+                            <pre
+                                style="background:var(--bg);color:var(--text);padding:12px;border-radius:6px;font-size:0.8rem;overflow-x:auto;"><code>conditions:
+  - placeholder{ph=%parseother_unsafe_{mmocore_party_member_1}_{mmocore_class}%;v=archer} true texture ...</code></pre>
+                        </div>
+                    </div>
+                    <div class="lang-th">
+                        <p>แสดง/ซ่อน Element ตามค่า PlaceholderAPI ใช้ได้กับ <strong>ทุกประเภท</strong></p>
+                        <table class="prop-table">
+                            <tr>
+                                <th>คุณสมบัติ</th>
+                                <th>รายละเอียด</th>
+                            </tr>
+                            <tr>
+                                <td>Enable Condition</td>
+                                <td>เปิด/ปิดระบบเงื่อนไข</td>
+                            </tr>
+                            <tr>
+                                <td>PAPI Placeholder</td>
+                                <td>เช่น <code>%mmocore_party_count%</code></td>
+                            </tr>
+                            <tr>
+                                <td>Operator</td>
+                                <td>==, !=, &gt;, &lt;, &gt;=, &lt;=, in (ตรงกับค่าใดค่าหนึ่งในลิสต์)</td>
+                            </tr>
+                            <tr>
+                                <td>Compare Value</td>
+                                <td>ค่าเปรียบเทียบ (ถ้าใช้ 'in' คั่นหลายค่าด้วยลูกน้ำ <code>a,b,c</code>)</td>
+                            </tr>
+                            <tr>
+                                <td>Invert Result</td>
+                                <td>ซ่อนเมื่อเงื่อนไขเป็นจริง</td>
+                            </tr>
+                        </table>
+                        <h4 style="margin-top:16px;font-size:1.05rem">คำอธิบาย Operator แต่ละตัว:</h4>
+                        <table class="prop-table" style="font-size:0.9rem">
+                            <tr>
+                                <th>Operator</th>
+                                <th>ความหมายและการใช้งาน</th>
+                            </tr>
+                            <tr>
+                                <td><code>==</code></td>
+                                <td>แสดงผลเมื่อค่า <b>ตรงกันเป๊ะ</b> (เท่ากับ)<br><i>เช่น PAPI=10, Value=10 ➡️ แสดง</i>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><code>!=</code></td>
+                                <td>แสดงผลเมื่อค่า <b>ไม่ตรงกัน</b> (ไม่เท่ากับ)<br><i>เช่น PAPI=5, Value=10 ➡️ แสดง</i>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><code>&gt;</code></td>
+                                <td>แสดงผลเมื่อค่า PAPI <b>มากกว่า</b> Value<br><i>เช่น PAPI=15, Value=10 ➡️ แสดง</i>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><code>&lt;</code></td>
+                                <td>แสดงผลเมื่อค่า PAPI <b>น้อยกว่า</b> Value<br><i>เช่น PAPI=5, Value=10 ➡️ แสดง</i>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><code>&gt;=</code></td>
+                                <td>แสดงผลเมื่อค่า PAPI <b>มากกว่าหรือเท่ากับ</b> Value<br><i>เช่น PAPI=10, Value=10 ➡️
+                                        แสดง</i></td>
+                            </tr>
+                            <tr>
+                                <td><code>&lt;=</code></td>
+                                <td>แสดงผลเมื่อค่า PAPI <b>น้อยกว่าหรือเท่ากับ</b> Value<br><i>เช่น PAPI=10, Value=10 ➡️
+                                        แสดง</i></td>
+                            </tr>
+                            <tr>
+                                <td><code>in</code></td>
+                                <td>แสดงผลเมื่อค่า PAPI ตรงกับ <b>ค่าใดค่าหนึ่งในหลายๆ ค่า</b> ที่ใส่ใน Value
+                                    (คั่นด้วยลูกน้ำ)<br><i>เช่น PAPI=apple, Value=apple,banana,orange ➡️ แสดง</i></td>
+                            </tr>
+                        </table>
+
+                        <h4 style="margin-top:24px;font-size:1.1rem;color:var(--accent2);"><span
+                                class="emoji">🛠️</span> ตัวอย่างการใช้งาน: Party HUD (MMOCore / MythicHUD)</h4>
+                        <p style="font-size:0.9rem;margin-top:8px;">ตัวอย่างการตั้งเงื่อนไขสำหรับระบบปาร์ตี้ (อ้างอิงจาก
+                            MythicHUD) หากเราต้องการให้แสดงไอคอนอาชีพ <b>เฉพาะเมื่อสมาชิกปาร์ตี้คนที่ 1 เป็น Archer
+                                เท่านั้น</b> ให้ตั้งค่าดังนี้:</p>
+
+                        <div
+                            style="background:var(--bg3); border-radius:8px; padding:16px; margin-top:12px; border:1px solid var(--border);">
+                            <p style="font-size:0.85rem;font-weight:700;margin-bottom:8px;">ตัวอย่างที่ 1:
+                                เช็คว่ามีสมาชิกปาร์ตี้คนที่ 1 หรือไม่</p>
+                            <ul style="font-size:0.85rem;">
+                                <li><b>PAPI Placeholder:</b> <code>%mmocore_party_count%</code></li>
+                                <li><b>Operator:</b> <code>>=</code></li>
+                                <li><b>Compare Value:</b> <code>1</code></li>
+                            </ul>
+
+                            <p style="font-size:0.85rem;font-weight:700;margin-top:16px;margin-bottom:8px;">ตัวอย่างที่
+                                2: แสดงไอคอนอาชีพ Archer ให้ตรงสาย</p>
+                            <ul style="font-size:0.85rem;">
+                                <li><b>PAPI Placeholder:</b>
+                                    <code>%parseother_unsafe_{mmocore_party_member_1}_{mmocore_class}%</code>
+                                </li>
+                                <li><b>Operator:</b> <code>==</code></li>
+                                <li><b>Compare Value:</b> <code>archer</code></li>
+                            </ul>
+
+                            <p style="font-size:0.85rem;font-weight:700;margin-top:16px;margin-bottom:8px;">
+                                การเปรียบเทียบกับ Config ของ MythicHUD:</p>
+                            <pre
+                                style="background:var(--bg);color:var(--text);padding:12px;border-radius:6px;font-size:0.8rem;overflow-x:auto;"><code>conditions:
+  - placeholder{ph=%parseother_unsafe_{mmocore_party_member_1}_{mmocore_class}%;v=archer} true texture ...</code></pre>
+                            <p style="font-size:0.8rem;color:var(--text2);margin-top:8px;">
+                                ผลลัพธ์คือตัวแก้ไขของเราจะนำเงื่อนไขนี้ไปแปลงเป็น Bedrock UI ให้ซ่อน/แสดง
+                                อัตโนมัติเหมือนกับที่ MythicHUD ทำใน Java!</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" id="grid">
+                <h2 class="section-title"><span class="emoji">⊞</span><span class="lang-en">Grid System &amp; Anchor
+                        Positioning</span><span class="lang-th">ระบบตาราง (Grid) และ การตั้ง Anchor</span></h2>
+
+                <!-- WHY ANCHOR MATTERS -->
+                <div class="card">
+                    <div class="card-title">
+                        <span class="lang-en">⚠️ Why Anchor Matters</span>
+                        <span class="lang-th">⚠️ ทำไม Anchor ถึงสำคัญ</span>
+                    </div>
+                    <div class="lang-en">
+                        <p>In Minecraft Bedrock UI, the <strong>Anchor</strong> determines the <strong>reference
+                                point</strong> from which an element's position (offset) is calculated. If the anchor
+                            doesn't match the area where you place an element, it <strong>will shift to a wrong
+                                position</strong> on different screen sizes or devices.</p>
+                        <p style="margin-top:8px">Think of it this way: The anchor tells the game <em>"measure my
+                                position starting from this corner/edge of the screen."</em> If your element is in the
+                            top-left area but the anchor is set to <code>bottom_right</code>, the element will appear in
+                            a completely different spot on phones, tablets, and PCs because the screen proportions are
+                            different.</p>
+                        <div class="warn">⚠️ <strong>Common mistake:</strong> Moving an element to the bottom-right
+                            corner but forgetting to change the Anchor. It looks correct in the preview but breaks on
+                            other devices!</div>
+                    </div>
+                    <div class="lang-th">
+                        <p>ใน Minecraft Bedrock UI, <strong>Anchor</strong> คือ <strong>จุดอ้างอิง</strong>
+                            ที่ใช้คำนวณตำแหน่ง (Offset) ของ Element ถ้า Anchor ไม่ตรงกับโซนที่คุณวาง Element ไว้
+                            ตำแหน่ง<strong>จะเพี้ยนเมื่อเปลี่ยนหน้าจอหรืออุปกรณ์</strong></p>
+                        <p style="margin-top:8px">ลองนึกภาพแบบนี้: Anchor บอกเกมว่า
+                            <em>"วัดตำแหน่งของฉันจากมุมนี้/ขอบนี้ของหน้าจอ"</em> ถ้า Element อยู่มุมซ้ายบนแต่ Anchor
+                            ตั้งเป็น <code>bottom_right</code> — Element จะไปอยู่ผิดที่บนมือถือ, แท็บเล็ต และ PC
+                            เพราะสัดส่วนหน้าจอต่างกัน
+                        </p>
+                        <div class="warn">⚠️ <strong>ข้อผิดพลาดที่พบบ่อย:</strong> ย้าย Element ไปมุมล่างขวา
+                            แต่ลืมเปลี่ยน Anchor! ดูถูกต้องใน Preview แต่พังเมื่อเล่นจริงบนอุปกรณ์อื่น!</div>
+                    </div>
+                </div>
+
+                <!-- HOW THE GRID WORKS -->
+                <div class="card">
+                    <div class="card-title">
+                        <span class="lang-en">⊞ How the 3×3 Grid Works</span>
+                        <span class="lang-th">⊞ ตาราง 3×3 ทำงานยังไง</span>
+                    </div>
+                    <div class="lang-en">
+                        <p>The editor divides the preview screen into a <strong>3×3 grid</strong> (9 zones). Each zone
+                            maps to an anchor value. When you <strong>drag an element into a zone</strong>, the system
+                            automatically sets the correct anchor for that area.</p>
+                        <table class="prop-table" style="text-align:center;margin-top:12px;font-size:0.95rem">
+
+                            <tr>
+                                <td style="background:rgba(108,92,231,.08);padding:16px 12px"><code>top_left</code></td>
+                                <td style="background:rgba(108,92,231,.05);padding:16px 12px"><code>top_middle</code>
+                                </td>
+                                <td style="background:rgba(108,92,231,.08);padding:16px 12px"><code>top_right</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="background:rgba(108,92,231,.05);padding:16px 12px"><code>left_middle</code>
+                                </td>
+                                <td style="background:rgba(108,92,231,.12);padding:16px 12px"><code>center</code></td>
+                                <td style="background:rgba(108,92,231,.05);padding:16px 12px"><code>right_middle</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="background:rgba(108,92,231,.08);padding:16px 12px"><code>bottom_left</code>
+                                </td>
+                                <td style="background:rgba(108,92,231,.05);padding:16px 12px"><code>bottom_middle</code>
+                                </td>
+                                <td style="background:rgba(108,92,231,.08);padding:16px 12px"><code>bottom_right</code>
+                                </td>
+                            </tr>
+                        </table>
+                        <p style="margin-top:12px"><strong>Rule of thumb:</strong> The Anchor should match the closest
+                            corner or edge where your element is placed. For example:</p>
+                        <ul>
+                            <li>Health bar at top-left → Anchor = <code>top_left</code></li>
+                            <li>Minimap at top-right → Anchor = <code>top_right</code></li>
+                            <li>Hotbar at bottom-center → Anchor = <code>bottom_middle</code></li>
+                            <li>Title text in the center → Anchor = <code>center</code></li>
+                        </ul>
+                        <div class="tip"><span class="ico">💡</span> Toggle Grid ON/OFF with the <strong>"Grid"</strong>
+                            button in the preview toolbar. Grid is <strong>enabled by default</strong>.</div>
+                    </div>
+                    <div class="lang-th">
+                        <p>ตัวแก้ไขแบ่งหน้าจอ Preview ออกเป็น <strong>ตาราง 3×3</strong> (9 โซน) แต่ละโซนจะตรงกับค่า
+                            Anchor ที่เหมาะสม เมื่อคุณ <strong>ลาก Element ไปวางในโซนใด</strong> ระบบจะตั้ง Anchor
+                            ที่ถูกต้องให้อัตโนมัติ</p>
+                        <table class="prop-table" style="text-align:center;margin-top:12px;font-size:0.95rem">
+
+                            <tr>
+                                <td style="background:rgba(108,92,231,.08);padding:16px 12px"><code>top_left</code></td>
+                                <td style="background:rgba(108,92,231,.05);padding:16px 12px"><code>top_middle</code>
+                                </td>
+                                <td style="background:rgba(108,92,231,.08);padding:16px 12px"><code>top_right</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="background:rgba(108,92,231,.05);padding:16px 12px"><code>left_middle</code>
+                                </td>
+                                <td style="background:rgba(108,92,231,.12);padding:16px 12px"><code>center</code></td>
+                                <td style="background:rgba(108,92,231,.05);padding:16px 12px"><code>right_middle</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="background:rgba(108,92,231,.08);padding:16px 12px"><code>bottom_left</code>
+                                </td>
+                                <td style="background:rgba(108,92,231,.05);padding:16px 12px"><code>bottom_middle</code>
+                                </td>
+                                <td style="background:rgba(108,92,231,.08);padding:16px 12px"><code>bottom_right</code>
+                                </td>
+                            </tr>
+                        </table>
+                        <p style="margin-top:12px"><strong>หลักการง่ายๆ:</strong> Anchor
+                            ควรตรงกับมุมหรือขอบที่ใกล้กับตำแหน่ง Element ที่สุด เช่น:</p>
+                        <ul>
+                            <li>แถบเลือด (HP) อยู่ซ้ายบน → Anchor = <code>top_left</code></li>
+                            <li>มินิแมพอยู่ขวาบน → Anchor = <code>top_right</code></li>
+                            <li>Hotbar อยู่กลางล่าง → Anchor = <code>bottom_middle</code></li>
+                            <li>ข้อความตรงกลาง → Anchor = <code>center</code></li>
+                        </ul>
+                        <div class="tip"><span class="ico">💡</span> เปิด/ปิด Grid ด้วยปุ่ม <strong>"Grid"</strong>
+                            ในแถบเครื่องมือ Preview เปิดอยู่เป็น <strong>ค่าเริ่มต้น</strong></div>
+                    </div>
+                </div>
+
+                <!-- MANUAL ANCHOR -->
+                <div class="card">
+                    <div class="card-title">
+                        <span class="lang-en">🎯 Setting Anchor Manually</span>
+                        <span class="lang-th">🎯 ตั้ง Anchor เอง (ด้วยมือ)</span>
+                    </div>
+                    <div class="lang-en">
+                        <p>You can also set anchor manually using the <strong>3×3 Anchor Grid</strong> in the Properties
+                            panel (Position section). Click on any cell to set the anchor. This is useful when you need
+                            precise control or the auto-assignment from dragging isn't what you want.</p>
+                        <div class="tip"><span class="ico">💡</span> Both <code>anchor_from</code> and
+                            <code>anchor_to</code> are set to the same value by default. This is the recommended
+                            approach for most HUD elements.
+                        </div>
+                    </div>
+                    <div class="lang-th">
+                        <p>คุณสามารถตั้ง Anchor เองได้โดยใช้ <strong>ตาราง Anchor 3×3</strong> ในแผง Properties (หัวข้อ
+                            Position) คลิกที่ช่องไหนก็ได้เพื่อตั้ง Anchor วิธีนี้เหมาะสำหรับกรณีที่ต้องการควบคุมแม่นยำ
+                            หรือเมื่อ Anchor อัตโนมัติจากการลากยังไม่ตรงที่ต้องการ</p>
+                        <div class="tip"><span class="ico">💡</span> ทั้ง <code>anchor_from</code> และ
+                            <code>anchor_to</code> จะถูกตั้งเป็นค่าเดียวกันโดยอัตโนมัติ ซึ่งเป็นวิธีที่แนะนำสำหรับ HUD
+                            ส่วนใหญ่
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" id="namespace">
+                <h2 class="section-title"><span class="emoji">📁</span><span class="lang-en">Namespace</span><span
+                        class="lang-th">Namespace</span></h2>
+                <div class="card">
+                    <div class="lang-en">
+                        <p>Sets the folder name for textures in the resource pack. Default: <code>custom_hud</code>.
+                            Images saved as <code>textures/{namespace}/{filename}</code>.</p>
+                        <p style="margin-top:8px;font-size:0.9rem;color:var(--text2)">
+                            <strong>What does this do?</strong> This acts as a unique folder name specifically for your
+                            UI's images inside the resource pack. By changing it to something unique (like your server
+                            name), you ensure your HUD textures won't accidentally overwrite or completely break other
+                            resource packs the player might be using.
+                        </p>
+                    </div>
+                    <div class="lang-th">
+                        <p>กำหนดชื่อโฟลเดอร์สำหรับ Texture ใน Resource Pack ค่าเริ่มต้น: <code>custom_hud</code></p>
+                        <p style="margin-top:8px;font-size:0.9rem;color:var(--text2)">
+                            <strong>ฟีเจอร์นี้คืออะไร?</strong> ค่านี้ทำหน้าที่เป็นชื่อโฟลเดอร์สำหรับเก็บรูปภาพ UI
+                            ของคุณใน Resource Pack การเปลี่ยนชื่อให้ไม่ซ้ำใคร (เช่น ตั้งเป็นชื่อเซิร์ฟเวอร์)
+                            จะช่วยป้องกันไม่ให้ Texture ของคุณไปทับหรือตีกับ Resource Pack อื่นๆ
+                            ที่ผู้เล่นกำลังใช้งานอยู่
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" id="widgets">
+                <h2 class="section-title"><span class="emoji">🎮</span><span class="lang-en">Widgets Upload
+                        (Hotbar)</span><span class="lang-th">อัปโหลด Widgets (แถบ Hotbar)</span></h2>
+                <div class="card">
+                    <img src="img/widgets.png" alt="Widgets Texture Example"
+                        style="max-width: 100%; border-radius: 8px; margin-bottom: 16px; border: 1px solid var(--border);"
+                        onerror="this.style.display='none'">
+
+                    <div class="lang-en">
+                        <p>Upload a custom texture to replace the hotbar slots and selection outline in the resource
+                            pack.</p>
+                        <p style="margin-top:8px;font-size:0.9rem;color:var(--text2)">
+                            <strong>What does this do?</strong> This feature allows you to seamlessly convert a Java
+                            Edition <code>widgets.png</code> hotbar texture into a Bedrock Edition compatible interface.
+                            Bedrock uses a different UI system for the hotbar, but by uploading your Java
+                            <code>widgets.png</code> here, the system automatically translates and maps your custom
+                            hotbar design so it functions perfectly on Bedrock!
+                        </p>
+                        <div class="warn">
+                            ⚠️ <strong>CRITICAL:</strong> The file you upload <strong>MUST</strong> be named exactly
+                            <code>widgets.png</code>. This feature is specifically for converting the hotbar texture.
+                        </div>
+                    </div>
+
+                    <div class="lang-th">
+                        <p>อัปโหลด Texture ของคุณเองเพื่อแทนที่ช่อง Hotbar และกรอบเลือกไอเทมใน Resource Pack</p>
+                        <p style="margin-top:8px;font-size:0.9rem;color:var(--text2)">
+                            <strong>ฟีเจอร์นี้คืออะไร?</strong> ฟีเจอร์นี้ช่วยให้คุณสามารถนำไฟล์แถบ Hotbar
+                            <code>widgets.png</code> จากฝั่ง Java Edition มาแปลงให้รองรับกับ Bedrock Edition ได้ทันที!
+                            ปกติแล้ว Bedrock จะใช้ระบบ UI ของ Hotbar ที่แตกต่างจาก Java แต่เพียงแค่อัปโหลด
+                            <code>widgets.png</code> ของคุณเข้ามา ระบบจะทำการหั่นและเขียนโค้ดแปลงให้ Hotbar
+                            ของคุณไปโชว์ใน Bedrock ได้อย่างถูกต้องและสวยงาม
+                        </p>
+                        <div class="warn">
+                            ⚠️ <strong>สำคัญมาก:</strong> ไฟล์ที่คุณอัปโหลด <strong>ต้องตั้งชื่อว่า</strong>
+                            <code>widgets.png</code> <strong>เท่านั้น!</strong> ฟีเจอร์นี้มีไว้สำหรับการ Convert แถบ
+                            Hotbar โดยเฉพาะ
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" id="save-load">
+                <h2 class="section-title"><span class="emoji">💾</span><span class="lang-en">Save &amp; Load
+                        Projects</span><span class="lang-th">บันทึกและโหลดโปรเจกต์</span></h2>
+                <div class="card">
+                    <div class="lang-en">
+                        <p>When logged in: <strong>Save</strong> — enter project name, saves to server.
+                            <strong>Load</strong> — browse saved projects to restore.
+                        </p>
+                        <p style="margin-top:8px;font-size:0.9rem;color:var(--text2)">
+                            <strong>What does this do?</strong> This lets you safely back up your entire HUD design to
+                            the cloud (linked to your account). You can close the browser, switch computers, or take a
+                            break, and then load it right back up later with all your elements, positions, and images
+                            perfectly preserved.
+                        </p>
+                        <div class="tip"><span class="ico">💡</span> Elements, positions, textures, and settings are all
+                            preserved.</div>
+                    </div>
+                    <div class="lang-th">
+                        <p>เมื่อล็อกอิน: <strong>Save</strong> — ใส่ชื่อโปรเจกต์ บันทึกไปเซิร์ฟเวอร์
+                            <strong>Load</strong> — เลือกโปรเจกต์ที่บันทึกไว้
+                        </p>
+                        <p style="margin-top:8px;font-size:0.9rem;color:var(--text2)">
+                            <strong>ฟีเจอร์นี้คืออะไร?</strong> ระบบนี้อนุญาตให้คุณบันทึกผลงานการออกแบบ HUD
+                            ทั้งหมดเก็บไว้บน Cloud ส่วนตัว (ผ่านบัญชีของคุณ) คุณสามารถปิดเบราว์เซอร์ลุกไปทำอย่างอื่น
+                            หรือเปลี่ยนไปใช้คอมพิวเตอร์เครื่องอื่น แล้วค่อยกลับมาโหลดโปรเจกต์เพื่อทำต่อได้ โดยที่ตำแหน่ง
+                            รูปภาพ และการตั้งค่าทุกอย่างยังอยู่ครบ
+                        </p>
+                        <div class="tip"><span class="ico">💡</span> Element, ตำแหน่ง, Texture
+                            และการตั้งค่าทั้งหมดจะถูกเก็บรักษาไว้</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" id="export">
+                <h2 class="section-title"><span class="emoji">📦</span><span class="lang-en">Export</span><span
+                        class="lang-th">ส่งออก (Export)</span></h2>
+                <div class="card">
+                    <div class="lang-en">
+                        <p>Click <strong>"Export .mcpack"</strong>. The system validates → confirms → generates
+                            <code>output.zip</code> containing:
+                        </p>
+                        <p style="margin-top:8px;font-size:0.9rem;color:var(--text2)">
+                            <strong>What does this do?</strong> This is the final step! It takes your visual layout from
+                            the editor and physically writes all the necessary Bedrock UI JSON files, places your images
+                            in the correct folders, and writes the KaizerMultiBar setup config. It bundles everything
+                            into a single ready-to-use ZIP file that you can plug directly into your server.
+                        </p>
+                        <ul>
+                            <li><code>GeyserMC/packs/{namespace}.mcpack</code> — Bedrock resource pack</li>
+                            <li><code>plugins/KaizerMultiBar/config.yml</code> — Plugin configuration</li>
+                        </ul>
+                        <div class="warn">⚠️ All Text elements must have PAPI placeholder set, and bar types must not be
+                            duplicated.</div>
+                    </div>
+                    <div class="lang-th">
+                        <p>คลิก <strong>"Export .mcpack"</strong> ระบบจะตรวจสอบ → ยืนยัน → สร้าง <code>output.zip</code>
+                            ประกอบด้วย:</p>
+                        <p style="margin-top:8px;font-size:0.9rem;color:var(--text2)">
+                            <strong>ฟีเจอร์นี้คืออะไร?</strong> นี่คือขั้นตอนสุดท้าย!
+                            ระบบจะนำสิ่งที่คุณจัดวางบนหน้าจอไปเขียนเป็นโค้ด Bedrock UI JSON เรียบเรียงโฟลเดอร์รูปภาพ
+                            และจัดทำไฟล์ Config สำหรับปลั๊กอิน KaizerMultiBar ให้อัตโนมัติ โดยแพ็คทั้งหมดให้กลายเป็นไฟล์
+                            ZIP ไฟล์เดียวที่คุณสามารถนำไปลงในเซิร์ฟเวอร์และใช้งานได้ทันที
+                        </p>
+                        <ul>
+                            <li><code>GeyserMC/packs/{namespace}.mcpack</code> — Resource Pack</li>
+                            <li><code>plugins/KaizerMultiBar/config.yml</code> — Config ปลั๊กอิน</li>
+                        </ul>
+                        <div class="warn">⚠️ Text ทุกอันต้องกรอก PAPI และ Bar Type ต้องไม่ซ้ำกัน</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" id="shortcuts">
+                <h2 class="section-title"><span class="emoji">⌨️</span><span class="lang-en">Keyboard
+                        Shortcuts</span><span class="lang-th">ปุ่มลัด</span></h2>
+                <div class="card">
+                    <div class="lang-en">
+                        <table class="prop-table">
+                            <tr>
+                                <th>Shortcut</th>
+                                <th>Action</th>
+                            </tr>
+                            <tr>
+                                <td><span class="kbd">Arrow Keys</span></td>
+                                <td>Move element by 0.1px</td>
+                            </tr>
+                            <tr>
+                                <td><span class="kbd">Ctrl</span>+<span class="kbd">Arrow</span></td>
+                                <td>Move element by 1.0px</td>
+                            </tr>
+                            <tr>
+                                <td><span class="kbd">Ctrl</span>+<span class="kbd">Z</span></td>
+                                <td>Undo</td>
+                            </tr>
+                            <tr>
+                                <td><span class="kbd">Ctrl</span>+<span class="kbd">Y</span></td>
+                                <td>Redo</td>
+                            </tr>
+                            <tr>
+                                <td><span class="kbd">Ctrl</span>+<span class="kbd">C</span></td>
+                                <td>Copy selected</td>
+                            </tr>
+                            <tr>
+                                <td><span class="kbd">Ctrl</span>+<span class="kbd">V</span></td>
+                                <td>Paste copied</td>
+                            </tr>
+                            <tr>
+                                <td><span class="kbd">Delete</span></td>
+                                <td>Delete selected</td>
+                            </tr>
+                            <tr>
+                                <td><span class="kbd">Ctrl</span>/Shift+Click</td>
+                                <td>Multi-select</td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="lang-th">
+                        <table class="prop-table">
+                            <tr>
+                                <th>ปุ่มลัด</th>
+                                <th>การทำงาน</th>
+                            </tr>
+                            <tr>
+                                <td><span class="kbd">ลูกศร</span></td>
+                                <td>เลื่อน 0.1px</td>
+                            </tr>
+                            <tr>
+                                <td><span class="kbd">Ctrl</span>+<span class="kbd">ลูกศร</span></td>
+                                <td>เลื่อน 1.0px</td>
+                            </tr>
+                            <tr>
+                                <td><span class="kbd">Ctrl</span>+<span class="kbd">Z</span></td>
+                                <td>ย้อนกลับ</td>
+                            </tr>
+                            <tr>
+                                <td><span class="kbd">Ctrl</span>+<span class="kbd">Y</span></td>
+                                <td>ทำซ้ำ</td>
+                            </tr>
+                            <tr>
+                                <td><span class="kbd">Ctrl</span>+<span class="kbd">C</span></td>
+                                <td>คัดลอกที่เลือก</td>
+                            </tr>
+                            <tr>
+                                <td><span class="kbd">Ctrl</span>+<span class="kbd">V</span></td>
+                                <td>วางที่คัดลอก</td>
+                            </tr>
+                            <tr>
+                                <td><span class="kbd">Delete</span></td>
+                                <td>ลบ Element</td>
+                            </tr>
+                            <tr>
+                                <td><span class="kbd">Ctrl</span>/Shift+คลิก</td>
+                                <td>เลือกหลายตัว</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" id="tutorials">
+                <h2 class="section-title"><span class="emoji">🎬</span><span class="lang-en">Video Tutorials</span><span
+                        class="lang-th">วิดีโอสอนใช้งาน</span></h2>
+                <p class="section-desc lang-en">Step-by-step GIF demonstrations for each tool and feature.</p>
+                <p class="section-desc lang-th">สาธิตการใช้งานแบบ GIF ทีละขั้นตอนสำหรับแต่ละเครื่องมือ</p>
+
+                <!-- Tutorial 1: Image -->
+                <div class="card tutorial-card">
+                    <div class="card-title"><span class="badge badge-image">1</span><span class="lang-en">Image
+                            Tool</span><span class="lang-th">เครื่องมือรูปภาพ</span></div>
+                    <div class="tutorial-gif">
+                        <img src="img/gift/1_image.gif" alt="Image Tool Tutorial" loading="lazy">
+                        <button class="fullscreen-btn" onclick="openFullscreen('img/gift/1_image.gif')"
+                            title="Fullscreen">
+                            <svg viewBox="0 0 24 24">
+                                <path
+                                    d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="lang-en">
+                        <p>Learn how to upload images, position them on the HUD, and adjust their size and texture
+                            paths.</p>
+                    </div>
+                    <div class="lang-th">
+                        <p>สอนการอัปโหลดรูปภาพ จัดวางตำแหน่งบน HUD และปรับขนาดและเส้นทาง Texture</p>
+                    </div>
+                </div>
+
+                <!-- Tutorial 2: Bar -->
+                <div class="card tutorial-card">
+                    <div class="card-title"><span class="badge badge-bar">2</span><span class="lang-en">Status Bar
+                            Tool</span><span class="lang-th">เครื่องมือแถบสถานะ</span></div>
+                    <div class="tutorial-gif">
+                        <img src="img/gift/2_bar.gif" alt="Bar Tool Tutorial" loading="lazy">
+                        <button class="fullscreen-btn" onclick="openFullscreen('img/gift/2_bar.gif')"
+                            title="Fullscreen">
+                            <svg viewBox="0 0 24 24">
+                                <path
+                                    d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="lang-en">
+                        <p>Create HP bars, mana bars, or any progress bar. Upload textures and configure fill
+                            directions.</p>
+                    </div>
+                    <div class="lang-th">
+                        <p>สร้างแถบ HP, มานา หรือแถบความคืบหน้าใดๆ อัปโหลด Texture และตั้งค่าทิศทางการเติม</p>
+                    </div>
+                </div>
+
+                <!-- Tutorial 3: Text -->
+                <div class="card tutorial-card">
+                    <div class="card-title"><span class="badge badge-text">3</span><span class="lang-en">Scoreboard Text
+                            Tool</span><span class="lang-th">เครื่องมือข้อความ</span></div>
+                    <div class="tutorial-gif">
+                        <img src="img/gift/3_text.gif" alt="Text Tool Tutorial" loading="lazy">
+                        <button class="fullscreen-btn" onclick="openFullscreen('img/gift/3_text.gif')"
+                            title="Fullscreen">
+                            <svg viewBox="0 0 24 24">
+                                <path
+                                    d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="lang-en">
+                        <p>Add dynamic text with PlaceholderAPI. Set colors, shadows, font sizes, and text anchors.</p>
+                    </div>
+                    <div class="lang-th">
+                        <p>เพิ่มข้อความแบบไดนามิกด้วย PlaceholderAPI ตั้งค่าสี เงา ขนาดตัวอักษร และการจัดตำแหน่งข้อความ
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Tutorial 4: Player Head -->
+                <div class="card tutorial-card">
+                    <div class="card-title"><span class="badge badge-head">4</span><span class="lang-en">Player Head
+                            Tool</span><span class="lang-th">เครื่องมือหัวผู้เล่น</span></div>
+                    <div class="tutorial-gif">
+                        <img src="img/gift/4_head.gif" alt="Player Head Tutorial" loading="lazy">
+                        <button class="fullscreen-btn" onclick="openFullscreen('img/gift/4_head.gif')"
+                            title="Fullscreen">
+                            <svg viewBox="0 0 24 24">
+                                <path
+                                    d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="lang-en">
+                        <p>Add the player's 3D paperdoll head to your HUD. Adjust doll size and offset positioning.</p>
+                    </div>
+                    <div class="lang-th">
+                        <p>เพิ่มหัวผู้เล่น 3D (Paperdoll) ลงบน HUD ปรับขนาดและตำแหน่ง Offset ของตุ๊กตา</p>
+                    </div>
+                </div>
+
+                <!-- Tutorial 5: XP Label -->
+                <div class="card tutorial-card">
+                    <div class="card-title"><span class="badge badge-xp">5</span><span class="lang-en">XP Label
+                            Tool</span><span class="lang-th">เครื่องมือป้าย XP</span></div>
+                    <div class="tutorial-gif">
+                        <img src="img/gift/5_.gif" alt="XP Label Tutorial" loading="lazy">
+                        <button class="fullscreen-btn" onclick="openFullscreen('img/gift/5_.gif')" title="Fullscreen">
+                            <svg viewBox="0 0 24 24">
+                                <path
+                                    d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="lang-en">
+                        <p>Display the player's experience level with customizable colors and font sizes.</p>
+                    </div>
+                    <div class="lang-th">
+                        <p>แสดงเลเวลประสบการณ์ของผู้เล่นพร้อมปรับแต่งสีและขนาดตัวอักษรได้ตามใจชอบ</p>
+                    </div>
+                </div>
+
+                <!-- Tutorial 6: Nameplate -->
+                <div class="card tutorial-card">
+                    <div class="card-title"><span class="badge badge-np">6</span><span class="lang-en">Nameplate
+                            Tool</span><span class="lang-th">เครื่องมือ Nameplate</span></div>
+                    <div class="tutorial-gif">
+                        <img src="img/gift/6_nameplate.gif" alt="Nameplate Tutorial" loading="lazy">
+                        <button class="fullscreen-btn" onclick="openFullscreen('img/gift/6_nameplate.gif')"
+                            title="Fullscreen">
+                            <svg viewBox="0 0 24 24">
+                                <path
+                                    d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="lang-en">
+                        <p>Create floating nameplates above entities with custom PAPI placeholders and styling.</p>
+                    </div>
+                    <div class="lang-th">
+                        <p>สร้างป้ายชื่อลอยเหนือ Entity ต่างๆ ด้วย PlaceholderAPI และการปรับแต่งสไตล์</p>
+                    </div>
+                </div>
+
+                <!-- Tutorial 7: Full Test -->
+                <div class="card tutorial-card">
+                    <div class="card-title"><span class="badge"
+                            style="background:rgba(108,92,231,.15);color:#a78bfa;border:1px solid rgba(108,92,231,.3)">7</span><span
+                            class="lang-en">Complete Workflow Test</span><span
+                            class="lang-th">ทดสอบเวิร์กโฟลว์แบบเต็ม</span></div>
+                    <div class="tutorial-gif">
+                        <img src="img/gift/7_TestAllTool.gif" alt="Complete Workflow Tutorial" loading="lazy">
+                        <button class="fullscreen-btn" onclick="openFullscreen('img/gift/7_TestAllTool.gif')"
+                            title="Fullscreen">
+                            <svg viewBox="0 0 24 24">
+                                <path
+                                    d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="lang-en">
+                        <p>See the complete workflow from start to finish: adding multiple elements, positioning, and
+                            preparing for export.</p>
+                    </div>
+                    <div class="lang-th">
+                        <p>ดูเวิร์กโฟลว์แบบเต็มจากต้นจนจบ: เพิ่มหลาย Element จัดตำแหน่ง และเตรียม Export</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" id="tips">
+                <h2 class="section-title"><span class="emoji">💡</span><span class="lang-en">Tips &amp;
+                        Tricks</span><span class="lang-th">เคล็ดลับ</span></h2>
+                <div class="card">
+                    <div class="lang-en">
+                        <ul>
+                            <li><strong>Zoom</strong> — +/− buttons (25–800%) for precise positioning</li>
+                            <li><strong>Layer order</strong> — Later elements appear on top. Use ↑↓ to reorder</li>
+                            <li><strong>Linked Position</strong> — Stack elements at same position by linking</li>
+                            <li><strong>Bar textures</strong> — Upload full bar image, auto-sliced into 16 steps</li>
+                            <li><strong>Multi-select</strong> — Ctrl/Shift+click, then move together with arrows</li>
+                            <li><strong>Undo</strong> — Up to 100 steps stored. Ctrl+Z / Ctrl+Y freely</li>
+                            <li><strong>Namespace</strong> — Use unique name to avoid texture conflicts</li>
+                        </ul>
+                    </div>
+                    <div class="lang-th">
+                        <ul>
+                            <li><strong>ซูม</strong> — ปุ่ม +/− (25–800%) สำหรับจัดตำแหน่งแม่นยำ</li>
+                            <li><strong>ลำดับ Layer</strong> — Element ทีหลังอยู่บน ใช้ ↑↓ เรียงลำดับ</li>
+                            <li><strong>Linked Position</strong> — วางหลายตัวที่ตำแหน่งเดียวกันโดยเชื่อมโยง</li>
+                            <li><strong>Bar Texture</strong> — อัปโหลดรูปเต็ม ตัดอัตโนมัติเป็น 16 ขั้น</li>
+                            <li><strong>เลือกหลายตัว</strong> — Ctrl/Shift+คลิก แล้วเลื่อนพร้อมกันด้วยลูกศร</li>
+                            <li><strong>Undo</strong> — เก็บได้ 100 ขั้น ใช้ Ctrl+Z / Ctrl+Y ได้ตามสบาย</li>
+                            <li><strong>Namespace</strong> — ใช้ชื่อไม่ซ้ำป้องกัน Texture ชนกัน</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════════════════════════════════════════════ -->
+            <!-- FAQ Section                                        -->
+            <!-- ═══════════════════════════════════════════════════ -->
+            <div class="section" id="faq">
+                <h2 class="section-title"><span class="emoji">❓</span><span class="lang-en">Frequently Asked Questions
+                        (FAQ)</span><span class="lang-th">คำถามที่พบบ่อย (FAQ)</span></h2>
+                <p class="section-desc lang-en">Common questions and solutions for setting up KaizerMC HUD on your
+                    server.</p>
+                <p class="section-desc lang-th">คำถามและวิธีแก้ปัญหาที่พบบ่อยในการตั้งค่า KaizerMC HUD
+                    บนเซิร์ฟเวอร์ของคุณ</p>
+
+                <!-- FAQ 1 — Why use our plugin? -->
+                <div class="card" id="faq-why-plugin">
+                    <div class="faq-q"><span class="q-icon">Q1.</span>
+                        <span class="lang-en">Why do I need to use KaizerMultiBar plugin?</span>
+                        <span class="lang-th">ทำไมต้องใช้ปลั๊กอิน KaizerMultiBar?</span>
+                    </div>
+                    <div class="lang-en">
+                        <p>KaizerMultiBar is the <strong>bridge between the HUD you design in the web editor and the
+                                Bedrock client</strong>. Here's why it's essential:</p>
+                        <ul>
+                            <li><strong>Renders your HUD in-game</strong> — The web editor creates the resource pack
+                                (<code>.mcpack</code>), but the plugin is what actually sends the BossBar data,
+                                scoreboard text, and placeholder values to the Bedrock client in real-time.</li>
+                            <li><strong>PlaceholderAPI integration</strong> — It resolves PAPI placeholders (e.g.
+                                <code>%player_health%</code>, <code>%vault_eco_balance%</code>) and converts them into
+                                Bedrock-compatible display data.
+                            </li>
+                            <li><strong>Bedrock-only targeting</strong> — The plugin automatically detects Bedrock
+                                players via Floodgate and only sends HUD data to them, leaving Java players completely
+                                unaffected.</li>
+                            <li><strong>Zero-config after export</strong> — The <code>output.zip</code> contains both
+                                the resource pack and the plugin config. Just extract and go.</li>
+                        </ul>
+                        <div class="tip"><span class="ico">💡</span> Without the plugin, the resource pack is just
+                            static images with no dynamic data. The plugin is what makes the HUD "alive".</div>
+                    </div>
+                    <div class="lang-th">
+                        <p>KaizerMultiBar คือ <strong>ตัวเชื่อมระหว่าง HUD ที่คุณออกแบบในเว็บกับหน้าจอ Bedrock
+                                จริง</strong> เหตุผลที่ต้องใช้:</p>
+                        <ul>
+                            <li><strong>แสดง HUD ในเกม</strong> — เว็บ Editor สร้าง Resource Pack (<code>.mcpack</code>)
+                                แต่ปลั๊กอินคือตัวที่ส่งข้อมูล BossBar, ข้อความ Scoreboard และค่า Placeholder ไปยัง
+                                Bedrock Client แบบ Real-time</li>
+                            <li><strong>เชื่อมต่อ PlaceholderAPI</strong> — แปลง PAPI Placeholder (เช่น
+                                <code>%player_health%</code>, <code>%vault_eco_balance%</code>) เป็นข้อมูลที่ Bedrock
+                                แสดงผลได้
+                            </li>
+                            <li><strong>ทำงานกับ Bedrock เท่านั้น</strong> — ปลั๊กอินตรวจจับผู้เล่น Bedrock ผ่าน
+                                Floodgate อัตโนมัติ ไม่กระทบผู้เล่น Java เลย</li>
+                            <li><strong>ไม่ต้องตั้งค่าเพิ่ม</strong> — <code>output.zip</code> มีทั้ง Resource Pack และ
+                                Config ปลั๊กอิน แค่แตกไฟล์แล้วใช้ได้เลย</li>
+                        </ul>
+                        <div class="tip"><span class="ico">💡</span> ถ้าไม่มีปลั๊กอิน Resource Pack จะเป็นแค่รูปภาพนิ่ง
+                            ปลั๊กอินคือตัวที่ทำให้ HUD "มีชีวิต"</div>
+                    </div>
+                </div>
+
+                <!-- FAQ 2 — Other HUD plugins conflict -->
+                <div class="card" id="faq-other-plugins">
+                    <div class="faq-q"><span class="q-icon">Q2.</span>
+                        <span class="lang-en">I have BetterHUD / MythicHUD / HappyHUD / CustomNameplates — what should I
+                            do?</span>
+                        <span class="lang-th">ใช้ BetterHUD / MythicHUD / HappyHUD / CustomNameplates อยู่ —
+                            ต้องทำอย่างไร?</span>
+                    </div>
+                    <div class="lang-en">
+                        <p>These plugins also use BossBar packets to display HUD elements. If they send BossBar data to
+                            Bedrock players, it will <strong>conflict with KaizerMultiBar</strong> and cause display
+                            issues. You must <strong>disable their Bedrock/Geyser output</strong>.</p>
+
+                        <div class="warn-red">
+                            <span class="ico">⚠️</span>
+                            <div>
+                                If you don't disable these plugins for Bedrock players, HUD elements will overlap, flicker, or not display correctly.
+                            </div>
+                        </div>
+
+                        <p style="margin-top:16px"><strong>BetterHUD</strong></p>
+                        <p>Open <code>config.yml</code> and set:</p>
+                        <div class="code-block"><span class="key">disable-to-bedrock-player</span>: <span class="bool">true</span></div>
+
+                        <p style="margin-top:16px"><strong>MythicHUD</strong></p>
+                        <p>Open <code>config.yml</code> and set:</p>
+                        <div class="code-block"><span class="key">disable-geyser-players</span>: <span class="bool">true</span></div>
+
+                        <p style="margin-top:16px"><strong>HappyHUD</strong></p>
+                        <p>HappyHUD does not have a built-in toggle for Bedrock players. You may need to use
+                            permission-based conditions to prevent it from showing to Bedrock players, or remove the
+                            plugin if you are using KaizerMultiBar for Bedrock HUD.</p>
+
+                        <p style="margin-top:16px"><strong>CustomNameplates</strong></p>
+                        <p>Open <code>CustomNameplates/configs/bossbar.yml</code> and add <code>floodgate: false</code>
+                            inside the <code>conditions</code> block of each bossbar entry:</p>
+<div class="code-block"><span class="comment"># CustomNameplates/configs/bossbar.yml</span>
+<span class="key">bossbar_1</span>:
+  <span class="key">color</span>: <span class="value">YELLOW</span>
+  <span class="key">overlay</span>: <span class="value">PROGRESS</span>
+  <span class="key">conditions</span>:
+    <span class="key">condition_1</span>:
+      <span class="key">type</span>: <span class="value">permission</span>
+      <span class="key">refresh-interval</span>: <span class="value">20</span>
+      <span class="key">value</span>:
+        - <span class="value">bossbar.show</span>
+      <span class="key">floodgate</span>: <span class="bool">false</span>
+  <span class="key">text-display-order</span>:
+    <span class="value">1</span>:
+      <span class="key">duration</span>: <span class="value">200</span>
+      <span class="key">text</span>: <span class="value">'%np_background_location%'</span></div>
+
+                        <div class="tip"><span class="ico">💡</span> After making these changes, restart your server for
+                            them to take effect.</div>
+                    </div>
+                    <div class="lang-th">
+                        <p>ปลั๊กอินเหล่านี้ใช้ BossBar Packet ในการแสดง HUD เช่นกัน ถ้าปลั๊กอินเหล่านี้ส่งข้อมูล BossBar
+                            ไปยังผู้เล่น Bedrock จะ <strong>ขัดแย้งกับ KaizerMultiBar</strong> และทำให้แสดงผลผิดพลาด
+                            คุณต้อง <strong>ปิดการแสดงผลฝั่ง Bedrock/Geyser</strong> ของปลั๊กอินเหล่านี้</p>
+
+                        <div class="warn-red">
+                            <span class="ico">⚠️</span>
+                            <div>
+                                ถ้าไม่ปิดปลั๊กอินเหล่านี้สำหรับผู้เล่น Bedrock จะทำให้ HUD ซ้อนกัน กระพริบ หรือแสดงผลไม่ถูกต้อง
+                            </div>
+                        </div>
+
+                        <p style="margin-top:16px"><strong>BetterHUD</strong></p>
+                        <p>เปิดไฟล์ <code>config.yml</code> และตั้งค่า:</p>
+                        <div class="code-block"><span class="key">disable-to-bedrock-player</span>: <span class="bool">true</span></div>
+
+                        <p style="margin-top:16px"><strong>MythicHUD</strong></p>
+                        <p>เปิดไฟล์ <code>config.yml</code> และตั้งค่า:</p>
+                        <div class="code-block"><span class="key">disable-geyser-players</span>: <span class="bool">true</span></div>
+
+                        <p style="margin-top:16px"><strong>HappyHUD</strong></p>
+                        <p>HappyHUD ไม่มีตัวเลือกปิดสำหรับ Bedrock โดยเฉพาะ อาจต้องใช้เงื่อนไข Permission
+                            เพื่อป้องกันไม่ให้แสดงกับผู้เล่น Bedrock หรือถอดปลั๊กอินออกหากใช้ KaizerMultiBar สำหรับ
+                            Bedrock HUD</p>
+
+                        <p style="margin-top:16px"><strong>CustomNameplates</strong></p>
+                        <p>เปิดไฟล์ <code>CustomNameplates/configs/bossbar.yml</code> และเพิ่ม
+                            <code>floodgate: false</code> ในส่วน <code>conditions</code> ของแต่ละ bossbar:
+                        </p>
+<div class="code-block"><span class="comment"># CustomNameplates/configs/bossbar.yml</span>
+<span class="key">bossbar_1</span>:
+  <span class="key">color</span>: <span class="value">YELLOW</span>
+  <span class="key">overlay</span>: <span class="value">PROGRESS</span>
+  <span class="key">conditions</span>:
+    <span class="key">condition_1</span>:
+      <span class="key">type</span>: <span class="value">permission</span>
+      <span class="key">refresh-interval</span>: <span class="value">20</span>
+      <span class="key">value</span>:
+        - <span class="value">bossbar.show</span>
+      <span class="key">floodgate</span>: <span class="bool">false</span>
+  <span class="key">text-display-order</span>:
+    <span class="value">1</span>:
+      <span class="key">duration</span>: <span class="value">200</span>
+      <span class="key">text</span>: <span class="value">'%np_background_location%'</span></div>
+
+                        <div class="tip"><span class="ico">💡</span> หลังแก้ไขค่าเหล่านี้แล้ว
+                            ให้รีสตาร์ทเซิร์ฟเวอร์เพื่อให้การเปลี่ยนแปลงมีผล</div>
+                    </div>
+                </div>
+
+                <!-- FAQ 3 — HUD not showing after export -->
+                <div class="card" id="faq-hud-not-showing">
+                    <div class="faq-q"><span class="q-icon">Q3.</span>
+                        <span class="lang-en">Why is the HUD not showing after I export and install?</span>
+                        <span class="lang-th">ทำไม HUD ไม่แสดงหลังจาก Export และติดตั้งแล้ว?</span>
+                    </div>
+                    <div class="lang-en">
+                        <p>The most common cause is that <strong>Floodgate is not installed or configured
+                                correctly</strong>. KaizerMultiBar uses Floodgate to detect Bedrock players. Without it,
+                            the plugin cannot identify who should see the HUD.</p>
+
+                        <div class="warn-red">
+                            <span class="ico">⚠️</span>
+                            <div>
+                                <strong>Floodgate is required.</strong> Without it, the plugin will not send any HUD data to players.
+                            </div>
+                        </div>
+
+                        <p style="margin-top:16px"><strong>Step 1: Install Floodgate</strong></p>
+                        <p>Download Floodgate from the official page: <a
+                                href="https://geysermc.org/download?project=floodgate"
+                                target="_blank">https://geysermc.org/download?project=floodgate</a></p>
+
+                        <p style="margin-top:16px"><strong>Step 2: Configure GeyserMC</strong></p>
+                        <p>In your GeyserMC <code>config.yml</code>, make sure the auth type is set to floodgate:</p>
+                        <div class="code-block"><span class="key">auth-type</span>: <span class="value">floodgate</span></div>
+                        <div class="tip"><span class="ico">💡</span> This setting is required for <strong>both proxy and
+                                non-proxy setups</strong>.</div>
+
+                        <p style="margin-top:16px"><strong>Step 3: Proxy Setup (Velocity / BungeeCord)</strong></p>
+                        <p>If you are using a proxy (Velocity, BungeeCord, Waterfall), you need additional
+                            configuration:</p>
+                        <ul class="step-list">
+                            <li data-step="3a.">Install Floodgate on the <strong>proxy server</strong></li>
+                            <li data-step="3b.">In Floodgate's <code>config.yml</code> on the proxy, set:
+                                <code>send-floodgate-data: true</code>
+                            </li>
+                            <li data-step="3c.">Copy the <code>key.pem</code> file from the proxy's Floodgate folder to
+                                <strong>all backend servers'</strong> Floodgate folders
+                            </li>
+                            <li data-step="3d.">Restart all servers</li>
+                        </ul>
+<div class="code-block"><span class="comment"># Floodgate config.yml (on proxy)</span>
+<span class="key">send-floodgate-data</span>: <span class="bool">true</span></div>
+
+                        <p style="margin-top:16px"><strong>Step 4: Verify</strong></p>
+                        <p>Join with a Bedrock client. If Floodgate is working correctly, the player's name will have a
+                            prefix (default: <code>.</code>). If the HUD appears, you're all set!</p>
+
+                        <div class="tip"><span class="ico">💡</span> If the HUD still doesn't appear, check the server
+                            console for errors related to KaizerMultiBar or Floodgate.</div>
+                    </div>
+                    <div class="lang-th">
+                        <p>สาเหตุที่พบบ่อยที่สุดคือ <strong>Floodgate ไม่ได้ติดตั้งหรือตั้งค่าไม่ถูกต้อง</strong>
+                            KaizerMultiBar ใช้ Floodgate ในการตรวจจับผู้เล่น Bedrock ถ้าไม่มี
+                            ปลั๊กอินจะไม่สามารถระบุได้ว่าใครควรเห็น HUD</p>
+
+                        <div class="warn-red">
+                            <span class="ico">⚠️</span>
+                            <div>
+                                <strong>ต้องติดตั้ง Floodgate</strong> ถ้าไม่มี ปลั๊กอินจะไม่ส่งข้อมูล HUD ให้ผู้เล่น
+                            </div>
+                        </div>
+
+                        <p style="margin-top:16px"><strong>ขั้นตอนที่ 1: ติดตั้ง Floodgate</strong></p>
+                        <p>ดาวน์โหลด Floodgate จากหน้าทางการ: <a href="https://geysermc.org/download?project=floodgate"
+                                target="_blank">https://geysermc.org/download?project=floodgate</a></p>
+
+                        <p style="margin-top:16px"><strong>ขั้นตอนที่ 2: ตั้งค่า GeyserMC</strong></p>
+                        <p>ใน <code>config.yml</code> ของ GeyserMC ต้องตั้ง auth-type เป็น floodgate:</p>
+                        <div class="code-block"><span class="key">auth-type</span>: <span class="value">floodgate</span></div>
+                        <div class="tip"><span class="ico">💡</span> ค่านี้ต้องตั้งทั้ง<strong>แบบใช้ Proxy และไม่ใช้
+                                Proxy</strong></div>
+
+                        <p style="margin-top:16px"><strong>ขั้นตอนที่ 3: สำหรับ Proxy (Velocity / BungeeCord)</strong>
+                        </p>
+                        <p>ถ้าคุณใช้ Proxy (Velocity, BungeeCord, Waterfall) ต้องตั้งค่าเพิ่มเติม:</p>
+                        <ul class="step-list">
+                            <li data-step="3a.">ติดตั้ง Floodgate บน <strong>เซิร์ฟเวอร์ Proxy</strong></li>
+                            <li data-step="3b.">ใน <code>config.yml</code> ของ Floodgate บน Proxy ตั้ง:
+                                <code>send-floodgate-data: true</code>
+                            </li>
+                            <li data-step="3c.">คัดลอกไฟล์ <code>key.pem</code> จากโฟลเดอร์ Floodgate ของ Proxy
+                                ไปวางใน<strong>โฟลเดอร์ Floodgate ของทุก Backend Server</strong></li>
+                            <li data-step="3d.">รีสตาร์ททุกเซิร์ฟเวอร์</li>
+                        </ul>
+<div class="code-block"><span class="comment"># Floodgate config.yml (บน Proxy)</span>
+<span class="key">send-floodgate-data</span>: <span class="bool">true</span></div>
+
+                        <p style="margin-top:16px"><strong>ขั้นตอนที่ 4: ตรวจสอบ</strong></p>
+                        <p>เข้าเกมด้วย Bedrock Client ถ้า Floodgate ทำงานถูกต้อง ชื่อผู้เล่นจะมี Prefix นำหน้า
+                            (ค่าเริ่มต้น: <code>.</code>) ถ้า HUD ขึ้นแล้วก็เรียบร้อย!</p>
+
+                        <div class="tip"><span class="ico">💡</span> ถ้า HUD ยังไม่ขึ้น ให้ตรวจสอบ Console
+                            ของเซิร์ฟเวอร์ว่ามี Error จาก KaizerMultiBar หรือ Floodgate หรือไม่</div>
+                    </div>
+                </div>
+
+                <!-- FAQ 4 — Position offset / anchor issues -->
+                <div class="card" id="faq-position-offset">
+                    <div class="faq-q"><span class="q-icon">Q4.</span>
+                        <span class="lang-en">Why is my HUD element position different in-game vs. the editor?</span>
+                        <span class="lang-th">ทำไมตำแหน่ง HUD ในเกมไม่ตรงกับที่วางในเว็บ?</span>
+                    </div>
+                    <div class="lang-en">
+                        <p>Position differences between the editor and in-game are usually caused by
+                            <strong>Anchor</strong> and <strong>Offset</strong> settings.
+                        </p>
+                        <ul>
+                            <li><strong>Anchor</strong> determines the reference point on the screen (e.g., top_left,
+                                center, bottom_right). The same offset values will produce completely different
+                                positions depending on the anchor.</li>
+                            <li><strong>Screen resolution</strong> — Bedrock uses 480×270 as the base UI resolution, but
+                                the actual display can vary slightly depending on device and GUI scale settings.</li>
+                            <li><strong>GUI Scale</strong> — If the player changes their GUI Scale in Minecraft
+                                settings, elements may shift. Design your HUD assuming the default GUI scale.</li>
+                            <li><strong>Safe Zone</strong> — Bedrock has a "Safe Zone" setting that can push UI elements
+                                inward. Ask players to set Safe Zone to the maximum (100%) in Settings → Video.</li>
+                        </ul>
+                        <div class="tip"><span class="ico">💡</span> Always test your HUD on an actual Bedrock client
+                            after exporting. The editor preview is a close approximation but may not be pixel-perfect on
+                            all devices.</div>
+                        <div class="tip"><span class="ico">💡</span> If elements are consistently shifted, try adjusting
+                            the <strong>Offset X/Y</strong> values by small amounts (1–5 pixels) until the in-game
+                            position matches your design.</div>
+                    </div>
+                    <div class="lang-th">
+                        <p>ตำแหน่งที่แตกต่างกันระหว่าง Editor กับในเกมมักเกิดจากการตั้งค่า <strong>Anchor</strong> และ
+                            <strong>Offset</strong>
+                        </p>
+                        <ul>
+                            <li><strong>Anchor</strong> คือจุดอ้างอิงบนหน้าจอ (เช่น top_left, center, bottom_right) ค่า
+                                Offset เดียวกันจะให้ตำแหน่งต่างกันขึ้นอยู่กับ Anchor</li>
+                            <li><strong>ความละเอียดหน้าจอ</strong> — Bedrock ใช้ 480×270 เป็นความละเอียด UI พื้นฐาน
+                                แต่การแสดงผลจริงอาจต่างกันเล็กน้อยตามอุปกรณ์และการตั้งค่า GUI Scale</li>
+                            <li><strong>GUI Scale</strong> — ถ้าผู้เล่นเปลี่ยน GUI Scale ในตั้งค่า Minecraft Element
+                                อาจเลื่อนตำแหน่ง ควรออกแบบ HUD ที่ GUI Scale ค่าเริ่มต้น</li>
+                            <li><strong>Safe Zone</strong> — Bedrock มีการตั้งค่า "Safe Zone" ที่อาจดัน UI เข้าด้านใน
+                                แนะนำให้ผู้เล่นตั้ง Safe Zone เป็นสูงสุด (100%) ใน Settings → Video</li>
+                        </ul>
+                        <div class="tip"><span class="ico">💡</span> ทดสอบ HUD บน Bedrock Client จริงหลัง Export เสมอ
+                            ตัว Preview ใน Editor เป็นค่าประมาณที่ใกล้เคียง แต่อาจไม่ตรง Pixel-perfect บนทุกอุปกรณ์
+                        </div>
+                        <div class="tip"><span class="ico">💡</span> ถ้า Element เลื่อนตำแหน่งอย่างสม่ำเสมอ
+                            ให้ลองปรับค่า <strong>Offset X/Y</strong> ทีละนิด (1–5 พิกเซล) จนตำแหน่งในเกมตรงกับที่ออกแบบ
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FAQ 5 — Resource pack not loading -->
+                <div class="card" id="faq-pack-not-loading">
+                    <div class="faq-q"><span class="q-icon">Q5.</span>
+                        <span class="lang-en">The resource pack (.mcpack) is not loading on Bedrock clients</span>
+                        <span class="lang-th">Resource Pack (.mcpack) ไม่โหลดบน Bedrock Client</span>
+                    </div>
+                    <div class="lang-en">
+                        <p>If the resource pack doesn't apply to Bedrock players, check the following:</p>
+                        <ul>
+                            <li><strong>Pack location</strong> — The <code>.mcpack</code> file must be placed inside
+                                <code>GeyserMC/packs/</code> on the server where GeyserMC is installed (proxy or
+                                backend, depending on your setup).
+                            </li>
+                            <li><strong>File name</strong> — Make sure the file ends with <code>.mcpack</code> (not
+                                <code>.zip</code>).
+                            </li>
+                            <li><strong>Restart required</strong> — GeyserMC loads resource packs on startup. You must
+                                <strong>restart the server</strong> (not just reload) after adding or updating the pack.
+                            </li>
+                            <li><strong>Client cache</strong> — Sometimes Bedrock clients cache old packs. The player
+                                may need to go to Settings → Storage → Cached Data and clear it, or rejoin the server.
+                            </li>
+                        </ul>
+                        <div class="tip"><span class="ico">💡</span> After exporting, the <code>output.zip</code>
+                            already contains the correct folder structure:
+                            <code>GeyserMC/packs/your_namespace.mcpack</code>. Simply extract the ZIP into your server
+                            root.
+                        </div>
+                    </div>
+                    <div class="lang-th">
+                        <p>ถ้า Resource Pack ไม่ถูกใช้งานบนผู้เล่น Bedrock ให้ตรวจสอบ:</p>
+                        <ul>
+                            <li><strong>ตำแหน่งไฟล์</strong> — ไฟล์ <code>.mcpack</code> ต้องอยู่ในโฟลเดอร์
+                                <code>GeyserMC/packs/</code> บนเซิร์ฟเวอร์ที่ติดตั้ง GeyserMC (Proxy หรือ Backend
+                                ขึ้นอยู่กับระบบของคุณ)
+                            </li>
+                            <li><strong>ชื่อไฟล์</strong> — ต้องลงท้ายด้วย <code>.mcpack</code> (ไม่ใช่
+                                <code>.zip</code>)
+                            </li>
+                            <li><strong>ต้องรีสตาร์ท</strong> — GeyserMC โหลด Resource Pack ตอนเริ่มต้น ต้อง
+                                <strong>รีสตาร์ทเซิร์ฟเวอร์</strong> (ไม่ใช่แค่ Reload) หลังจากเพิ่มหรืออัพเดท Pack
+                            </li>
+                            <li><strong>Cache ของ Client</strong> — บางครั้ง Bedrock Client เก็บ Pack เก่าไว้
+                                ผู้เล่นอาจต้องไปที่ Settings → Storage → Cached Data แล้วล้าง หรือเข้าเซิร์ฟใหม่</li>
+                        </ul>
+                        <div class="tip"><span class="ico">💡</span> หลัง Export แล้ว <code>output.zip</code>
+                            มีโครงสร้างโฟลเดอร์ที่ถูกต้องอยู่แล้ว: <code>GeyserMC/packs/your_namespace.mcpack</code>
+                            แค่แตกไฟล์ ZIP ลงใน Root ของเซิร์ฟเวอร์</div>
+                    </div>
+                </div>
+
+                <!-- FAQ 6 — Java player issues -->
+                <div class="card" id="faq-java-players">
+                    <div class="faq-q"><span class="q-icon">Q6.</span>
+                        <span class="lang-en">Does this plugin affect Java Edition players?</span>
+                        <span class="lang-th">ปลั๊กอินนี้กระทบผู้เล่น Java Edition ไหม?</span>
+                    </div>
+                    <div class="lang-en">
+                        <p><strong>No.</strong> KaizerMultiBar is designed exclusively for Bedrock players. It
+                            automatically detects Bedrock players via the Floodgate API and only sends HUD data to them.
+                        </p>
+                        <ul>
+                            <li>Java players will <strong>not</strong> see any BossBar, actionbar, or overlay from this
+                                plugin</li>
+                            <li>The plugin does <strong>not</strong> interfere with other plugins' BossBar displays for
+                                Java players</li>
+                            <li>No resource packs are sent to Java clients</li>
+                        </ul>
+                        <div class="tip"><span class="ico">💡</span> If you want a HUD for Java players as well, you can
+                            use a separate plugin like BetterHUD or MythicHUD alongside KaizerMultiBar — just make sure
+                            to disable their Bedrock output as described in FAQ Q2.</div>
+                    </div>
+                    <div class="lang-th">
+                        <p><strong>ไม่กระทบ</strong> KaizerMultiBar ออกแบบมาสำหรับผู้เล่น Bedrock โดยเฉพาะ
+                            ตรวจจับผู้เล่น Bedrock ผ่าน Floodgate API อัตโนมัติ และส่งข้อมูล HUD ให้เฉพาะผู้เล่น Bedrock
+                        </p>
+                        <ul>
+                            <li>ผู้เล่น Java จะ <strong>ไม่เห็น</strong> BossBar, Actionbar หรือ Overlay จากปลั๊กอินนี้
+                            </li>
+                            <li>ปลั๊กอิน <strong>ไม่รบกวน</strong> การแสดง BossBar ของปลั๊กอินอื่นสำหรับผู้เล่น Java
+                            </li>
+                            <li>ไม่มี Resource Pack ถูกส่งไปยัง Java Client</li>
+                        </ul>
+                        <div class="tip"><span class="ico">💡</span> ถ้าคุณต้องการ HUD สำหรับผู้เล่น Java ด้วย
+                            สามารถใช้ปลั๊กอินอื่นเช่น BetterHUD หรือ MythicHUD ควบคู่กับ KaizerMultiBar ได้
+                            แค่ปิดการแสดงผลฝั่ง Bedrock ตาม FAQ Q2</div>
+                    </div>
+                </div>
+
+                <!-- FAQ 7 — How to update HUD -->
+                <div class="card" id="faq-update-hud">
+                    <div class="faq-q"><span class="q-icon">Q7.</span>
+                        <span class="lang-en">How do I update my HUD after making changes?</span>
+                        <span class="lang-th">แก้ไข HUD แล้ว อัพเดทยังไง?</span>
+                    </div>
+                    <div class="lang-en">
+                        <p>After editing your HUD in the web editor, follow these steps to apply changes on your server:
+                        </p>
+                        <ul class="step-list">
+                            <li data-step="1.">Click <strong>Export</strong> in the web editor to download the new
+                                <code>output.zip</code></li>
+                            <li data-step="2.">Extract the ZIP — it contains the updated <code>.mcpack</code> and plugin
+                                config files</li>
+                            <li data-step="3.">Replace the old <code>.mcpack</code> file in <code>GeyserMC/packs/</code>
+                                with the new one</li>
+                            <li data-step="4.">Replace the plugin config files in <code>plugins/KaizerMultiBar/</code>
+                            </li>
+                            <li data-step="5."><strong>Restart the server</strong> (not just reload) — GeyserMC only
+                                loads packs on startup</li>
+                            <li data-step="6.">Ask players to <strong>clear their cached resource packs</strong> in
+                                Bedrock: Settings → Storage → Cached Data</li>
+                        </ul>
+                        <div class="warn-red">
+                            <span class="ico">⚠️</span>
+                            <div>
+                                A full server restart is required. Using <code>/reload</code> will <strong>not</strong> update the resource pack on Bedrock clients.
+                            </div>
+                        </div>
+                        <div class="tip"><span class="ico">💡</span> If players still see the old HUD after restarting,
+                            they need to leave the server, clear cached data, and rejoin.</div>
+                    </div>
+                    <div class="lang-th">
+                        <p>หลังจากแก้ไข HUD ในเว็บ Editor แล้ว ทำตามขั้นตอนนี้เพื่ออัพเดทบนเซิร์ฟเวอร์:</p>
+                        <ul class="step-list">
+                            <li data-step="1.">กด <strong>Export</strong> ในเว็บ Editor เพื่อดาวน์โหลด
+                                <code>output.zip</code> ใหม่</li>
+                            <li data-step="2.">แตกไฟล์ ZIP — จะมี <code>.mcpack</code> และไฟล์ Config
+                                ปลั๊กอินที่อัพเดทแล้ว</li>
+                            <li data-step="3.">เอาไฟล์ <code>.mcpack</code> ใหม่ไปแทนที่ไฟล์เก่าในโฟลเดอร์
+                                <code>GeyserMC/packs/</code></li>
+                            <li data-step="4.">เอาไฟล์ Config ปลั๊กอินไปแทนที่ในโฟลเดอร์
+                                <code>plugins/KaizerMultiBar/</code></li>
+                            <li data-step="5."><strong>รีสตาร์ทเซิร์ฟเวอร์</strong> (ไม่ใช่แค่ reload) — GeyserMC โหลด
+                                Pack ตอนเริ่มต้นเท่านั้น</li>
+                            <li data-step="6.">แจ้งผู้เล่นให้ <strong>ล้าง Cache Resource Pack</strong> ใน Bedrock:
+                                Settings → Storage → Cached Data</li>
+                        </ul>
+                        <div class="warn-red">
+                            <span class="ico">⚠️</span>
+                            <div>
+                                ต้องรีสตาร์ทเซิร์ฟเวอร์ใหม่ทั้งหมด การใช้ <code>/reload</code> จะ <strong>ไม่</strong> อัพเดท Resource Pack บน Bedrock Client
+                            </div>
+                        </div>
+                        <div class="tip"><span class="ico">💡</span> ถ้าผู้เล่นยังเห็น HUD เก่าหลังรีสตาร์ท
+                            ให้ออกจากเซิร์ฟเวอร์ ล้าง Cached Data แล้วเข้าใหม่</div>
+                    </div>
+                </div>
+
+                <!-- FAQ 8 — Recommended PAPI expansions -->
+                <div class="card" id="faq-papi">
+                    <div class="faq-q"><span class="q-icon">Q8.</span>
+                        <span class="lang-en">Which PlaceholderAPI expansions do you recommend?</span>
+                        <span class="lang-th">แนะนำ PlaceholderAPI Expansion ตัวไหนบ้าง?</span>
+                    </div>
+                    <div class="lang-en">
+                        <p>KaizerMultiBar works with <strong>any PlaceholderAPI placeholder</strong>. Here are the most
+                            commonly used expansions for HUD elements:</p>
+                        <table class="prop-table">
+                            <tr>
+                                <th>Expansion</th>
+                                <th>Example Placeholder</th>
+                                <th>Use Case</th>
+                            </tr>
+                            <tr>
+                                <td><strong>Player</strong></td>
+                                <td><code>%player_health%</code>, <code>%player_food_level%</code></td>
+                                <td>Health bar, hunger bar</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Vault</strong></td>
+                                <td><code>%vault_eco_balance%</code></td>
+                                <td>Money display</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Statistic</strong></td>
+                                <td><code>%statistic_deaths%</code>, <code>%statistic_kill_entity%</code></td>
+                                <td>Kill/death counters</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Server</strong></td>
+                                <td><code>%server_online%</code>, <code>%server_tps_1%</code></td>
+                                <td>Server info display</td>
+                            </tr>
+                            <tr>
+                                <td><strong>LuckPerms</strong></td>
+                                <td><code>%luckperms_prefix%</code></td>
+                                <td>Rank display</td>
+                            </tr>
+                            <tr>
+                                <td><strong>CheckItem</strong></td>
+                                <td><code>%checkitem_amount_mat:DIAMOND%</code></td>
+                                <td>Item counters</td>
+                            </tr>
+                        </table>
+                        <p style="margin-top:12px"><strong>How to install expansions:</strong></p>
+<div class="code-block"><span class="comment"># Install from eCloud (in-game or console)</span>
+/papi ecloud download Player
+/papi ecloud download Vault
+/papi ecloud download Statistic
+/papi ecloud download Server
+/papi ecloud download LuckPerms
+/papi ecloud download CheckItem
+/papi reload</div>
+                        <div class="tip"><span class="ico">💡</span> Use <code>/papi parse me %placeholder%</code> to
+                            test if a placeholder is working before adding it to your HUD.</div>
+                        <div class="tip"><span class="ico">💡</span> Full list of expansions: <a
+                                href="https://wiki.placeholderapi.com/users/placeholder-list/"
+                                target="_blank">PlaceholderAPI Wiki — Placeholder List</a></div>
+                    </div>
+                    <div class="lang-th">
+                        <p>KaizerMultiBar ใช้งานร่วมกับ <strong>PlaceholderAPI placeholder ได้ทุกตัว</strong> นี่คือ
+                            Expansion ที่นิยมใช้สำหรับ HUD:</p>
+                        <table class="prop-table">
+                            <tr>
+                                <th>Expansion</th>
+                                <th>ตัวอย่าง Placeholder</th>
+                                <th>ใช้ทำอะไร</th>
+                            </tr>
+                            <tr>
+                                <td><strong>Player</strong></td>
+                                <td><code>%player_health%</code>, <code>%player_food_level%</code></td>
+                                <td>แถบเลือด, แถบหิว</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Vault</strong></td>
+                                <td><code>%vault_eco_balance%</code></td>
+                                <td>แสดงเงิน</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Statistic</strong></td>
+                                <td><code>%statistic_deaths%</code>, <code>%statistic_kill_entity%</code></td>
+                                <td>นับ Kill/Death</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Server</strong></td>
+                                <td><code>%server_online%</code>, <code>%server_tps_1%</code></td>
+                                <td>แสดงข้อมูลเซิร์ฟ</td>
+                            </tr>
+                            <tr>
+                                <td><strong>LuckPerms</strong></td>
+                                <td><code>%luckperms_prefix%</code></td>
+                                <td>แสดงยศ</td>
+                            </tr>
+                            <tr>
+                                <td><strong>CheckItem</strong></td>
+                                <td><code>%checkitem_amount_mat:DIAMOND%</code></td>
+                                <td>นับไอเทม</td>
+                            </tr>
+                        </table>
+                        <p style="margin-top:12px"><strong>วิธีติดตั้ง Expansion:</strong></p>
+<div class="code-block"><span class="comment"># ติดตั้งจาก eCloud (ในเกมหรือ Console)</span>
+/papi ecloud download Player
+/papi ecloud download Vault
+/papi ecloud download Statistic
+/papi ecloud download Server
+/papi ecloud download LuckPerms
+/papi ecloud download CheckItem
+/papi reload</div>
+                        <div class="tip"><span class="ico">💡</span> ใช้ <code>/papi parse me %placeholder%</code>
+                            เพื่อทดสอบว่า Placeholder ทำงานได้หรือไม่ ก่อนใส่ลงใน HUD</div>
+                        <div class="tip"><span class="ico">💡</span> ดูรายการ Expansion ทั้งหมด: <a
+                                href="https://wiki.placeholderapi.com/users/placeholder-list/"
+                                target="_blank">PlaceholderAPI Wiki — Placeholder List</a></div>
+                    </div>
+                </div>
+
+                <!-- FAQ 9 — Server compatibility -->
+                <div class="card" id="faq-compatibility">
+                    <div class="faq-q"><span class="q-icon">Q9.</span>
+                        <span class="lang-en">What server software and versions are supported?</span>
+                        <span class="lang-th">รองรับ Server Software และเวอร์ชันอะไรบ้าง?</span>
+                    </div>
+                    <div class="lang-en">
+                        <p><strong>Server Software:</strong></p>
+                        <table class="prop-table">
+                            <tr>
+                                <th>Software</th>
+                                <th>Supported</th>
+                                <th>Notes</th>
+                            </tr>
+                            <tr>
+                                <td><strong>Paper</strong></td>
+                                <td style="color:var(--green)">✅ Recommended</td>
+                                <td>Best compatibility and performance</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Spigot</strong></td>
+                                <td style="color:var(--green)">✅ Yes</td>
+                                <td>Fully supported</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Purpur</strong></td>
+                                <td style="color:var(--green)">✅ Yes</td>
+                                <td>Paper fork — works out of the box</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Folia</strong></td>
+                                <td style="color:var(--green)">✅ Yes</td>
+                                <td>Region-threaded — supported with async scheduling</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Fabric / Forge</strong></td>
+                                <td style="color:var(--red)">❌ No</td>
+                                <td>Not a Bukkit-based server</td>
+                            </tr>
+                        </table>
+
+                        <p style="margin-top:16px"><strong>Minecraft Version:</strong> 1.16.5 – 1.21.x (latest)</p>
+
+                        <p style="margin-top:16px"><strong>Required Dependencies:</strong></p>
+                        <table class="prop-table">
+                            <tr>
+                                <th>Plugin</th>
+                                <th>Required?</th>
+                                <th>Purpose</th>
+                            </tr>
+                            <tr>
+                                <td><strong>GeyserMC</strong></td>
+                                <td style="color:var(--green)">✅ Required</td>
+                                <td>Allows Bedrock players to join Java servers</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Floodgate</strong></td>
+                                <td style="color:var(--green)">✅ Required</td>
+                                <td>Detects Bedrock players for HUD targeting</td>
+                            </tr>
+                            <tr>
+                                <td><strong>ProtocolLib</strong></td>
+                                <td style="color:var(--green)">✅ Required</td>
+                                <td>Handles BossBar packet management</td>
+                            </tr>
+                            <tr>
+                                <td><strong>PlaceholderAPI</strong></td>
+                                <td style="color:var(--green)">✅ Required</td>
+                                <td>Resolves dynamic placeholders for HUD text</td>
+                            </tr>
+                        </table>
+
+                        <div class="tip"><span class="ico">💡</span> Make sure all dependencies are up-to-date. Using
+                            outdated versions of ProtocolLib or GeyserMC may cause issues.</div>
+                    </div>
+                    <div class="lang-th">
+                        <p><strong>Server Software:</strong></p>
+                        <table class="prop-table">
+                            <tr>
+                                <th>Software</th>
+                                <th>รองรับ</th>
+                                <th>หมายเหตุ</th>
+                            </tr>
+                            <tr>
+                                <td><strong>Paper</strong></td>
+                                <td style="color:var(--green)">✅ แนะนำ</td>
+                                <td>เข้ากันได้ดีที่สุด ประสิทธิภาพสูง</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Spigot</strong></td>
+                                <td style="color:var(--green)">✅ ได้</td>
+                                <td>รองรับเต็มที่</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Purpur</strong></td>
+                                <td style="color:var(--green)">✅ ได้</td>
+                                <td>Fork ของ Paper — ใช้ได้เลย</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Folia</strong></td>
+                                <td style="color:var(--green)">✅ ได้</td>
+                                <td>Region-threaded — รองรับด้วย async scheduling</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Fabric / Forge</strong></td>
+                                <td style="color:var(--red)">❌ ไม่ได้</td>
+                                <td>ไม่ใช่ Bukkit-based server</td>
+                            </tr>
+                        </table>
+
+                        <p style="margin-top:16px"><strong>เวอร์ชัน Minecraft:</strong> 1.16.5 – 1.21.x (ล่าสุด)</p>
+
+                        <p style="margin-top:16px"><strong>ปลั๊กอินที่ต้องติดตั้ง (Dependencies):</strong></p>
+                        <table class="prop-table">
+                            <tr>
+                                <th>ปลั๊กอิน</th>
+                                <th>จำเป็น?</th>
+                                <th>หน้าที่</th>
+                            </tr>
+                            <tr>
+                                <td><strong>GeyserMC</strong></td>
+                                <td style="color:var(--green)">✅ จำเป็น</td>
+                                <td>ให้ผู้เล่น Bedrock เข้าเซิร์ฟ Java ได้</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Floodgate</strong></td>
+                                <td style="color:var(--green)">✅ จำเป็น</td>
+                                <td>ตรวจจับผู้เล่น Bedrock สำหรับแสดง HUD</td>
+                            </tr>
+                            <tr>
+                                <td><strong>ProtocolLib</strong></td>
+                                <td style="color:var(--green)">✅ จำเป็น</td>
+                                <td>จัดการ BossBar Packet</td>
+                            </tr>
+                            <tr>
+                                <td><strong>PlaceholderAPI</strong></td>
+                                <td style="color:var(--green)">✅ จำเป็น</td>
+                                <td>แปลง Placeholder เป็นข้อมูลจริงสำหรับ HUD</td>
+                            </tr>
+                        </table>
+
+                        <div class="tip"><span class="ico">💡</span> ตรวจสอบให้ทุก Dependency อัพเดทเป็นเวอร์ชันล่าสุด
+                            การใช้ ProtocolLib หรือ GeyserMC เวอร์ชันเก่าอาจทำให้เกิดปัญหาได้</div>
+                    </div>
+                </div>
+
+                <!-- FAQ 10 — Open Source / License -->
+                <div class="card" id="faq-license">
+                    <div class="faq-q"><span class="q-icon">Q10.</span>
+                        <span class="lang-en">Is KaizerHUD Studio free and open source?</span>
+                        <span class="lang-th">KaizerHUD Studio ใช้งานฟรีและเป็น Open Source ใช่ไหม?</span>
+                    </div>
+                    <div class="lang-en">
+                        <p><strong>Yes — 100% free and open source under the GNU General Public License v3.0 (GPL-3.0).</strong></p>
+                        <p style="margin-top:12px">Every feature in KaizerHUD Studio and its companion server plugins
+                            (<code>KaizerMultiBar</code>, <code>KaizerMultiBarGeyser</code>, and <code>KaizerUI</code>) is
+                            unlocked for everyone — including Live Code View &amp; Editing, clean Readable <code>.mcpack</code>
+                            Export, Live Folder Sync, GUI Studio, and Java HUD Import/Export. No license keys, accounts, or
+                            subscriptions are required.</p>
+                        <div class="tip"><span class="ico">💡</span> Want to contribute code, templates, or translations? Check out the project repository on GitHub and join the community on <a href="https://discord.gg/rNGH2SpNs5" target="_blank">Discord</a>.</div>
+                    </div>
+                    <div class="lang-th">
+                        <p><strong>ใช่ — ใช้งานฟรี 100% และเปิดเป็น Open Source ภายใต้สัญญาอนุญาต GNU General Public License v3.0 (GPL-3.0)</strong></p>
+                        <p style="margin-top:12px">ทุกฟีเจอร์ใน KaizerHUD Studio รวมถึงปลั๊กอินฝั่งเซิร์ฟเวอร์
+                            (<code>KaizerMultiBar</code>, <code>KaizerMultiBarGeyser</code> และ <code>KaizerUI</code>)
+                            เปิดให้ใช้งานได้ครบทั้งหมด ไม่ว่าจะเป็น Live Code View &amp; Editing, การ Export ไฟล์
+                            <code>.mcpack</code> แบบ Readable, Live Folder Sync, GUI Studio และ Java HUD Import/Export
+                            โดยไม่ต้องใช้ License Key บัญชี หรือแพลนรายเดือนใดๆ</p>
+                        <div class="tip"><span class="ico">💡</span> อยากร่วมพัฒนาโค้ด ส่งเทมเพลต หรือช่วยแปลภาษา? สามารถเปิด Pull Request บน GitHub หรือพูดคุยกับชุมชนได้ที่ <a href="https://discord.gg/rNGH2SpNs5" target="_blank">Discord</a></div>
+                    </div>
+                </div>
+
+                <!-- FAQ 11 — Widgets Upload -->
+                <div class="card" id="faq-widgets">
+                    <div class="faq-q"><span class="q-icon">Q11.</span>
+                        <span class="lang-en">What is "Widgets Upload"? How do I use it?</span>
+                        <span class="lang-th">"Widgets Upload" คืออะไร? ใช้ยังไง?</span>
+                    </div>
+                    <div class="lang-en">
+                        <p><strong>Widgets Upload</strong> is a feature for uploading a custom <code>widgets.png</code>
+                            file — the texture that contains your <strong>hotbar slots and selection highlight</strong>.
+                            This is <strong>NOT</strong> for adding regular images to your HUD.</p>
+
+                        <p style="margin-top:16px"><strong>What does it do?</strong></p>
+                        <p>When you upload a <code>widgets.png</code> file (182×22 pixels), the editor automatically slices it into individual hotbar slot textures and includes them in the exported <code>.mcpack</code>. This allows you to customize the appearance of the hotbar (the item slots at the bottom of the screen).</p>
+
+                        <p style="margin-top:12px"><strong>Example widgets.png:</strong></p>
+                        <img src="img/widgets.png" alt="widgets.png example" style="max-width:100%; border:1px solid var(--border); border-radius:4px; margin:8px 0;">
+
+                        <p style="margin-top:16px"><strong>How to use it:</strong></p>
+                        <ul class="step-list">
+                            <li data-step="1.">Find or create a <code>widgets.png</code> file (182×22 pixels) with your
+                                custom hotbar design</li>
+                            <li data-step="2.">In the editor, click <strong>"Upload Widgets"</strong> in the left panel
+                            </li>
+                            <li data-step="3.">Select your <code>widgets.png</code> file</li>
+                            <li data-step="4.">The preview will show your uploaded texture</li>
+                            <li data-step="5.">Export your HUD — the custom hotbar will be included automatically</li>
+                        </ul>
+
+                        <div class="warn-red">
+                            <span class="ico">⚠️</span>
+                            <div>
+                                <strong>Common mistake:</strong> Do NOT use the <strong>"Image"</strong> tool to add hotbar textures. The Image tool is for static HUD overlays, not for replacing game UI elements like the hotbar. Use <strong>Widgets Upload</strong> instead.
+                            </div>
+                        </div>
+
+                        <div class="tip"><span class="ico">💡</span> If you don't upload a custom widgets.png, the
+                            default Minecraft hotbar will be used.</div>
+                    </div>
+                    <div class="lang-th">
+                        <p><strong>Widgets Upload</strong> คือฟีเจอร์สำหรับอัปโหลดไฟล์ <code>widgets.png</code>
+                            ที่กำหนดเอง — เทกซ์เจอร์ที่มี<strong>ช่องไอเทม Hotbar และกรอบเลือก</strong>
+                            นี่<strong>ไม่ใช่</strong>สำหรับเพิ่มรูปภาพทั่วไปลงใน HUD</p>
+
+                        <p style="margin-top:16px"><strong>มันทำอะไร?</strong></p>
+                        <p>เมื่อคุณอัปโหลดไฟล์ <code>widgets.png</code> (ขนาด 182×22 พิกเซล) Editor จะตัดมันเป็นเทกซ์เจอร์ช่อง Hotbar แยกชิ้นอัตโนมัติ และรวมเข้าไปใน <code>.mcpack</code> ที่ Export ออกมา ทำให้คุณสามารถปรับแต่งรูปลักษณ์ของ Hotbar (แถบไอเทมด้านล่างหน้าจอ) ได้</p>
+
+                        <p style="margin-top:12px"><strong>ตัวอย่าง widgets.png:</strong></p>
+                        <img src="img/widgets.png" alt="ตัวอย่าง widgets.png" style="max-width:100%; border:1px solid var(--border); border-radius:4px; margin:8px 0;">
+
+                        <p style="margin-top:16px"><strong>วิธีใช้:</strong></p>
+                        <ul class="step-list">
+                            <li data-step="1.">หาหรือสร้างไฟล์ <code>widgets.png</code> (ขนาด 182×22 พิกเซล) ที่มีดีไซน์
+                                Hotbar ที่คุณต้องการ</li>
+                            <li data-step="2.">ใน Editor กด <strong>"Upload Widgets"</strong> ในแผงด้านซ้าย</li>
+                            <li data-step="3.">เลือกไฟล์ <code>widgets.png</code> ของคุณ</li>
+                            <li data-step="4.">ตัวอย่างจะแสดงเทกซ์เจอร์ที่อัปโหลด</li>
+                            <li data-step="5.">Export HUD — Hotbar ที่กำหนดเองจะถูกรวมเข้าไปอัตโนมัติ</li>
+                        </ul>
+
+                        <div class="warn-red">
+                            <span class="ico">⚠️</span>
+                            <div>
+                                <strong>ข้อผิดพลาดที่พบบ่อย:</strong> <strong>ห้าม</strong>ใช้เครื่องมือ <strong>"Image"</strong> เพื่อเพิ่มเทกซ์เจอร์ Hotbar เครื่องมือ Image ใช้สำหรับ HUD Overlay แบบนิ่ง ไม่ใช่สำหรับแทนที่ UI ของเกมอย่าง Hotbar ให้ใช้ <strong>Widgets Upload</strong> แทน
+                            </div>
+                        </div>
+
+                        <div class="tip"><span class="ico">💡</span> ถ้าไม่อัปโหลด widgets.png ที่กำหนดเอง ระบบจะใช้
+                            Hotbar ของ Minecraft แบบ Default</div>
+                    </div>
+                </div>
+
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Fullscreen GIF Overlay -->
+    <div class="gif-overlay" id="gifOverlay" onclick="closeFullscreen(event)">
+        <button class="close-btn" onclick="closeFullscreen()">&times;</button>
+        <img src="" alt="Fullscreen GIF" id="fullscreenImg">
+    </div>
+
+    <script>
+        function setLang(lang) {
+            document.body.className = lang === 'th' ? 'lang-th' : '';
+            document.querySelectorAll('.lang-btn').forEach(b => { b.classList.toggle('active', b.textContent.trim() === lang.toUpperCase()) });
+            localStorage.setItem('wiki-lang', lang);
+        }
+        (function () { const l = localStorage.getItem('wiki-lang'); if (l) setLang(l) })();
+        document.addEventListener('DOMContentLoaded', () => {
+            const sb = document.getElementById('sidebar');
+            const links = document.querySelectorAll('.section[id]');
+            let html = '';
+            const groups = {
+                'Getting Started': ['overview', 'interface'],
+                'Elements': ['el-image', 'el-text', 'el-head', 'el-bar', 'el-xp', 'el-nameplate'],
+                'Properties': ['prop-general', 'prop-position', 'prop-display', 'prop-visibility'],
+                'Tutorials': ['tutorials'],
+                'Features': ['el-groups', 'grid', 'namespace', 'widgets', 'save-load', 'export', 'shortcuts', 'tips'],
+                'Support': ['faq']
+            };
+            const icons = { 'overview': '📖', 'interface': '🖥️', 'el-image': '🖼', 'el-text': '📝', 'el-head': '👤', 'el-bar': '▬', 'el-xp': '❇', 'el-nameplate': '⬜', 'prop-general': '⚙️', 'prop-position': '📍', 'prop-display': '🎨', 'prop-visibility': '👁️', 'el-groups': '📁', 'grid': '⊞', 'namespace': '📁', 'widgets': '🎮', 'save-load': '💾', 'export': '📦', 'shortcuts': '⌨️', 'tips': '💡', 'tutorials': '🎬', 'faq': '❓' };
+            const labels = { 'overview': 'Overview', 'interface': 'Interface Layout', 'el-image': 'Image Element', 'el-text': 'Scoreboard Text', 'el-head': 'Player Head', 'el-bar': 'Status Bar', 'el-xp': 'XP Level Label', 'el-nameplate': 'Nameplate', 'prop-general': 'General Properties', 'prop-position': 'Position Properties', 'prop-display': 'Display Properties', 'prop-visibility': 'Visibility Conditions', 'el-groups': 'Element Groups', 'grid': 'Grid System', 'namespace': 'Namespace', 'widgets': 'Widgets Upload', 'save-load': 'Save & Load Projects', 'export': 'Export', 'shortcuts': 'Keyboard Shortcuts', 'tips': 'Tips & Tricks', 'tutorials': 'Video Tutorials', 'faq': 'FAQ' };
+            for (const [group, ids] of Object.entries(groups)) {
+                html += `<div class="sidebar-group"><div class="sidebar-title">${group}</div>`;
+                ids.forEach(id => {
+                    const sec = document.getElementById(id);
+                    if (!sec) return;
+                    const label = labels[id] || id;
+                    html += `<a class="sidebar-link" href="#${id}" onclick="document.querySelectorAll('.sidebar-link').forEach(l=>l.classList.remove('active'));this.classList.add('active')"><span class="ico">${icons[id] || '•'}</span>${label}</a>`;
+                });
+                html += `</div>`;
+            }
+            sb.innerHTML = html;
+        });
+
+        // Fullscreen GIF functions
+        function openFullscreen(src) {
+            const overlay = document.getElementById('gifOverlay');
+            const img = document.getElementById('fullscreenImg');
+            img.src = src;
+            overlay.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeFullscreen(event) {
+            if (event && event.target !== event.currentTarget) return;
+            const overlay = document.getElementById('gifOverlay');
+            overlay.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        // Close on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeFullscreen();
+            }
+        });
+    </script>
+    <script src="js/desktop.js"></script>
+</body>
+
+</html>

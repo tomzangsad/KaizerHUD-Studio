@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KaizerHUD Studio</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/shell.css" />
+  <link rel="shortcut icon" href="img/favicon.png" type="image/x-icon" />
+  <!-- SVG icon sprite -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 9"/></symbol>
+    <symbol id="i-text" viewBox="0 0 24 24"><path d="M5 6V4h14v2M12 4v16M9 20h6"/></symbol>
+    <symbol id="i-head" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="14" rx="1.5"/><path d="M9 9h.01M15 9h.01M9 13h6M7 21v-1a3 3 0 013-3h4a3 3 0 013 3v1"/></symbol>
+    <symbol id="i-bar" viewBox="0 0 24 24"><rect x="2.5" y="8" width="19" height="8" rx="1.5"/><path d="M5 11v2M8 11v2M11 11v2"/></symbol>
+    <symbol id="i-xp" viewBox="0 0 24 24"><path d="M12 3l2.6 5.6L20 9.3l-4 4 1 5.7L12 16.3 7 19l1-5.7-4-4 5.4-.7z"/></symbol>
+    <symbol id="i-nameplate" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="2"/><path d="M7 12h7"/></symbol>
+    <symbol id="i-widgets" viewBox="0 0 24 24"><rect x="2" y="9" width="20" height="7" rx="1"/><path d="M6 9v7M10 9v7M14 9v7M18 9v7"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="1.5"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 010 10h-3"/></symbol>
+    <symbol id="i-redo" viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 000 10h3"/></symbol>
+    <symbol id="i-zoom-in" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></symbol>
+    <symbol id="i-zoom-out" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M8 11h6"/></symbol>
+    <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 17v3h16v-3"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 3h11l4 4v14H4V4a1 1 0 011-1z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/></symbol>
+    <symbol id="i-open" viewBox="0 0 24 24"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 114 2c-.9.6-1.5 1.1-1.5 2.2M12 17h.01"/></symbol>
+    <symbol id="i-forge" viewBox="0 0 24 24"><path d="M4 9h11l5-3v5l-5 1-2 3h-3l-2-3H4z"/><path d="M9 15v3M15 15v3M6 20h12"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  </svg>
+</head>
+
+<body class="kz-shell">
+
+  <!-- ═══════════ Title bar + menus ═══════════ -->
+  <header id="titlebar" data-tauri-drag-region>
+    <div class="tb-left">
+      <img src="img/favicon.png" alt="" class="tb-logo" />
+      <nav class="menubar" id="menubar">
+        <div class="menu" data-menu="file">
+          <button class="menu-trigger">File</button>
+          <div class="menu-pop">
+            <button data-cmd="new"><span>New Project</span><kbd>Ctrl+N</kbd></button>
+            <button data-cmd="open"><span>Open Project…</span><kbd>Ctrl+O</kbd></button>
+            <div class="menu-sep"></div>
+            <button data-cmd="save"><span>Save</span><kbd>Ctrl+S</kbd></button>
+            <button data-cmd="save-as"><span>Save As…</span><kbd>Ctrl+Shift+S</kbd></button>
+            <button data-cmd="projects-folder"><span>Show Projects Folder</span></button>
+            <button data-cmd="live-sync"><span>Live Sync Folder…</span></button>
+            <div class="menu-sep"></div>
+            <button data-cmd="import-java-hud"><span>Import Java HUD Pack (.zip)…</span></button>
+            <button data-cmd="import-java-hud-folder"><span>Import Java HUD Pack (folder)…</span></button>
+            <button data-cmd="widgets"><span>Import widgets.png…</span></button>
+            <button data-cmd="export"><span>Export .mcpack…</span><kbd>Ctrl+E</kbd></button>
+            <div class="menu-sep"></div>
+            <button data-cmd="exit"><span>Exit</span><kbd>Alt+F4</kbd></button>
+          </div>
+        </div>
+        <div class="menu" data-menu="edit">
+          <button class="menu-trigger">Edit</button>
+          <div class="menu-pop">
+            <button data-cmd="undo"><span>Undo</span><kbd>Ctrl+Z</kbd></button>
+            <button data-cmd="redo"><span>Redo</span><kbd>Ctrl+Y</kbd></button>
+            <div class="menu-sep"></div>
+            <button data-cmd="copy"><span>Copy</span><kbd>Ctrl+C</kbd></button>
+            <button data-cmd="paste"><span>Paste</span><kbd>Ctrl+V</kbd></button>
+            <button data-cmd="duplicate"><span>Duplicate</span><kbd>Ctrl+D</kbd></button>
+            <button data-cmd="delete"><span>Delete</span><kbd>Del</kbd></button>
+            <div class="menu-sep"></div>
+            <button data-cmd="select-all"><span>Select All in Group</span><kbd>Ctrl+A</kbd></button>
+            <button data-cmd="deselect"><span>Deselect</span><kbd>Esc</kbd></button>
+          </div>
+        </div>
+        <div class="menu" data-menu="insert">
+          <button class="menu-trigger">Insert</button>
+          <div class="menu-pop">
+            <button data-cmd="add-image"><span>Image…</span><kbd>I</kbd></button>
+            <button data-cmd="add-text"><span>Scoreboard Text</span><kbd>T</kbd></button>
+            <button data-cmd="add-head"><span>Player Head</span><kbd>H</kbd></button>
+            <button data-cmd="add-bar"><span>Status Bar…</span><kbd>B</kbd></button>
+            <button data-cmd="add-xp"><span>XP Level Number</span><kbd>X</kbd></button>
+            <button data-cmd="add-nameplate"><span>Nameplate Slot</span><kbd>N</kbd></button>
+            <div class="menu-sep"></div>
+            <button data-cmd="hud-forge"><span>HUD from Templates (HUD Forge)…</span><kbd>F</kbd></button>
+          </div>
+        </div>
+        <div class="menu" data-menu="view">
+          <button class="menu-trigger">View</button>
+          <div class="menu-pop">
+            <button data-cmd="zoom-in"><span>Zoom In</span><kbd>Ctrl++</kbd></button>
+            <button data-cmd="zoom-out"><span>Zoom Out</span><kbd>Ctrl+−</kbd></button>
+            <button data-cmd="zoom-reset"><span>Actual Size (100%)</span><kbd>Ctrl+0</kbd></button>
+            <div class="menu-sep"></div>
+            <button data-cmd="view-canvas"><span>Canvas</span><kbd>Ctrl+1</kbd></button>
+            <button data-cmd="view-code"><span>Code</span><kbd>Ctrl+2</kbd></button>
+            <button data-cmd="view-split"><span>Canvas + Code</span><kbd>Ctrl+3</kbd></button>
+            <div class="menu-sep"></div>
+            <button data-cmd="grid"><span>Anchor Grid</span><kbd>G</kbd></button>
+            <button data-cmd="toggle-panels"><span>Show / Hide Panels</span><kbd>Tab</kbd></button>
+            <div class="menu-sep"></div>
+            <button data-cmd="fullscreen"><span>Maximize Window</span><kbd>F11</kbd></button>
+          </div>
+        </div>
+        <div class="menu" data-menu="help">
+          <button class="menu-trigger">Help</button>
+          <div class="menu-pop">
+            <button data-cmd="wiki"><span>User Guide &amp; Wiki</span><kbd>F1</kbd></button>
+            <button data-cmd="shortcuts"><span>Keyboard Shortcuts</span></button>
+            <div class="menu-sep"></div>
+            <a class="menu-link" href="https://convert.kaizermc.xyz"><span>J2B Resource Pack Converter ↗</span></a>
+            <a class="menu-link" href="https://discord.gg/rNGH2SpNs5"><span>Discord Support ↗</span></a>
+            <div class="menu-sep"></div>
+            <button data-cmd="about"><span>About KaizerHUD Studio</span></button>
+          </div>
+        </div>
+      </nav>
+    </div>
+    <div class="tb-title" data-tauri-drag-region>
+      <span id="doc-title" data-tauri-drag-region>Untitled</span><span class="tb-dirty" id="tb-dirty">●</span>
+      <span class="tb-app" data-tauri-drag-region>— KaizerHUD Studio</span>
+    </div>
+    <div class="tb-controls" id="window-controls">
+      <button class="wc" data-wc="min" title="Minimize"><svg viewBox="0 0 10 10"><path d="M1 5h8"/></svg></button>
+      <button class="wc" data-wc="max" title="Maximize"><svg viewBox="0 0 10 10"><rect x="1.5" y="1.5" width="7" height="7"/></svg></button>
+      <button class="wc wc-close" data-wc="close" title="Close"><svg viewBox="0 0 10 10"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7"/></svg></button>
+    </div>
+  </header>
+
+  <!-- ═══════════ Options bar ═══════════ -->
+  <div id="optionsbar">
+    <div class="ob-group">
+      <label for="namespace-input" class="ob-label">Namespace</label>
+      <input type="text" id="namespace-input" value="custom_hud" placeholder="namespace" spellcheck="false" />
+    </div>
+    <div class="ob-sep"></div>
+    <div class="ob-group">
+      <button id="btn-undo" class="icon-btn" title="Undo (Ctrl+Z)"><svg><use href="#i-undo"/></svg></button>
+      <button id="btn-redo" class="icon-btn" title="Redo (Ctrl+Y)"><svg><use href="#i-redo"/></svg></button>
+    </div>
+    <div class="ob-sep"></div>
+    <div class="ob-group">
+      <button id="btn-zoom-out" class="icon-btn" title="Zoom Out (Mouse wheel / Ctrl+−)"><svg><use href="#i-zoom-out"/></svg></button>
+      <span id="zoom-level" class="ob-zoom" title="Click for 100%">100%</span>
+      <button id="btn-zoom-in" class="icon-btn" title="Zoom In (Mouse wheel / Ctrl++)"><svg><use href="#i-zoom-in"/></svg></button>
+    </div>
+    <div class="ob-sep"></div>
+    <div class="ob-group">
+      <button class="btn-grid-toggle icon-btn with-label" id="btn-grid-toggle" title="Anchor Grid (G)">
+        <svg><use href="#i-grid"/></svg><span>Grid</span>
+      </button>
+    </div>
+    <div class="ob-spacer"></div>
+    <div class="ob-group">
+      <button id="btn-quick-save" class="ghost-btn" title="Save (Ctrl+S)"><svg><use href="#i-save"/></svg><span>Save</span></button>
+      <button id="btn-export" class="primary-btn" title="Export .mcpack (Ctrl+E)">
+        <svg><use href="#i-export"/></svg><span>Export</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════ Main body ═══════════ -->
+  <div class="shell-body" id="shell-body">
+
+    <!-- Tool strip -->
+    <aside id="toolstrip">
+      <button class="tool" id="btn-add-image" data-tip="Image" data-key="I"><svg><use href="#i-image"/></svg></button>
+      <button class="tool" id="btn-add-text" data-tip="Scoreboard Text" data-key="T"><svg><use href="#i-text"/></svg></button>
+      <button class="tool" id="btn-add-player-head" data-tip="Player Head" data-key="H"><svg><use href="#i-head"/></svg></button>
+      <button class="tool" id="btn-add-bar" data-tip="Status Bar" data-key="B"><svg><use href="#i-bar"/></svg></button>
+      <button class="tool" id="btn-add-xp" data-tip="XP Level Number" data-key="X"><svg><use href="#i-xp"/></svg></button>
+      <button class="tool" id="btn-add-nameplate" data-tip="Nameplate Slot" data-key="N"><svg><use href="#i-nameplate"/></svg></button>
+      <div class="tool-sep"></div>
+      <button class="tool" id="btn-tool-forge" data-tip="HUD Forge — templates" data-key="F"><svg><use href="#i-forge"/></svg></button>
+      <button class="tool" id="btn-tool-widgets" data-tip="Hotbar Widgets" data-key=""><svg><use href="#i-widgets"/></svg></button>
+      <div class="tool-flex"></div>
+      <button class="tool" id="btn-tool-help" data-tip="User Guide" data-key="F1"><svg><use href="#i-help"/></svg></button>
+    </aside>
+
+    <!-- Document area -->
+    <main class="panel-center doc-area">
+      <div class="doc-tabs">
+        <div class="doc-tab active">
+          <img src="img/favicon.png" alt="" />
+          <span id="doc-tab-name">Untitled</span>
+          <span class="doc-tab-dirty" id="doc-tab-dirty">●</span>
+        </div>
+        <div class="doc-tabs-fill"></div>
+        <div class="view-switch" role="tablist">
+          <button data-view="canvas" class="active" title="Canvas (Ctrl+1)">Canvas</button>
+          <button data-view="code" title="Code (Ctrl+2)">Code</button>
+          <button data-view="split" title="Canvas + Code (Ctrl+3)">Split</button>
+        </div>
+        <span class="doc-meta">Bedrock HUD · 16:9</span>
+      </div>
+      <div class="doc-views" id="doc-views">
+      <div class="preview-wrapper" id="pasteboard">
+        <div class="preview-screen" id="preview-screen">
+          <div id="marquee-select"></div>
+          <div class="preview-elements" id="preview-elements"></div>
+          <div class="grid-toggle-container" id="grid-toggle-container">
+            <div class="grid-cell" data-cell="0" data-row="0" data-col="0"><span class="cell-label">1</span></div>
+            <div class="grid-cell" data-cell="1" data-row="0" data-col="1"><span class="cell-label">2</span></div>
+            <div class="grid-cell" data-cell="2" data-row="0" data-col="2"><span class="cell-label">3</span></div>
+            <div class="grid-cell" data-cell="3" data-row="1" data-col="0"><span class="cell-label">4</span></div>
+            <div class="grid-cell" data-cell="4" data-row="1" data-col="1"><span class="cell-label">5</span></div>
+            <div class="grid-cell" data-cell="5" data-row="1" data-col="2"><span class="cell-label">6</span></div>
+            <div class="grid-cell" data-cell="6" data-row="2" data-col="0"><span class="cell-label">7</span></div>
+            <div class="grid-cell" data-cell="7" data-row="2" data-col="1"><span class="cell-label">8</span></div>
+            <div class="grid-cell" data-cell="8" data-row="2" data-col="2"><span class="cell-label">9</span></div>
+          </div>
+        </div>
+      </div>
+
+      <section id="code-view">
+        <aside class="code-tree" id="code-tree"></aside>
+        <div class="code-main">
+          <div class="code-head">
+            <span class="code-path" id="code-path"></span>
+            <span class="code-badge" id="code-badge"></span>
+            <div class="code-actions">
+              <button class="ghost-btn" id="code-btn-copy" title="Copy this file">Copy</button>
+              <button class="ghost-btn" id="code-btn-reset" style="display:none" title="Use the generated code again">Reset</button>
+              <button class="ghost-btn" id="code-btn-cancel" style="display:none">Cancel</button>
+              <button class="ghost-btn" id="code-btn-edit" title="Edit this file">Edit</button>
+              <button class="primary-btn" id="code-btn-apply" style="display:none" title="Apply (Ctrl+S)">Apply</button>
+            </div>
+          </div>
+          <div class="code-note" id="code-note"></div>
+          <div class="code-error" id="code-error"></div>
+          <div class="code-body" id="code-body"></div>
+          <textarea id="code-edit" spellcheck="false" wrap="off" style="display:none"></textarea>
+        </div>
+      </section>
+      </div>
+    </main>
+
+    <!-- Dock -->
+    <aside id="dock">
+      <section class="dock-panel dock-properties">
+        <div class="dock-head">
+          <div class="dock-tab active"><svg><use href="#i-sliders"/></svg>Properties</div>
+        </div>
+        <div class="properties-content" id="properties-content">
+          <div class="no-selection">
+            <p>Select an element to edit its properties</p>
+          </div>
+        </div>
+      </section>
+
+      <div class="dock-splitter" id="dock-splitter" title="Drag to resize"></div>
+
+      <section class="dock-panel dock-lower" id="dock-lower">
+        <div class="dock-head">
+          <button class="dock-tab active" data-pane="layers"><svg><use href="#i-layers"/></svg>Layers</button>
+          <button class="dock-tab" data-pane="project"><svg><use href="#i-open"/></svg>Project</button>
+          <button class="dock-tab" data-pane="widgets"><svg><use href="#i-widgets"/></svg>Widgets</button>
+        </div>
+
+        <!-- Layers -->
+        <div class="dock-pane active" data-pane="layers">
+          <div class="layers-list-wrap">
+            <ul class="element-list" id="element-list"></ul>
+          </div>
+          <div class="pane-footer">
+            <span class="pane-footer-info" id="preview-info">0 elements</span>
+            <div class="pane-footer-actions">
+              <button class="icon-btn small" id="btn-layer-up" title="Move layer down"><svg><use href="#i-down"/></svg></button>
+              <button class="icon-btn small" id="btn-layer-down" title="Move layer up"><svg><use href="#i-up"/></svg></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Project -->
+        <div class="dock-pane" data-pane="project">
+          <div id="user-section" class="project-pane">
+            <div class="project-card">
+              <div class="project-card-label">Current project</div>
+              <div class="project-card-name" id="project-pane-name">Untitled</div>
+              <div class="project-card-status" id="project-pane-status">Not saved yet</div>
+            </div>
+            <div class="project-actions">
+              <button id="btn-save" class="ghost-btn block"><svg><use href="#i-save"/></svg><span>Save As…</span></button>
+              <button id="btn-load" class="ghost-btn block"><svg><use href="#i-open"/></svg><span>Open…</span></button>
+            </div>
+            <button id="btn-open-projects-folder" class="link-btn">Show projects folder</button>
+
+            <div class="project-card sync-card">
+              <div class="project-card-label">Live sync</div>
+              <p class="sync-hint">Writes the readable pack into a folder after every change — point it at a folder in Minecraft's <b>development_resource_packs</b> to test in game, or open it in VS Code.</p>
+              <div class="sync-path" id="sync-path">Not set</div>
+              <div class="sync-status" id="sync-status">Off</div>
+              <div class="sync-actions">
+                <button class="ghost-btn" id="btn-sync-choose"><svg><use href="#i-open"/></svg><span>Choose folder…</span></button>
+                <button class="ghost-btn" id="btn-sync-open" style="display:none">Open</button>
+                <button class="ghost-btn" id="btn-sync-off" style="display:none">Turn off</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Widgets -->
+        <div class="dock-pane" data-pane="widgets">
+          <div class="widgets-pane">
+            <p class="pane-hint">Replace the hotbar textures with the ones from a Java resource pack. The canvas preview updates to match.</p>
+            <div class="widgets-format" role="tablist">
+              <button data-format="legacy" class="active">Legacy <em>≤ 1.20.1</em></button>
+              <button data-format="modern">Modern <em>1.20.2+</em></button>
+            </div>
+
+            <div class="widgets-mode" data-mode="legacy">
+              <p class="pane-path">textures/gui/<b>widgets.png</b></p>
+              <button class="ghost-btn block" id="btn-upload-widgets"><svg><use href="#i-widgets"/></svg><span>Upload widgets.png…</span></button>
+              <input type="file" id="widgets-file-input" accept="image/png" style="display: none;" />
+            </div>
+
+            <div class="widgets-mode" data-mode="modern" style="display: none;">
+              <p class="pane-path">textures/gui/sprites/hud/</p>
+              <div class="widgets-file-row">
+                <div><b>hotbar.png</b><span id="modern-hotbar-status">not chosen</span></div>
+                <button class="ghost-btn" id="btn-modern-hotbar">Choose…</button>
+                <input type="file" id="modern-hotbar-input" accept="image/png" multiple style="display: none;" />
+              </div>
+              <div class="widgets-file-row">
+                <div><b>hotbar_selection.png</b><span id="modern-selection-status">not chosen</span></div>
+                <button class="ghost-btn" id="btn-modern-selection">Choose…</button>
+                <input type="file" id="modern-selection-input" accept="image/png" multiple style="display: none;" />
+              </div>
+              <p class="pane-hint small">Tip: select both files at once — they are matched by name.</p>
+            </div>
+
+            <div id="widgets-preview" style="display: none;">
+              <div class="widgets-preview-head">
+                <span>Current hotbar</span>
+                <button id="widgets-remove" class="icon-btn small danger" title="Remove custom textures"><svg><use href="#i-close"/></svg></button>
+              </div>
+              <img id="widgets-preview-img" alt="Hotbar preview" />
+            </div>
+          </div>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <!-- ═══════════ Status bar ═══════════ -->
+  <footer id="statusbar">
+    <span class="sb-item"><span class="sb-dot" id="sb-dot"></span><span id="sb-save-state">Ready</span></span>
+    <span class="sb-item" id="sb-selection">No selection</span>
+    <span class="sb-spacer"></span>
+    <span class="sb-item sb-sync" id="sb-sync" style="display:none"></span>
+    <span class="sb-item" id="sb-namespace">custom_hud</span>
+    <span class="sb-item" id="sb-zoom">100%</span>
+    <span class="sb-item">480 × 270 HUD units</span>
+    <span class="sb-item sb-brand">KaizerHUD Studio 1.0</span>
+  </footer>
+
+  <!-- Hidden file inputs -->
+  <input type="file" id="image-upload" accept="image/png,image/jpeg,image/webp,image/gif" multiple style="display:none" />
+  <input type="file" id="bar-upload" accept="image/png,image/jpeg,image/webp" multiple style="display:none" />
+
+  <!-- ═══════════ Export dialog ═══════════ -->
+  <div id="export-confirm-modal" class="kz-modal" style="display: none;">
+    <div class="kz-window">
+      <div class="kz-window-head">
+        <span>Export</span><!-- java-export-merged -->
+        <button class="icon-btn small" id="export-confirm-close" title="Close"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <div class="kz-window-body">
+        <div class="kz-summary">
+          <div><span>Elements</span><b id="export-total-elements">0</b></div>
+          <div><span>Custom widgets.png</span><b id="export-widgets-status">No</b></div>
+          <div><span>Output</span><b>output.zip</b></div>
+        </div>
+        <fieldset class="kz-fieldset" id="export-channel-box">
+          <legend>Bedrock data channel</legend>
+          <label class="kz-radio">
+            <input type="radio" name="export-channel" value="bossbar" id="export-ch-bossbar" />
+            <span><b>Boss bar</b> <em>— default. Data never replaces other messages; our boss bar must stay first</em></span>
+          </label>
+          <label class="kz-radio">
+            <input type="radio" name="export-channel" value="title" id="export-ch-title" />
+            <span><b>Title</b> <em>— hidden title; few plugins use titles, so it clashes the least</em></span>
+          </label>
+          <label class="kz-radio" id="export-ch-debug-row">
+            <input type="checkbox" id="export-ch-debug" />
+            <span><b>Debug text</b> <em>— testing only: yellow line at the top shows what the pack receives; the title is not hidden</em></span>
+          </label>
+          <p class="kz-note" id="export-channel-note">Needs KaizerMultiBar 2.1+. The config.yml in output.zip already has <code>bossbar.channel</code> set to match.</p>
+        </fieldset>
+        <fieldset class="kz-fieldset" id="export-java-box">
+          <legend>Java Edition (optional)</legend>
+          <label class="kz-radio">
+            <input type="checkbox" id="export-java-on" />
+            <span><b>Also export Java HUD config</b> <em>— BetterHud / MythicHUD, saved as a second .zip</em></span>
+          </label>
+          <div id="export-java-opts" style="display:none;margin-top:6px"></div>
+        </fieldset>
+      </div>
+      <div class="kz-window-foot">
+        <button id="export-cancel-btn" class="ghost-btn">Cancel</button>
+        <button id="export-confirm-btn" class="primary-btn"><svg><use href="#i-export"/></svg><span>Export</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ Open dialog ═══════════ -->
+  <div id="load-modal" class="kz-modal" style="display: none;">
+    <div class="kz-window wide">
+      <div class="kz-window-head">
+        <span>Open Project</span>
+        <button class="icon-btn small" id="load-close-x" title="Close"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <div class="kz-window-body">
+        <div id="project-list"></div>
+      </div>
+      <div class="kz-window-foot">
+        <button id="load-cancel" class="ghost-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ Save dialog ═══════════ -->
+  <div id="save-modal" class="kz-modal" style="display: none;">
+    <div class="kz-window">
+      <div class="kz-window-head">
+        <span>Save Project</span>
+      </div>
+      <div class="kz-window-body">
+        <label for="save-project-name" class="kz-label">Project name</label>
+        <input type="text" id="save-project-name" placeholder="Enter project name" spellcheck="false" />
+        <p class="kz-note">Saving with the same name updates the open project. A new name creates a copy.</p>
+      </div>
+      <div class="kz-window-foot">
+        <button id="save-cancel" class="ghost-btn">Cancel</button>
+        <button id="save-submit" class="primary-btn"><svg><use href="#i-save"/></svg><span>Save</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ Help overlay (wiki) ═══════════ -->
+  <div id="help-overlay" class="kz-modal" style="display: none;">
+    <div class="kz-window help-window">
+      <div class="kz-window-head">
+        <span>User Guide &amp; Wiki</span>
+        <button class="icon-btn small" id="help-close" title="Close (Esc)"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <iframe id="help-frame" title="User Guide"></iframe>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/desktop.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/preview.js"></script>
+  <script src="js/animation.js"></script>
+  <script src="js/controls.js"></script>
+  <script src="js/scoreboard.js"></script>
+  <script src="js/export.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/widgets.js"></script>
+  <script src="js/javaimport.js"></script>
+  <script src="js/javaexport.js"></script>
+  <script src="js/hudforge_themes.js"></script>
+  <script src="js/hudforge_v2.js"></script>
+  <script src="js/hudforge_v2_more.js"></script>
+  <script src="js/hudforge_v2_set3.js"></script>
+  <script src="js/hudforge_v2_set4.js"></script>
+  <script src="js/hudforge_v2_redo.js"></script>
+  <script src="js/hudforge.js"></script>
+  <script src="js/papi_catalog.js"></script>
+  <script src="js/papi_picker.js"></script>
+  <script>
+    // Grid Toggle System
+    const GridToggle = {
+      isActive: false,
+      activeCells: new Set(),
+
+      init() {
+        const btn = document.getElementById('btn-grid-toggle');
+        const container = document.getElementById('grid-toggle-container');
+        btn.addEventListener('click', () => {
+          this.isActive = !this.isActive;
+          btn.classList.toggle('active', this.isActive);
+          container.classList.toggle('active', this.isActive);
+        });
+        // Default: Grid ON
+        this.isActive = true;
+        btn.classList.add('active');
+        container.classList.add('active');
+      },
+
+      render() {
+        const container = document.getElementById('grid-toggle-container');
+        container.querySelectorAll('.grid-cell').forEach((cell, index) => {
+          cell.classList.toggle('active', this.activeCells.has(index));
+        });
+      },
+
+      getActiveCells() {
+        return Array.from(this.activeCells);
+      },
+
+      clear() {
+        this.activeCells.clear();
+        this.render();
+      },
+
+      getCellPosition(cellIndex) {
+        return { row: Math.floor(cellIndex / 3), col: cellIndex % 3 };
+      }
+    };
+
+    window.addEventListener('DOMContentLoaded', () => {
+      GridToggle.init();
+    });
+  </script>
+  <script src="js/codeview.js"></script>
+  <script src="js/shell.js"></script>
+  <script src="js/workspace_switch.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,54 @@
+# ─────────────────────────────────────────────────────────────
+#  KaizerUI — your settings.
+#  Menus come from KaizerHUD Studio (GUI Studio): put the exported
+#  plugins/KaizerUI/menus/*.yml and studio.yml here, then /kui reload.
+# ─────────────────────────────────────────────────────────────
+
+java:
+  enabled: true
+  # Field of view the menu is sized for, when the player has not set their own with /kui fov.
+  # (The game does not tell the server the player's FOV.) Players are told once how to set theirs.
+  default-fov: 70
+  # Full-screen menus (GUI Studio: Full screen) use this share of the screen height.
+  # 1.0 = edge to edge; a little less keeps the edges visible when a player's FOV is set a bit off.
+  fullscreen-fill: 0.94
+  # Pictures look mirrored in game? Set true.
+  flip-facing: false
+  # Items in menus (Item elements) show their back? Set true.
+  item-flip: false
+  # Player Model: a real 3D player (Mannequin entity, needs a 1.21.9+ server and clients).
+  # false = always the flat skin drawn as pixels.
+  models-3d: true
+  # Move every hologram up (+) or down (-), in GUI pixels, if pictures sit a little off.
+  offset-y: 0
+  # Label colour of a button under the cursor when the button has no hover picture.
+  label-hover-color: "#ffff55"
+  # Ignore a second click this soon after the first (milliseconds).
+  click-cooldown-ms: 150
+  # With camera lock the player sits on an invisible entity (so the mouse can move the cursor).
+  # horse   = an invisible untamed horse: the E key (inventory) does nothing while a menu is open
+  # display = an invisible display entity: E still opens the inventory (use if horses can't spawn)
+  vehicle: horse
+
+bedrock:
+  enabled: true
+
+# Java resource pack with the menu pictures (KaizerUI_<namespace>_java_pack.zip from the export).
+# Leave url empty if ItemsAdder / Nexo / Oraxen or server.properties already sends it.
+resource-pack:
+  url: ""
+  sha1: ""
+  required: false
+  prompt: "This server uses a resource pack for its menus."
+
+messages:
+  prefix: "&8[&bKaizerUI&8] &r"
+  no-menu: "&cThere is no menu called &f%menu%&c."
+  no-permission: "&cYou can't do that."
+  players-only: "&cOnly players can do that."
+  player-not-found: "&cPlayer &f%player%&c is not online."
+  reloaded: "&aReloaded &f%count%&a menus."
+  fov-set: "&aMenus are now sized for FOV &f%fov%&a."
+  speed-set: "&aCursor speed is now &f%speed%&a."
+  no-packetevents: "&7(Tip: install PacketEvents so the mouse moves a cursor.)"
+  fov-hint: "&7Menu too big or too small on your screen? &f/kui fov <number>&7 — bigger number = bigger menu (now &f%fov%&7) · &f/kui fov reset&7 to go back."

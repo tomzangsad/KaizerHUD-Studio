@@ -1,0 +1,28 @@
+name: Template / Theme Submission (ส่งเทมเพลต)
+description: Share an original HUD or GUI template/theme / ส่งเทมเพลตหรือธีมที่สร้างเองให้ชุมชน
+title: "[Template]: "
+labels: ["template", "community"]
+body:
+  - type: input
+    id: name
+    attributes:
+      label: Template Name / ชื่อเทมเพลต
+      placeholder: e.g., MinimalRPG HUD
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description & Screenshots / รายละเอียดและภาพตัวอย่าง
+      description: Describe the layout and attach screenshots from the studio and in-game. / อธิบายรูปแบบและแนบภาพตัวอย่าง
+    validations:
+      required: true
+  - type: checkboxes
+    id: license_confirm
+    attributes:
+      label: Asset Originality & License / การยืนยันลิขสิทธิ์
+      options:
+        - label: I confirm all textures, icons, and layouts are my original work or CC0 / GPL-3.0 compatible (ขอยืนยันว่าเป็นผลงานสร้างเองหรือเปิดเสรี ไม่มีไฟล์ลิขสิทธิ์ผู้อื่น)
+          required: true
+        - label: I agree to contribute this template under GPL-3.0 (ยินยอมให้เผยแพร่ภายใต้สัญญาอนุญาต GPL-3.0)
+          required: true

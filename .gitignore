@@ -1,0 +1,31 @@
+# Rust / Tauri build artifacts
+src-tauri/target/
+target/
+
+# Java / Maven plugin build artifacts & portable tools
+plugins/*/target/
+plugins/.tools/
+*.jar
+
+# Build logs & installers
+build*_log.txt
+*.exe
+*.msi
+*.nsis
+*.zip
+
+# Secrets & local license files (never commit)
+*.kzlic
+*.key
+*.pem
+license-tool/
+
+# Editor / OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+node_modules/
+.idea/
+.vscode/
+*.swp
+*.swo

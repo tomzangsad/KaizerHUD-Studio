@@ -1,0 +1,46 @@
+name: Bug Report / แจ้งบั๊ก
+description: Report a bug in KaizerHUD Studio, GUI Studio, or companion plugins / แจ้งปัญหาการใช้งานโปรแกรมหรือปลั๊กอิน
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component / ส่วนที่พบปัญหา
+      options:
+        - KaizerHUD Studio (Desktop App)
+        - GUI Studio
+        - KaizerMultiBar (Plugin)
+        - KaizerMultiBarGeyser (Extension)
+        - KaizerUI (Plugin)
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened? / อาการที่พบ
+      description: A clear description of the bug. / อธิบายปัญหาที่เกิดขึ้นอย่างชัดเจน
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce / ขั้นตอนการทำซ้ำ
+      placeholder: |
+        1. Open...
+        2. Add element...
+        3. Click Export...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment / สภาพแวดล้อม
+      description: OS, Minecraft/Paper/Geyser version, and app/plugin version. / ระบบปฏิบัติการ เวอร์ชันเกม/เซิร์ฟเวอร์ และเวอร์ชันโปรแกรม
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots / บันทึกข้อผิดพลาดหรือภาพหน้าจอ
+      description: Paste any console errors or drag-and-drop screenshots here. / แนบ error log หรือภาพหน้าจอได้ที่นี่

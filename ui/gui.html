@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GUI Studio — KaizerHUD Studio</title>
+  <!-- GUI Studio: a separate workspace for cursor GUIs (Java holograms + Bedrock forms).
+       It shares only the window theme (shell.css) and desktop.js with the HUD editor. -->
+  <link rel="stylesheet" href="css/shell.css" />
+  <link rel="stylesheet" href="css/guistudio.css" />
+  <link rel="shortcut icon" href="img/favicon.png" type="image/x-icon" />
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+    <symbol id="g-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 9"/></symbol>
+    <symbol id="g-button" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="3"/><path d="M13 12l5 5M13 12v6M13 12h6"/></symbol>
+    <symbol id="g-text" viewBox="0 0 24 24"><path d="M5 6V4h14v2M12 4v16M9 20h6"/></symbol>
+    <symbol id="g-head" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M4 9h16M8 13h2M14 13h2M10 17h4"/></symbol>
+    <symbol id="g-item" viewBox="0 0 24 24"><path d="M19 3l2 2-9.5 9.5-2-2zM8.5 13.5l2 2-3 3-2-2zM4 18l2 2-2 1-1-1z"/></symbol>
+    <symbol id="g-model" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="6"/><path d="M9 8h6v8H9zM5 8h4v7M19 8h-4v7M10 16v6M14 16v6"/></symbol>
+    <symbol id="g-cursor" viewBox="0 0 24 24"><path d="M5 3l13 8-6 1.5L9 19z"/></symbol>
+    <symbol id="g-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 010 10h-3"/></symbol>
+    <symbol id="g-redo" viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 000 10h3"/></symbol>
+    <symbol id="g-zoom-in" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></symbol>
+    <symbol id="g-zoom-out" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M8 11h6"/></symbol>
+    <symbol id="g-export" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 17v3h16v-3"/></symbol>
+    <symbol id="g-save" viewBox="0 0 24 24"><path d="M5 3h11l4 4v14H4V4a1 1 0 011-1z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/></symbol>
+    <symbol id="g-open" viewBox="0 0 24 24"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></symbol>
+    <symbol id="g-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+    <symbol id="g-down" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></symbol>
+    <symbol id="g-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="g-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3"/></symbol>
+    <symbol id="g-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+    <symbol id="g-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="g-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="g-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="1.5"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></symbol>
+    <symbol id="g-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
+    <symbol id="g-sliders" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+    <symbol id="g-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 114 2c-.9.6-1.5 1.1-1.5 2.2M12 17h.01"/></symbol>
+    <symbol id="g-pages" viewBox="0 0 24 24"><rect x="4" y="3" width="13" height="16" rx="1.5"/><path d="M8 21h11a1 1 0 001-1V7"/><path d="M7 8h7M7 12h7"/></symbol>
+    <symbol id="g-shape" viewBox="0 0 24 24"><rect x="3" y="12" width="9" height="9" rx="1"/><circle cx="16.5" cy="7.5" r="4.5"/><path d="M15 21l3.5-6 3.5 6z"/></symbol>
+    <symbol id="g-icon" viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></symbol>
+    <symbol id="g-template" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 8h18M8 12h8M8 16h5"/></symbol>
+    <symbol id="g-play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></symbol>
+  </svg>
+</head>
+
+<body class="kz-shell gs-body">
+
+  <!-- ═══════════ Title bar + menus ═══════════ -->
+  <header id="titlebar">
+    <div class="tb-left">
+      <img src="img/favicon.png" alt="" class="tb-logo" />
+      <nav class="menubar" id="menubar">
+        <div class="menu">
+          <button class="menu-trigger">File</button>
+          <div class="menu-pop">
+            <button data-cmd="new"><span>New GUI Project</span><kbd>Ctrl+N</kbd></button>
+            <button data-cmd="open"><span>Open GUI Project…</span><kbd>Ctrl+O</kbd></button>
+            <div class="menu-sep"></div>
+            <button data-cmd="save"><span>Save</span><kbd>Ctrl+S</kbd></button>
+            <button data-cmd="save-as"><span>Save As…</span><kbd>Ctrl+Shift+S</kbd></button>
+            <button data-cmd="projects-folder"><span>Show GUI Projects Folder</span></button>
+            <div class="menu-sep"></div>
+            <button data-cmd="export"><span>Export GUI (Java + Bedrock + plugin)…</span><kbd>Ctrl+E</kbd></button>
+            <div class="menu-sep"></div>
+            <button data-cmd="to-hud"><span>Switch to HUD Editor</span></button>
+            <button data-cmd="exit"><span>Exit</span><kbd>Alt+F4</kbd></button>
+          </div>
+        </div>
+        <div class="menu">
+          <button class="menu-trigger">Edit</button>
+          <div class="menu-pop">
+            <button data-cmd="undo"><span>Undo</span><kbd>Ctrl+Z</kbd></button>
+            <button data-cmd="redo"><span>Redo</span><kbd>Ctrl+Y</kbd></button>
+            <div class="menu-sep"></div>
+            <button data-cmd="copy"><span>Copy</span><kbd>Ctrl+C</kbd></button>
+            <button data-cmd="paste"><span>Paste</span><kbd>Ctrl+V</kbd></button>
+            <button data-cmd="duplicate"><span>Duplicate</span><kbd>Ctrl+D</kbd></button>
+            <button data-cmd="delete"><span>Delete</span><kbd>Del</kbd></button>
+            <div class="menu-sep"></div>
+            <button data-cmd="center-h"><span>Center Horizontally</span></button>
+            <button data-cmd="center-v"><span>Center Vertically</span></button>
+            <button data-cmd="fit-image"><span>Size to Image</span></button>
+            <div class="menu-sep"></div>
+            <button data-cmd="select-all"><span>Select All</span><kbd>Ctrl+A</kbd></button>
+            <button data-cmd="deselect"><span>Deselect</span><kbd>Esc</kbd></button>
+          </div>
+        </div>
+        <div class="menu">
+          <button class="menu-trigger">Insert</button>
+          <div class="menu-pop">
+            <button data-cmd="add-image"><span>Image…</span><kbd>I</kbd></button>
+            <button data-cmd="add-button"><span>Button</span><kbd>B</kbd></button>
+            <button data-cmd="add-text"><span>Text</span><kbd>T</kbd></button>
+            <button data-cmd="add-head"><span>Player Head</span><kbd>H</kbd></button>
+            <button data-cmd="add-model"><span>Player Model</span><kbd>L</kbd></button>
+            <button data-cmd="add-item"><span>Item…</span><kbd>K</kbd></button>
+            <button data-cmd="mc-assets"><span>Download Minecraft assets…</span></button>
+            <button data-cmd="add-shape"><span>Shape…</span><kbd>S</kbd></button>
+            <button data-cmd="add-icon"><span>Icon…</span><kbd>O</kbd></button>
+            <div class="menu-sep"></div>
+            <button data-cmd="templates"><span>Menu from Template…</span><kbd>M</kbd></button>
+            <div class="menu-sep"></div>
+            <button data-cmd="add-menu"><span>New Menu Page</span><kbd>Ctrl+M</kbd></button>
+            <button data-cmd="dup-menu"><span>Duplicate Menu Page</span></button>
+          </div>
+        </div>
+        <div class="menu">
+          <button class="menu-trigger">View</button>
+          <div class="menu-pop">
+            <button data-cmd="zoom-in"><span>Zoom In</span><kbd>Ctrl++</kbd></button>
+            <button data-cmd="zoom-out"><span>Zoom Out</span><kbd>Ctrl+−</kbd></button>
+            <button data-cmd="zoom-fit"><span>Fit to Window</span><kbd>Ctrl+0</kbd></button>
+            <div class="menu-sep"></div>
+            <button data-cmd="grid"><span>Snap to 4px Grid</span><kbd>G</kbd></button>
+            <button data-cmd="preview"><span>Play Preview (hover / click)</span><kbd>P</kbd></button>
+            <div class="menu-sep"></div>
+            <button data-cmd="fullscreen"><span>Maximize Window</span><kbd>F11</kbd></button>
+          </div>
+        </div>
+        <div class="menu">
+          <button class="menu-trigger">Help</button>
+          <div class="menu-pop">
+            <button data-cmd="help"><span>GUI Studio Guide</span><kbd>F1</kbd></button>
+            <button data-cmd="shortcuts"><span>Keyboard Shortcuts</span></button>
+          </div>
+        </div>
+      </nav>
+      <div class="ws-switch" id="ws-switch" title="Workspace">
+        <button data-ws="hud">HUD</button>
+        <button data-ws="gui" class="active">GUI</button>
+      </div>
+    </div>
+    <div class="tb-title">
+      <span id="doc-title">Untitled GUI</span><span class="tb-dirty" id="tb-dirty">●</span>
+      <span class="tb-app">— KaizerHUD Studio</span>
+    </div>
+    <div class="tb-controls" id="window-controls">
+      <button class="wc" data-wc="min" title="Minimize"><svg viewBox="0 0 10 10"><path d="M1 5h8"/></svg></button>
+      <button class="wc" data-wc="max" title="Maximize"><svg viewBox="0 0 10 10"><rect x="1.5" y="1.5" width="7" height="7"/></svg></button>
+      <button class="wc wc-close" data-wc="close" title="Close"><svg viewBox="0 0 10 10"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7"/></svg></button>
+    </div>
+  </header>
+
+  <!-- ═══════════ Options bar ═══════════ -->
+  <div id="optionsbar">
+    <div class="ob-group">
+      <label for="gs-namespace" class="ob-label">Namespace</label>
+      <input type="text" id="gs-namespace" value="kaizerui" spellcheck="false" />
+    </div>
+    <div class="ob-sep"></div>
+    <div class="ob-group">
+      <button class="icon-btn" data-cmd="undo" title="Undo (Ctrl+Z)"><svg><use href="#g-undo"/></svg></button>
+      <button class="icon-btn" data-cmd="redo" title="Redo (Ctrl+Y)"><svg><use href="#g-redo"/></svg></button>
+    </div>
+    <div class="ob-sep"></div>
+    <div class="ob-group">
+      <button class="icon-btn" data-cmd="zoom-out" title="Zoom Out"><svg><use href="#g-zoom-out"/></svg></button>
+      <span id="gs-zoom" class="ob-zoom" title="Click to fit">100%</span>
+      <button class="icon-btn" data-cmd="zoom-in" title="Zoom In"><svg><use href="#g-zoom-in"/></svg></button>
+    </div>
+    <div class="ob-sep"></div>
+    <div class="ob-group">
+      <button class="icon-btn with-label" id="gs-btn-grid" data-cmd="grid" title="Snap to 4px grid (G)"><svg><use href="#g-grid"/></svg><span>Snap</span></button>
+      <button class="icon-btn with-label" id="gs-btn-preview" data-cmd="preview" title="Play preview: hover and click like in game (P)"><svg><use href="#g-play"/></svg><span>Preview</span></button>
+    </div>
+    <div class="ob-spacer"></div>
+    <div class="ob-group">
+      <button class="ghost-btn" data-cmd="save" title="Save (Ctrl+S)"><svg><use href="#g-save"/></svg><span>Save</span></button>
+      <button class="primary-btn" data-cmd="export" title="Export (Ctrl+E)"><svg><use href="#g-export"/></svg><span>Export</span></button>
+    </div>
+  </div>
+
+  <!-- ═══════════ Main body ═══════════ -->
+  <div class="shell-body">
+
+    <aside id="toolstrip">
+      <button class="tool" data-cmd="add-image" data-tip="Image (I)"><svg><use href="#g-image"/></svg></button>
+      <button class="tool" data-cmd="add-button" data-tip="Button (B)"><svg><use href="#g-button"/></svg></button>
+      <button class="tool" data-cmd="add-text" data-tip="Text (T)"><svg><use href="#g-text"/></svg></button>
+      <button class="tool" data-cmd="add-head" data-tip="Player Head (H)"><svg><use href="#g-head"/></svg></button>
+      <button class="tool" data-cmd="add-model" data-tip="Player Model — whole body (L)"><svg><use href="#g-model"/></svg></button>
+      <button class="tool" data-cmd="add-item" data-tip="Item — a real Minecraft item (K)"><svg><use href="#g-item"/></svg></button>
+      <button class="tool" data-cmd="add-shape" data-tip="Shape — 2D or pixel (S)"><svg><use href="#g-shape"/></svg></button>
+      <button class="tool" data-cmd="add-icon" data-tip="Icon — free icon sets (O)"><svg><use href="#g-icon"/></svg></button>
+      <div class="tool-sep"></div>
+      <button class="tool" data-cmd="templates" data-tip="Menu from Template (M)"><svg><use href="#g-template"/></svg></button>
+      <button class="tool" data-cmd="cursor-settings" data-tip="Cursor &amp; in-game settings"><svg><use href="#g-cursor"/></svg></button>
+      <div class="tool-flex"></div>
+      <button class="tool" data-cmd="help" data-tip="GUI Studio Guide (F1)"><svg><use href="#g-help"/></svg></button>
+    </aside>
+
+    <!-- Menu pages -->
+    <aside class="gs-pages" id="gs-pages">
+      <div class="dock-head">
+        <div class="dock-tab active"><svg><use href="#g-pages"/></svg>Menus</div>
+        <div class="gs-head-actions">
+          <button class="icon-btn small" data-cmd="add-menu" title="New menu page (Ctrl+M)"><svg><use href="#g-plus"/></svg></button>
+          <button class="icon-btn small" data-cmd="dup-menu" title="Duplicate menu page"><svg><use href="#g-copy"/></svg></button>
+          <button class="icon-btn small danger" data-cmd="del-menu" title="Delete menu page"><svg><use href="#g-trash"/></svg></button>
+        </div>
+      </div>
+      <ul class="gs-page-list" id="gs-page-list"></ul>
+      <div class="gs-pages-hint">Each menu page is opened in game with<br><code>/kui open &lt;id&gt;</code> or its own command.</div>
+    </aside>
+
+    <main class="gs-center doc-area">
+      <div class="doc-tabs">
+        <div class="doc-tab active">
+          <img src="img/favicon.png" alt="" />
+          <span id="doc-tab-name">Untitled GUI</span>
+          <span class="doc-tab-dirty" id="doc-tab-dirty">●</span>
+        </div>
+        <div class="doc-tabs-fill"></div>
+        <div class="view-switch" id="gs-platform" role="tablist" title="Show the menu as each edition sees it">
+          <button data-platform="java" class="active" title="Java: hologram + cursor">Java</button>
+          <button data-platform="bedrock" title="Bedrock: server form">Bedrock</button>
+        </div>
+        <span class="doc-meta" id="gs-doc-meta">Cursor GUI</span>
+      </div>
+      <div class="gs-pasteboard" id="gs-pasteboard">
+        <div class="gs-world" id="gs-world">
+          <div class="gs-screen" id="gs-screen">
+            <div class="gs-elements" id="gs-elements"></div>
+            <div class="gs-cursor" id="gs-cursor"></div>
+          </div>
+        </div>
+      </div>
+      <div class="gs-canvas-info" id="gs-canvas-info"></div>
+    </main>
+
+    <aside id="dock" class="gs-dock">
+      <section class="dock-panel dock-properties">
+        <div class="dock-head"><div class="dock-tab active"><svg><use href="#g-sliders"/></svg>Properties</div></div>
+        <div class="gs-props" id="gs-props"></div>
+      </section>
+      <section class="dock-panel gs-layers-panel">
+        <div class="dock-head">
+          <div class="dock-tab active"><svg><use href="#g-layers"/></svg>Layers</div>
+          <div class="gs-head-actions">
+            <button class="icon-btn small" data-cmd="layer-up" title="Bring forward"><svg><use href="#g-up"/></svg></button>
+            <button class="icon-btn small" data-cmd="layer-down" title="Send backward"><svg><use href="#g-down"/></svg></button>
+          </div>
+        </div>
+        <ul class="gs-layer-list" id="gs-layer-list"></ul>
+      </section>
+    </aside>
+  </div>
+
+  <footer id="statusbar">
+    <span class="sb-item"><span class="sb-dot" id="sb-dot"></span><span id="gs-save-state">Ready</span></span>
+    <span class="sb-item" id="gs-sb-selection">No selection</span>
+    <span class="sb-spacer"></span>
+    <span class="sb-item" id="gs-sb-cursor"></span>
+    <span class="sb-item" id="gs-sb-menu"></span>
+    <span class="sb-item" id="gs-sb-zoom">100%</span>
+    <span class="sb-item" id="gs-sb-size"></span>
+    <span class="sb-item sb-brand">KaizerHUD Studio 1.0 · GUI</span>
+  </footer>
+
+  <input type="file" id="gs-image-input" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none" />
+
+  <div id="gs-toast" class="gs-toast"></div>
+
+  <script src="js/desktop.js"></script>
+  <script src="js/guistudio/gs_motion.js"></script>
+  <script src="js/guistudio/gs_model.js"></script>
+  <script src="js/guistudio/gs_export.js"></script>
+  <script src="js/guistudio/gs_editor.js"></script>
+  <script src="js/guistudio/gs_mcrender.js"></script>
+  <script src="js/guistudio/gs_items.js"></script>
+  <script src="js/guistudio/gs_templates.js"></script>
+  <script src="js/guistudio/gs_iconsets.js"></script>
+  <script src="js/guistudio/gs_assets.js"></script>
+  <script src="js/guistudio/gs_shell.js"></script>
+  <script src="js/guistudio/gs_template_dialog.js"></script>
+</body>
+
+</html>

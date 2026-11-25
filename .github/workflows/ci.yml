@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  rust-test:
+    name: Desktop App (Rust tests & check)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Run unit tests
+        run: cargo test --lib
+      - name: Check build
+        run: cargo check
+
+  plugins-build:
+    name: Server Plugins (Java 21 + Maven)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Build KaizerMultiBar
+        working-directory: plugins/KaizerMultiBar
+        run: mvn -B clean package
+      - name: Build KaizerMultiBarGeyser
+        working-directory: plugins/KaizerMultiBarGeyser
+        run: mvn -B clean package
+      - name: Build KaizerUI
+        working-directory: plugins/KaizerUI
+        run: mvn -B clean package

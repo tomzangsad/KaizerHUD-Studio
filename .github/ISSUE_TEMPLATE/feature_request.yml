@@ -1,0 +1,24 @@
+name: Feature Request / เสนอฟีเจอร์ใหม่
+description: Suggest a new feature, UX improvement, or plugin integration / เสนอแนวคิดหรือฟีเจอร์ใหม่ๆ
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve? / ปัญหาที่ต้องการแก้ไข
+      description: Explain what you are trying to achieve and what feels missing right now. / อธิบายสิ่งที่อยากทำและสิ่งที่ยังขาดอยู่
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution / แนวทางที่เสนอ
+      description: How would you like this feature to work? / อยากให้ฟีเจอร์นี้ทำงานอย่างไร
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or references / ตัวอย่างหรือข้อมูลอ้างอิง
+      description: Any examples, mockups, or plugins this relates to. / ตัวอย่างประกอบหรือปลั๊กอินที่เกี่ยวข้อง (ถ้ามี)

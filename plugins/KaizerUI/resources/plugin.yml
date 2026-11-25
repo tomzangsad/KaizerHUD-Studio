@@ -1,0 +1,27 @@
+name: KaizerUI
+version: '${project.version}'
+main: kz.kaizerui.KaizerUIPlugin
+api-version: '1.21'
+folia-supported: true
+authors: [ KaizerMC ]
+description: Cursor GUI menus made in KaizerHUD Studio — holograms for Java, server forms for Bedrock.
+
+# All optional:
+#  packetevents     locks the camera so the mouse moves a cursor (without it the crosshair is the cursor)
+#  PlaceholderAPI   %placeholders% in texts, labels and actions
+#  floodgate/Geyser Bedrock players get menus as server forms
+softdepend: [PlaceholderAPI, packetevents, floodgate, Geyser-Spigot, ItemsAdder, Nexo, Oraxen]
+
+commands:
+  kui:
+    description: Open, close and manage KaizerUI menus.
+    usage: /kui <open|close|list|reload|fov|speed>
+    aliases: [kaizerui]
+
+permissions:
+  kaizerui.use:
+    description: Open menus with /kui open <menu> and the menus' own commands.
+    default: true
+  kaizerui.admin:
+    description: Reload, list, and open / close menus for other players.
+    default: op

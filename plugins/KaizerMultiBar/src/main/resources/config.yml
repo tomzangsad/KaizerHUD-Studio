@@ -1,0 +1,116 @@
+#permissions | kaizermultibar.show
+bossbar:
+  enabled: true
+  toggle-command: /kzbos
+  combine-into-one: true
+  update-interval: 5
+  # Unit for every pad-length: "bytes" (UTF-8, colour codes count — what Bedrock's %.Ns slices) or "chars"
+  length-unit: bytes
+  # How the HUD data reaches Bedrock players: bossbar (default) | title
+  # Must match "Data channel" in KaizerHUD Studio's Export window (the .mcpack reads only that one)
+  channel: bossbar
+  # title only: the data is sent when it changes, and again every N ticks (0 = only on change)
+  channel-resend-ticks: 100
+  # Length of the bars section before the slots. KaizerHUD Studio writes the exact sum of the bar pads;
+  # 100 = packs exported before this option existed
+  bars-length: 100
+
+  bars:
+    #default bar | Do not delete
+    health_bar:
+      text: "@1%kaizerbar_hpprefix%%kaizerbar_hp%"
+      pad-length: 6
+    food_bar:
+      text: "@2%kaizerbar_foodprefix%%kaizerbar_food%"
+      pad-length: 6
+    armor_bar:
+      text: "@3a%kaizerbar_armor%"
+      pad-length: 6
+    oxygen_bar:
+      text: "@4o%kaizerbar_oxy%"
+      pad-length: 6
+    exp_bar:
+      text: "@5ex%kaizerbar_exp%"
+      pad-length: 6
+  
+  slots:
+    #slot_1:
+    #  text: "%your_placeholder%"
+    #  pad-length: 50
+
+#----------------------------------------------------------#
+# KaizerBar placeholder config (merged into KaizerMultiBar)
+bar-steps: 16
+
+status-prefix:
+  health:
+    default: "h"
+    special:
+      FREEZING:
+        enabled: true
+        prefix: "fz"
+    effects:
+      enabled: true
+      ABSORPTION:
+        enabled: true
+        prefix: "ab"
+      HEALTH_BOOST:
+        enabled: true
+        prefix: "hb"
+      REGENERATION:
+        enabled: true
+        prefix: "r"
+      WITHER:
+        enabled: true
+        prefix: "w"
+      POISON:
+        enabled: true
+        prefix: "p"
+  food:
+    default: "f"
+    effects:
+      enabled: true
+      HUNGER:
+        enabled: true
+        prefix: "g"
+      SATURATION:
+        enabled: true
+        prefix: "s"
+
+# Stat Bindings
+# Each stat maps a max and current value using PlaceholderAPI placeholders.
+# The plugin calculates: (bar-steps / max) * current = bar index
+stats:
+  #default stats | Do not delete
+  health:
+    max: "%kaizerbar_maxhp%"
+    current: "%kaizerbar_currenthp%"
+  food:
+    max: "%kaizerbar_maxfood%"
+    current: "%kaizerbar_currentfood%"
+  armor:
+    max: "%kaizerbar_maxarmor%"
+    current: "%kaizerbar_currentarmor%"
+  oxygen:
+    max: "%kaizerbar_maxoxy%"
+    current: "%kaizerbar_currentoxy%"
+
+
+# An example of adding a custom status.
+#  posx:
+#    title_pre: "posx"
+#    papi: "%player_x%"
+#    max: "100"
+#    current: "%kaizerbar_currentposx%"
+#  posy:
+#    title_pre: "posy"
+#    papi: "%player_y%"
+#    max: "100"
+#    current: "%kaizerbar_currentposy%"
+custom_status:
+  #default custom status | Do not delete
+  exp:
+    title_pre: "ex"
+    papi: "%player_exp%"
+    max: "1"
+    current: "%kaizerbar_currentexp%"

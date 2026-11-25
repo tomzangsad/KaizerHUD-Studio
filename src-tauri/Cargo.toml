@@ -1,0 +1,39 @@
+[package]
+name = "kaizerhud"
+version = "1.0.0"
+description = "KaizerMC HUD Maker - Bedrock JSON UI HUD generator"
+license = "GPL-3.0-only"
+edition = "2021"
+
+[lib]
+name = "kaizerhud_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+indexmap = "2"
+rand = "0.8"
+uuid = { version = "1", features = ["v4"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["png"] }
+chrono = "0.4"
+serde_yaml = "0.9"
+
+[features]
+# Embed the frontend into the binary even for plain `cargo build`
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

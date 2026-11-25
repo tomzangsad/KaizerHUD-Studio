@@ -1,0 +1,24 @@
+name: KaizerMultiBar
+version: '${project.version}'
+main: com.kaizer.kaizermultibar.KaizerMultiBarPlugin
+# Lowest API we use; Paper/Spigot 1.21.x and 26.x both load it.
+api-version: '1.21'
+folia-supported: true
+authors: [ KaizerMC, VisherRyz ]
+description: Sends the KaizerMC Bedrock HUD data to Bedrock players through a bossbar, the action bar or the title.
+
+# packetevents keeps our bossbar above other plugins' bars (optional but recommended).
+softdepend: [PlaceholderAPI, floodgate, Geyser-Spigot, packetevents]
+
+commands:
+  kzbos:
+    description: Toggle the bossbar display or reload config.
+    permission: kaizermultibar.command
+
+permissions:
+  kaizermultibar.command:
+    description: Allows use of the /kzbos command (toggle/reload).
+    default: op
+  kaizermultibar.show:
+    description: Allows the player to see KaizerMultiBar bossbars even if not detected as Bedrock.
+    default: false

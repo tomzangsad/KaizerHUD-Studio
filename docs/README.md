@@ -1,4 +1,4 @@
-# Documentation Index / สารบัญเอกสารเทคนิค
+# Documentation Index / สารบัญเอกสาร
 
 [English](#english) · [ภาษาไทย](#ภาษาไทย)
 
@@ -6,9 +6,16 @@
 
 ## English
 
-Technical specifications and contributor design notes for **KaizerHUD Studio** and its companion plugins. Each document below includes an English overview followed by the original detailed Thai specification.
+### 1. User & Server Owner Guides (No coding required)
+- **[USER_GUIDE.md](USER_GUIDE.md)** — Download releases, design HUDs & GUIs, export `output.zip`, and install on your server.
+- **[../plugins/README.md](../plugins/README.md)** — Setup, configuration, and commands for `KaizerMultiBar` and `KaizerUI`.
 
-| Document | Topic |
+### 2. Developer & Technical Reference
+- **[DEVELOPMENT.md](DEVELOPMENT.md)** — Fork, clone, dev mode, unit tests, and building `.exe` / `.jar` from source.
+- **[../ARCHITECTURE.md](../ARCHITECTURE.md)** — Codebase map, data flow, and contributor roadmap.
+- **[../CONTRIBUTING.md](../CONTRIBUTING.md)** — Pull request workflow and asset licensing guidelines.
+
+| Technical Spec | Topic |
 |---|---|
 | [HUD_CHANNEL.md](HUD_CHANNEL.md) | Bossbar vs. hidden Title data channel protocol (Studio + KaizerMultiBar 2.1) |
 | [HUD_ANIMATION.md](HUD_ANIMATION.md) | Animated image flip-book strips (Bedrock) & sequence export (BetterHud) |
@@ -22,9 +29,16 @@ Technical specifications and contributor design notes for **KaizerHUD Studio** a
 
 ## ภาษาไทย
 
-เอกสารสเปกและคู่มือระบบภายในของ **KaizerHUD Studio** และปลั๊กอินร่วม (ทุกไฟล์มีสรุปภาษาอังกฤษด้านบนและรายละเอียดภาษาไทยครบถ้วนด้านล่าง)
+### 1. คู่มือผู้ใช้และเจ้าของเซิร์ฟเวอร์ (ไม่ต้องเขียนโค้ด)
+- **[USER_GUIDE.md](USER_GUIDE.md)** — วิธีโหลดไฟล์จาก Releases, ใช้งาน HUD Studio / GUI Studio, Export และนำไปลงเซิร์ฟเวอร์
+- **[../plugins/README.md](../plugins/README.md)** — วิธีติดตั้ง ตั้งค่า และคำสั่งของปลั๊กอิน `KaizerMultiBar` และ `KaizerUI`
 
-| เอกสาร | หัวข้อ |
+### 2. คู่มือนักพัฒนาและเอกสารเทคนิค
+- **[DEVELOPMENT.md](DEVELOPMENT.md)** — วิธี Fork, Clone, รัน Dev Mode, รัน Test และ Build `.exe` / `.jar` เองจากซอร์สโค้ด
+- **[../ARCHITECTURE.md](../ARCHITECTURE.md)** — แผนผังสถาปัตยกรรมระบบและงานที่เปิดรับอาสาสมัคร
+- **[../CONTRIBUTING.md](../CONTRIBUTING.md)** — ขั้นตอนการส่ง Pull Request และกฎด้านลิขสิทธิ์ไฟล์
+
+| เอกสารสเปกเทคนิค | หัวข้อ |
 |---|---|
 | [HUD_CHANNEL.md](HUD_CHANNEL.md) | ช่องทางส่งข้อมูล HUD (Bossbar เทียบกับ Title) ระหว่างแพ็คกับ KaizerMultiBar 2.1 |
 | [HUD_ANIMATION.md](HUD_ANIMATION.md) | ระบบรูปภาพเคลื่อนไหว (`flip_book` ฝั่ง Bedrock และ `sequence` ฝั่ง BetterHud) |

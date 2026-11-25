@@ -17,12 +17,14 @@ Thank you for wanting to make **KaizerHUD Studio** better! Whether you write Rus
 
 ### Development Workflow
 
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for full environment setup and build instructions.
+
 1. Fork the repo and clone your fork.
 2. Create a descriptive branch (`fix/bar-offset` or `feat/linux-opener`).
 3. Make focused, clean changes. Avoid bundling unrelated refactors with a bug fix.
 4. Run checks before pushing:
    - **Rust:** `cd src-tauri && cargo test --lib && cargo check`
-   - **Plugins:** `mvn -B clean package` inside the modified plugin folder (`plugins/KaizerMultiBar`, `plugins/KaizerMultiBarGeyser`, or `plugins/KaizerUI`)
+   - **Plugins:** `mvn -B clean package` inside the modified plugin folder (`plugins/KaizerMultiBar` or `plugins/KaizerUI`)
 5. Open a Pull Request describing **what** changed, **why**, and **how you tested it**.
 
 ### Asset & Licensing Rules
@@ -45,12 +47,14 @@ Thank you for wanting to make **KaizerHUD Studio** better! Whether you write Rus
 
 ### ขั้นตอนการทำงานของนักพัฒนา
 
+ดูขั้นตอนการติดตั้งเครื่องมือและคำสั่ง Build ทั้งหมดได้ที่ [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
+
 1. Fork repository แล้ว clone ลงเครื่อง
 2. ตั้งชื่อ branch ให้สื่อความหมาย (เช่น `fix/bar-offset` หรือ `feat/linux-opener`)
 3. แก้โค้ดให้ตรงประเด็น ไม่ปน refactor ที่ไม่เกี่ยวข้องกับงาน
 4. รันตรวจสอบก่อน push ทุกครั้ง:
    - **ฝั่ง Rust:** `cd src-tauri && cargo test --lib && cargo check`
-   - **ฝั่งปลั๊กอิน:** รัน `mvn -B clean package` ในโฟลเดอร์ปลั๊กอินที่แก้ไข (`plugins/KaizerMultiBar`, `plugins/KaizerMultiBarGeyser` หรือ `plugins/KaizerUI`)
+   - **ฝั่งปลั๊กอิน:** รัน `mvn -B clean package` ในโฟลเดอร์ปลั๊กอินที่แก้ไข (`plugins/KaizerMultiBar` หรือ `plugins/KaizerUI`)
 5. เปิด Pull Request พร้อมอธิบาย **สิ่งที่แก้**, **เหตุผล**, และ **วิธีทดสอบ**
 
 ### กฎด้านลิขสิทธิ์ไฟล์และ Asset

@@ -1,6 +1,0 @@
-id: kaizermultibar
-name: KaizerMultiBarGeyser
-main: com.kaizer.kaizermultibar.geyser.KaizerMultiBarGeyser
-api: 2.12.0
-version: ${project.version}
-authors: [KaizerMC]

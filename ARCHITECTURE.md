@@ -35,7 +35,6 @@ This document maps out how **KaizerHUD Studio** and its companion plugins fit to
 |  Minecraft Server (plugins/) — Java 21 / Paper / Geyser           |
 |  - KaizerMultiBar      : Encodes HP/food/armor/air/EXP/PAPI/flags |
 |                          into bossbar or hidden title channel     |
-|  - KaizerMultiBarGeyser: Geyser extension keeping HUD bar on top  |
 |  - KaizerUI            : Renders GUI Studio menus (hologram/form) |
 +-------------------------------------------------------------------+
 ```
@@ -77,7 +76,6 @@ Detailed specs and notes live in `docs/` ([docs/README.md](docs/README.md)):
   - `guistudio.rs`: ระบบจัดการโปรเจกต์และ export ของ GUI Studio
 - **Server Plugins (`plugins/`):** เขียนด้วย Java 21 (Paper / Purpur / Folia / Geyser)
   - `KaizerMultiBar`: ส่งค่าพลัง อาหาร เกราะ EXP และ PAPI ให้ผู้เล่น Bedrock ผ่าน bossbar หรือ hidden title
-  - `KaizerMultiBarGeyser`: Extension ของ Geyser ช่วยดัน bossbar ของ HUD ให้อยู่แถวบนสุด
   - `KaizerUI`: แสดงเมนูจาก GUI Studio (Java เป็น hologram + เคอร์เซอร์, Bedrock เป็น server form)
 
 ### แนวทางงานที่เปิดรับอาสาสมัคร (Good First Issues)

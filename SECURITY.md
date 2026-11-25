@@ -8,7 +8,7 @@
 
 ### Reporting a Vulnerability
 
-If you discover a security vulnerability in **KaizerHUD Studio** or any companion plugin (`KaizerMultiBar`, `KaizerMultiBarGeyser`, `KaizerUI`) — for example:
+If you discover a security vulnerability in **KaizerHUD Studio** or any companion plugin (`KaizerMultiBar`, `KaizerUI`) — for example:
 
 - Path traversal during `.mcpack` / `.zip` import, export, or live folder sync
 - Arbitrary command or URL execution in the Tauri backend
@@ -27,7 +27,7 @@ Please include steps to reproduce, affected versions, and any suggested fix.
 
 ### การแจ้งช่องโหว่ด้านความปลอดภัย
 
-หากคุณพบช่องโหว่ด้านความปลอดภัยใน **KaizerHUD Studio** หรือปลั๊กอินร่วม (`KaizerMultiBar`, `KaizerMultiBarGeyser`, `KaizerUI`) เช่น:
+หากคุณพบช่องโหว่ด้านความปลอดภัยใน **KaizerHUD Studio** หรือปลั๊กอินร่วม (`KaizerMultiBar`, `KaizerUI`) เช่น:
 
 - ปัญหา Path Traversal ระหว่างการ Import / Export ไฟล์ `.mcpack` / `.zip` หรือระบบ Live Folder Sync
 - การสั่งรันคำสั่งหรือเปิดลิงก์ที่ไม่ปลอดภัยในฝั่ง Tauri Backend

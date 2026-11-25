@@ -19,14 +19,22 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-      - name: Build release binary
+      - uses: taiki-e/install-action@cargo-tauri
+      - name: Build release installer and binary
         working-directory: src-tauri
-        run: cargo build --release
-      - name: Upload desktop binary artifact
+        run: cargo tauri build
+      - name: Collect desktop artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist-desktop | Out-Null
+          Copy-Item "src-tauri/target/release/bundle/nsis/*-setup.exe" "dist-desktop/"
+          Copy-Item "src-tauri/target/release/kaizerhud.exe" "dist-desktop/kaizerhud-portable.exe"
+          Get-ChildItem dist-desktop
+      - name: Upload desktop artifacts
         uses: actions/upload-artifact@v4
         with:
           name: kaizerhud-windows
-          path: src-tauri/target/release/kaizerhud.exe
+          path: dist-desktop/*
 
   build-plugins:
     name: Build Server Plugins
@@ -41,9 +49,6 @@ jobs:
       - name: Build KaizerMultiBar
         working-directory: plugins/KaizerMultiBar
         run: mvn -B clean package
-      - name: Build KaizerMultiBarGeyser
-        working-directory: plugins/KaizerMultiBarGeyser
-        run: mvn -B clean package
       - name: Build KaizerUI
         working-directory: plugins/KaizerUI
         run: mvn -B clean package
@@ -51,7 +56,6 @@ jobs:
         run: |
           mkdir -p dist-plugins
           cp plugins/KaizerMultiBar/target/KaizerMultiBar-*.jar dist-plugins/
-          cp plugins/KaizerMultiBarGeyser/target/KaizerMultiBarGeyser-*.jar dist-plugins/
           cp plugins/KaizerUI/target/KaizerUI-*.jar dist-plugins/
           rm -f dist-plugins/original-*.jar
           ls -la dist-plugins/
@@ -75,5 +79,5 @@ jobs:
         with:
           generate_release_notes: true
           files: |
-            dist/kaizerhud-windows/kaizerhud.exe
+            dist/kaizerhud-windows/*
             dist/kaizer-plugins/**/*.jar

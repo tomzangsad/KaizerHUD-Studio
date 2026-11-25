@@ -9,8 +9,8 @@
 Bedrock HUD state is encoded into a single string (`@zelisce/custom_bossbars:` + bar codes + text/nameplate slots + visibility markers `@v01...`).
 
 - **Supported Channels (`HudChannel`):**
-  - `bossbar` (default): Uses the `boss_bars` collection. Persistent and never overwrites other messages; requires keeping our boss bar first via PacketEvents + `KaizerMultiBarGeyser`.
-  - `title`: Uses a hidden `kz_hud_store` panel (`#kz_saved` + `visibility_changed` binding on `#hud_title_text_string`) so vanilla `hud_title_text` is hidden only when our prefix is present, and HUD state persists across other plugins' titles. Does not need PacketEvents or `KaizerMultiBarGeyser`.
+  - `bossbar` (default): Uses the `boss_bars` collection. Persistent and never overwrites other messages; requires keeping our boss bar first via PacketEvents.
+  - `title`: Uses a hidden `kz_hud_store` panel (`#kz_saved` + `visibility_changed` binding on `#hud_title_text_string`) so vanilla `hud_title_text` is hidden only when our prefix is present, and HUD state persists across other plugins' titles. Does not need PacketEvents.
   - *(Historical note: `actionbar` was tested and removed because Bedrock cannot isolate `$actionbar_text` into a persistent store outside the vanilla actionbar control.)*
 - **Plugin (`KaizerMultiBar 2.1`):** Configured via `bossbar.channel` (`bossbar | title`) and `bossbar.channel-resend-ticks` (`100` default). `/kzbos` sends `@zelisce/custom_bossbars:~off` to hide the HUD.
 - **Debug Mode:** `hudChannelDebug` renders a yellow diagnostic line at the top without hiding the title.
@@ -31,7 +31,7 @@ Bedrock HUD state is encoded into a single string (`@zelisce/custom_bossbars:` +
 
 | ช่องทาง | pack อ่านจาก | ข้อดี | ข้อควรรู้ |
 |---|---|---|---|
-| **Boss bar** (ค่าเริ่ม) | collection `boss_bars` | ข้อมูลอยู่ตลอด ไม่แทนข้อความของใคร | ต้องให้ bossbar ของเราอยู่แถวบน (PacketEvents + KaizerMultiBarGeyser), bar ของ bossbar ทุกอันถูกทำให้ใส |
+| **Boss bar** (ค่าเริ่ม) | collection `boss_bars` | ข้อมูลอยู่ตลอด ไม่แทนข้อความของใคร | ต้องให้ bossbar ของเราอยู่แถวบน (PacketEvents), bar ของ bossbar ทุกอันถูกทำให้ใส |
 | **Action bar** | control ที่ `hud_actionbar_text_factory` สร้าง (`$actionbar_text`) | ไม่มี bossbar ของเรา → bossbar ปลั๊กอินอื่นแสดงปกติ | ปลั๊กอิน RPG/สกิล (AuraSkills, mcMMO, Jobs …) ใช้ action bar บ่อย — ข้อความของเขาถูกแทนตอนข้อมูลเราเปลี่ยน |
 | **Title** (แนะนำเป็นตัวเลือกที่ 2) | global binding `#hud_title_text_string` | ปลั๊กอินส่วนใหญ่ใช้ title แค่ตอนเข้าเซิร์ฟ/อีเวนต์ → ชนน้อยสุด | title ของคนอื่นที่ขึ้นค้างอยู่ถูกตัดตอนข้อมูลเราเปลี่ยน |
 

@@ -37,9 +37,6 @@ jobs:
       - name: Build KaizerMultiBar
         working-directory: plugins/KaizerMultiBar
         run: mvn -B clean package
-      - name: Build KaizerMultiBarGeyser
-        working-directory: plugins/KaizerMultiBarGeyser
-        run: mvn -B clean package
       - name: Build KaizerUI
         working-directory: plugins/KaizerUI
         run: mvn -B clean package

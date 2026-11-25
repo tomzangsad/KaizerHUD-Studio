@@ -19,10 +19,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-      - uses: taiki-e/install-action@cargo-tauri
       - name: Build release installer and binary
         working-directory: src-tauri
-        run: cargo tauri build
+        run: npx --yes @tauri-apps/cli@2 build
       - name: Collect desktop artifacts
         shell: pwsh
         run: |

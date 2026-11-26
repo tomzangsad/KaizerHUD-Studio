@@ -75,7 +75,7 @@ function buildBody() {
     '|---|---|---|',
     `| \`KaizerHUD-Studio_${ver}_x64-setup.exe\` | **Windows Installer** *(recommended — adds Start Menu & Desktop shortcut)* | **ตัวติดตั้ง Windows** *(แนะนำ — สร้างไอคอนหน้า Desktop / Start Menu)* |`,
     '| `kaizerhud-portable.exe` | **Portable Windows app** *(run directly without installing)* | **ตัวโปรแกรมแบบพกพา** *(เปิดใช้งานได้ทันที ไม่ต้องติดตั้ง)* |',
-    '| `KaizerMultiBar-2.1.0.jar` | **HUD Studio server plugin** *(put in Paper/Purpur/Folia `plugins/`)* | **ปลั๊กอินสำหรับ HUD Studio** *(ใส่ใน `plugins/` บน Paper/Purpur/Folia 1.21.x–26.x)* |',
+    '| `KaizerMultiBar-2.2.0.jar` | **HUD Studio server plugin** *(put in Paper/Purpur/Folia `plugins/`)* | **ปลั๊กอินสำหรับ HUD Studio** *(ใส่ใน `plugins/` บน Paper/Purpur/Folia 1.21.x–26.x)* |',
     '| `KaizerUI-1.0.0.jar` | **GUI Studio server plugin** *(optional — only if using cursor menus)* | **ปลั๊กอินสำหรับ GUI Studio** *(ลงเฉพาะเมื่อใช้เมนู GUI)* |',
     '',
     `> **Note:** \`Source code (zip)\` and \`Source code (tar.gz)\` are for developers only — see [docs/DEVELOPMENT.md](https://github.com/${REPO}/blob/main/docs/DEVELOPMENT.md).`,

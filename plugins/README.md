@@ -15,12 +15,12 @@
 
 | Plugin | Version | Used with | Put in |
 |---|---|---|---|
-| `KaizerMultiBar-2.1.0.jar` | `2.1.0` | **HUD Studio** *(Bedrock HUDs)* | `plugins/` on Paper / Purpur / Folia `1.21.x–26.x` |
+| `KaizerMultiBar-2.2.0.jar` | `2.2.0` | **HUD Studio** *(Bedrock HUDs)* | `plugins/` on Paper / Purpur / Folia `1.21.x–26.x` |
 | `KaizerUI-1.0.0.jar` | `1.0.0` | **GUI Studio** *(Interactive menus)* | `plugins/` on Paper / Purpur / Folia `1.21.x–26.x` |
 
 ---
 
-#### 1. `KaizerMultiBar` 2.1 (HUD Data Streamer)
+#### 1. `KaizerMultiBar` 2.2 (HUD Data Streamer)
 
 Streams HUD data (HP / Food / Armor / Oxygen / EXP / PlaceholderAPI text / visibility flags) to Bedrock players via **bossbar** or hidden **title**, read by the `.mcpack` exported from KaizerHUD Studio. No license or loader plugin is required.
 
@@ -29,7 +29,7 @@ Streams HUD data (HP / Food / Armor / Oxygen / EXP / PlaceholderAPI text / visib
 - **Recommended:** [PlaceholderAPI](https://www.spigotmc.org/resources/placeholderapi.6245/) (for PAPI placeholders & custom bars), [PacketEvents 2.14+](https://modrinth.com/plugin/packetevents) (keeps `bossbar` channel ordered cleanly on top)
 
 **Installation:**
-1. Download `KaizerMultiBar-2.1.0.jar` from **[GitHub Releases](https://github.com/tomzangsad/KaizerHUD-Studio/releases/latest)** and place it into your server's `plugins/` folder.
+1. Download `KaizerMultiBar-2.2.0.jar` from **[GitHub Releases](https://github.com/tomzangsad/KaizerHUD-Studio/releases/latest)** and place it into your server's `plugins/` folder.
 2. Export your HUD from **KaizerHUD Studio** (`Ctrl+E` → `output.zip`):
    - Copy `GeyserMC/packs/<namespace>.mcpack` into your Geyser `packs/` folder.
    - Copy `plugins/KaizerMultiBar/config.yml` into your server's `plugins/KaizerMultiBar/` folder.
@@ -73,7 +73,7 @@ Renders menus exported from **GUI Studio**: Java players see TextDisplay hologra
 - **Prerequisites:** JDK 21+ and Maven 3.9+ (Windows helpers `plugins/build_kaizermultibar.bat` and `plugins/build_kaizerui.bat` detect JDK 21+ and download portable Maven into `plugins/.tools/` automatically).
 - **Commands:**
   ```powershell
-  # KaizerMultiBar -> plugins/KaizerMultiBar/target/KaizerMultiBar-2.1.0.jar
+  # KaizerMultiBar -> plugins/KaizerMultiBar/target/KaizerMultiBar-2.2.0.jar
   cd plugins/KaizerMultiBar
   mvn -B clean package
 
@@ -93,12 +93,12 @@ Renders menus exported from **GUI Studio**: Java players see TextDisplay hologra
 
 | ปลั๊กอิน | เวอร์ชัน | ใช้คู่กับ | นำไปวางที่ |
 |---|---|---|---|
-| `KaizerMultiBar-2.1.0.jar` | `2.1.0` | **HUD Studio** *(HUD ฝั่ง Bedrock)* | โฟลเดอร์ `plugins/` บน Paper / Purpur / Folia `1.21.x–26.x` |
+| `KaizerMultiBar-2.2.0.jar` | `2.2.0` | **HUD Studio** *(HUD ฝั่ง Bedrock)* | โฟลเดอร์ `plugins/` บน Paper / Purpur / Folia `1.21.x–26.x` |
 | `KaizerUI-1.0.0.jar` | `1.0.0` | **GUI Studio** *(เมนูเคอร์เซอร์)* | โฟลเดอร์ `plugins/` บน Paper / Purpur / Folia `1.21.x–26.x` |
 
 ---
 
-#### 1. `KaizerMultiBar` 2.1 (ปลั๊กอินส่งข้อมูล HUD)
+#### 1. `KaizerMultiBar` 2.2 (ปลั๊กอินส่งข้อมูล HUD)
 
 ส่งข้อมูล HUD (HP / อาหาร / เกราะ / อากาศ / EXP / ข้อความ PAPI / เงื่อนไขแสดงผล) ให้ผู้เล่น Bedrock ผ่าน **bossbar** หรือ hidden **title** เพื่อให้ HUD pack จาก KaizerHUD Studio อ่านไปแสดงผล — ไม่ต้องใช้คีย์/ไลเซนส์ และใช้ `.jar` เดียวจบ (ไม่มี Loader แยกแล้ว)
 
@@ -107,7 +107,7 @@ Renders menus exported from **GUI Studio**: Java players see TextDisplay hologra
 - **แนะนำ:** [PlaceholderAPI](https://www.spigotmc.org/resources/placeholderapi.6245/) (สำหรับแสดงค่า PAPI / Custom bar), [PacketEvents 2.14+](https://modrinth.com/plugin/packetevents) (ช่วยจัดลำดับ bossbar ของ HUD ไว้บนสุดฝั่งเซิร์ฟเวอร์เมื่อใช้โหมด `bossbar`)
 
 **วิธีติดตั้ง:**
-1. ดาวน์โหลด `KaizerMultiBar-2.1.0.jar` จากหน้า **[GitHub Releases](https://github.com/tomzangsad/KaizerHUD-Studio/releases/latest)** ไปใส่ในโฟลเดอร์ `plugins/` ของเซิร์ฟเวอร์
+1. ดาวน์โหลด `KaizerMultiBar-2.2.0.jar` จากหน้า **[GitHub Releases](https://github.com/tomzangsad/KaizerHUD-Studio/releases/latest)** ไปใส่ในโฟลเดอร์ `plugins/` ของเซิร์ฟเวอร์
 2. กด Export จาก **KaizerHUD Studio** (`Ctrl+E` → `output.zip`):
    - นำ `GeyserMC/packs/<namespace>.mcpack` ไปใส่ในโฟลเดอร์ `packs/` ของ Geyser
    - นำ `plugins/KaizerMultiBar/config.yml` ไปใส่ในโฟลเดอร์ `plugins/KaizerMultiBar/` ของเซิร์ฟเวอร์
@@ -151,7 +151,7 @@ Renders menus exported from **GUI Studio**: Java players see TextDisplay hologra
 - **เครื่องมือที่ต้องมี:** JDK 21+ และ Maven 3.9+ (บน Windows สามารถดับเบิลคลิก `plugins/build_kaizermultibar.bat` หรือ `plugins/build_kaizerui.bat` ได้เลย สคริปต์จะหา JDK 21+ และโหลด Maven พกพาไว้ใน `plugins/.tools/` ให้อัตโนมัติ)
 - **คำสั่ง Build:**
   ```powershell
-  # KaizerMultiBar -> plugins/KaizerMultiBar/target/KaizerMultiBar-2.1.0.jar
+  # KaizerMultiBar -> plugins/KaizerMultiBar/target/KaizerMultiBar-2.2.0.jar
   cd plugins/KaizerMultiBar
   mvn -B clean package
 

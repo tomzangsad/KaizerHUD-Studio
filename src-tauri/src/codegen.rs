@@ -8,12 +8,27 @@ use std::collections::HashSet;
 
 const LETTERS: &[u8] = b"abcdefghijklmnopqrstuvwxyz";
 const NEWBOS_PREFIX: &str = "@zelisce/custom_bossbars";
+const BOSSBAR_BANK_LIMIT: usize = 255;
+const MAX_HUD_BANKS: usize = 8;
+
+fn bank_prefix_str(bank: usize) -> String {
+    if bank == 0 {
+        NEWBOS_PREFIX.to_string()
+    } else {
+        format!("@kz{}", bank)
+    }
+}
 
 /// Expression that removes "prefix:" from the boss bar title before it is sliced by byte.
 /// Geyser prepends a reset code to boss bar titles (MessageTranslator.convertMessage), so
 /// "§r" + prefix is stripped first, then the bare prefix as a fallback for other clients.
 fn strip_bossbar_prefix() -> String {
-    format!("((#bossName - '\u{a7}r{p}:') - '{p}:')", p = NEWBOS_PREFIX)
+    strip_bank_prefix(0)
+}
+
+fn strip_bank_prefix(bank: usize) -> String {
+    let p = bank_prefix_str(bank);
+    format!("((#bossName - '\u{a7}r{p}:') - '{p}:')", p = p)
 }
 
 /// Default text_offset per text row and font size. Copied from ui/js/app.js DEFAULT_TEXT_OFFSETS
@@ -243,6 +258,145 @@ pub fn bossbar_title_length(elements: &[Value]) -> usize {
         .map(|v| to_number(Some(&v)).max(0.0) as usize)
         .sum();
     NEWBOS_PREFIX.len() + 1 + bars_section_length(elements) + pads
+}
+
+#[derive(Debug, Clone, Copy)]
+struct SlotPlace {
+    bank: usize,
+    start: usize,
+    end: usize,
+}
+
+#[derive(Debug, Clone)]
+struct BankPlan {
+    num_banks: usize,
+    text_places: Vec<SlotPlace>,
+    np_places: Vec<SlotPlace>,
+    np_bank: Option<usize>,
+}
+
+/// Worst-case byte budget for visibility markers `@v01..` (matches `bossbarTitleBudget` in export.js).
+fn visibility_markers_budget(elements: &[Value]) -> usize {
+    let (uniq, _) = visibility_keys(elements);
+    if uniq.is_empty() {
+        return 0;
+    }
+    let marker_len = 2 + uniq.len().to_string().len().max(2);
+    let mut eq_papis: HashSet<String> = HashSet::new();
+    let mut other_count = 0usize;
+    for (_, c) in &uniq {
+        if c.operator == "==" {
+            eq_papis.insert(c.papi.clone());
+        } else {
+            other_count += 1;
+        }
+    }
+    (eq_papis.len() + other_count) * marker_len
+}
+
+/// Partitions text and nameplate slots into 1 or more banks (up to MAX_HUD_BANKS).
+/// When the whole HUD fits within 255 bytes, Bank 0 keeps every slot at exact legacy offsets.
+fn plan_hud_banks(elements: &[Value]) -> BankPlan {
+    let text_slots = get_bossbar_slots(elements);
+    let np_slots = get_nameplate_slots(elements);
+    let text_pads: Vec<usize> = text_slots
+        .iter()
+        .map(|s| to_number(Some(&get_bossbar_slot_raw_length(s))).max(1.0) as usize)
+        .collect();
+    let np_pads: Vec<usize> = np_slots
+        .iter()
+        .map(|n| to_number(Some(&get_bossbar_slot_raw_length(n))).max(1.0) as usize)
+        .collect();
+
+    let bars_len = bars_section_length(elements);
+    let markers_len = visibility_markers_budget(elements);
+    let sum_text: usize = text_pads.iter().sum();
+    let sum_np: usize = np_pads.iter().sum();
+    let total_with_markers = NEWBOS_PREFIX.len() + 1 + bars_len + sum_text + sum_np + markers_len;
+
+    if total_with_markers <= BOSSBAR_BANK_LIMIT {
+        let mut cursor = bars_len;
+        let mut text_places = Vec::with_capacity(text_pads.len());
+        for pad in text_pads {
+            text_places.push(SlotPlace { bank: 0, start: cursor, end: cursor + pad });
+            cursor += pad;
+        }
+        let mut np_places = Vec::with_capacity(np_pads.len());
+        for pad in np_pads {
+            np_places.push(SlotPlace { bank: 0, start: cursor, end: cursor + pad });
+            cursor += pad;
+        }
+        return BankPlan {
+            num_banks: 1,
+            text_places,
+            np_places,
+            np_bank: if np_slots.is_empty() { None } else { Some(0) },
+        };
+    }
+
+    // Multi-bank packing: Reserve Bank 0 for bars + markers + nameplates (if they fit) + leading text slots.
+    let cap0 = BOSSBAR_BANK_LIMIT.saturating_sub(NEWBOS_PREFIX.len() + 1 + bars_len + markers_len);
+    let extra_cap = BOSSBAR_BANK_LIMIT.saturating_sub(5); // "@kzX:" is 5 bytes
+
+    let np_in_bank0 = !np_pads.is_empty() && sum_np <= cap0;
+    let np_bank = if np_pads.is_empty() {
+        None
+    } else if np_in_bank0 {
+        Some(0)
+    } else {
+        Some(1)
+    };
+
+    let mut bank0_text_cap = if np_in_bank0 { cap0 - sum_np } else { cap0 };
+    let mut text_places = Vec::with_capacity(text_pads.len());
+    let mut bank0_cursor = bars_len;
+
+    let mut cur_extra_bank = 1usize;
+    let mut cur_extra_used = 0usize;
+
+    // Assign all text slots: pack as many as fit into Bank 0, then spill sequentially to Bank 1..N
+    for &pad in &text_pads {
+        if pad <= bank0_text_cap && cur_extra_bank == 1 && cur_extra_used == 0 {
+            text_places.push(SlotPlace { bank: 0, start: bank0_cursor, end: bank0_cursor + pad });
+            bank0_cursor += pad;
+            bank0_text_cap -= pad;
+        } else {
+            // Reserve Bank 1 for overflow nameplates first if nameplates couldn't fit in Bank 0
+            if cur_extra_bank == 1 && !np_in_bank0 && np_bank == Some(1) && cur_extra_used == 0 {
+                cur_extra_used = sum_np;
+            }
+            if cur_extra_used > 0 && cur_extra_used + pad > extra_cap && cur_extra_bank + 1 < MAX_HUD_BANKS {
+                cur_extra_bank += 1;
+                cur_extra_used = 0;
+            }
+            text_places.push(SlotPlace { bank: cur_extra_bank, start: cur_extra_used, end: cur_extra_used + pad });
+            cur_extra_used += pad;
+        }
+    }
+
+    // Place all nameplates contiguously in `np_bank` (after text slots in that bank, matching plugin order)
+    let mut np_places = Vec::with_capacity(np_pads.len());
+    if let Some(nb) = np_bank {
+        let mut cursor = if nb == 0 { bank0_cursor } else { 0 };
+        for &pad in &np_pads {
+            np_places.push(SlotPlace { bank: nb, start: cursor, end: cursor + pad });
+            cursor += pad;
+        }
+    }
+
+    let max_bank_used = text_places
+        .iter()
+        .chain(np_places.iter())
+        .map(|p| p.bank)
+        .max()
+        .unwrap_or(0);
+
+    BankPlan {
+        num_banks: max_bank_used + 1,
+        text_places,
+        np_places,
+        np_bank,
+    }
 }
 
 fn sanitize_custom_bar_key(value: &str, fallback: &str) -> String {
@@ -587,24 +741,60 @@ pub fn generate_kaizer_multibar_config_yml_with(elements: &[Value], channel: Hud
         push(&format!("      pad-length: {}", custom_bar_pad(slot_number, &entry.tag)));
     }
 
+    let plan = plan_hud_banks(elements);
+    let extra_nameplates = get_nameplate_slots(elements);
+
     push("  ");
     push("  slots:");
+    let mut bank0_entries: Vec<(usize, String, &Value)> = vec![];
     for (idx, slot) in extra_texts.iter().enumerate() {
-        let placeholder = str_or_empty(get(slot, "papi_placeholder"));
-        let pad = js_string(Some(&get_bossbar_slot_raw_length(slot)));
+        if plan.text_places[idx].bank == 0 {
+            bank0_entries.push((plan.text_places[idx].start, format!("slot_{}", idx + 1), slot));
+        }
+    }
+    for (idx, np) in extra_nameplates.iter().enumerate() {
+        if plan.np_places[idx].bank == 0 {
+            bank0_entries.push((plan.np_places[idx].start, format!("nameplate_slot_{}", idx + 1), np));
+        }
+    }
+    bank0_entries.sort_by_key(|e| e.0);
+    for (_, key, el) in bank0_entries {
+        let placeholder = str_or_empty(get(el, "papi_placeholder"));
+        let pad = js_string(Some(&get_bossbar_slot_raw_length(el)));
         let prefix = if has_non_ascii(&placeholder) { "" } else { "§z" };
-        push(&format!("    slot_{}:", idx + 1));
+        push(&format!("    {}:", key));
         push(&format!("      text: \"{}{}\"", prefix, placeholder));
         push(&format!("      pad-length: {}", pad));
     }
 
-    for (idx, np) in get_nameplate_slots(elements).iter().enumerate() {
-        let placeholder = str_or_empty(get(np, "papi_placeholder"));
-        let pad = js_string(Some(&get_bossbar_slot_raw_length(np)));
-        let prefix = if has_non_ascii(&placeholder) { "" } else { "§z" };
-        push(&format!("    nameplate_slot_{}:", idx + 1));
-        push(&format!("      text: \"{}{}\"", prefix, placeholder));
-        push(&format!("      pad-length: {}", pad));
+    if plan.num_banks > 1 {
+        push("  ");
+        push("  banks:");
+        for bank in 1..plan.num_banks {
+            push(&format!("    bank_{}:", bank));
+            push(&format!("      prefix: \"{prefix}:\"", prefix = bank_prefix_str(bank)));
+            push("      slots:");
+            let mut entries: Vec<(usize, String, &Value)> = vec![];
+            for (idx, slot) in extra_texts.iter().enumerate() {
+                if plan.text_places[idx].bank == bank {
+                    entries.push((plan.text_places[idx].start, format!("slot_{}", idx + 1), slot));
+                }
+            }
+            for (idx, np) in extra_nameplates.iter().enumerate() {
+                if plan.np_places[idx].bank == bank {
+                    entries.push((plan.np_places[idx].start, format!("nameplate_slot_{}", idx + 1), np));
+                }
+            }
+            entries.sort_by_key(|e| e.0);
+            for (_, key, el) in entries {
+                let placeholder = str_or_empty(get(el, "papi_placeholder"));
+                let pad = js_string(Some(&get_bossbar_slot_raw_length(el)));
+                let prefix = if has_non_ascii(&placeholder) { "" } else { "§z" };
+                push(&format!("        {}:", key));
+                push(&format!("          text: \"{}{}\"", prefix, placeholder));
+                push(&format!("          pad-length: {}", pad));
+            }
+        }
     }
 
     push("");
@@ -735,6 +925,10 @@ pub fn resolve_bar_for_render(elements: &[Value], bar: &Value) -> Value {
 /// bossbar of its own factory instance (no `source_control_name`, so the result does
 /// not depend on which bossbar comes first).
 fn own_slice_bindings(range: &(String, String)) -> Value {
+    own_slice_bindings_for(range, 0)
+}
+
+fn own_slice_bindings_for(range: &(String, String), bank: usize) -> Value {
     let (start, end) = range;
     json!([
         {
@@ -745,7 +939,7 @@ fn own_slice_bindings(range: &(String, String)) -> Value {
         {
             "binding_type": "view",
             // remove "prefix:" as one string; `- ':'` would also strip every ':' inside the slots
-            "source_property_name": strip_bossbar_prefix(),
+            "source_property_name": strip_bank_prefix(bank),
             "target_property_name": "#kz_s"
         },
         {
@@ -764,21 +958,33 @@ fn own_slice_bindings(range: &(String, String)) -> Value {
 /// A fixed 1x1 grid over the `boss_bars` collection. (`stack_panel` + `factory` +
 /// `#form_button_length` comes from server_form.json and does not exist on the HUD.)
 fn bossbar_factory(control_name: &str) -> Value {
+    bossbar_factory_rows(control_name, 1)
+}
+
+fn bossbar_factory_rows(control_name: &str, rows: usize) -> Value {
     json!({
         "type": "grid",
         "collection_name": "boss_bars",
         "grid_item_template": control_name,
-        "grid_dimensions": [1, 1],
-        "size": ["100%", "100%"]
+        "grid_dimensions": [1, rows],
+        "anchor_from": "top_left",
+        "anchor_to": "top_left",
+        "size": ["100%", format!("{}%", rows * 100)]
     })
 }
 
 /// `#visible` binding that matches our bossbar anywhere in the title, so leading
 /// colour/reset codes do not hide it.
 fn own_bossbar_visible_binding() -> Value {
+    own_bank_visible_binding(0)
+}
+
+fn own_bank_visible_binding(bank: usize) -> Value {
+    let p = bank_prefix_str(bank);
+    let needle = if bank == 0 { p } else { format!("{}:", p) };
     json!({
         "binding_type": "view",
-        "source_property_name": format!("(not ((#bossName - '{}') = #bossName))", NEWBOS_PREFIX),
+        "source_property_name": format!("(not ((#bossName - '{}') = #bossName))", needle),
         "target_property_name": "#visible"
     })
 }
@@ -1247,9 +1453,16 @@ pub fn generate_hud_screen_json_with(namespace: &str, elements: &[Value], opts: 
         }
     }
 
+    let mut extra_bank_factories: Vec<String> = vec![];
     if !slots.is_empty() || !nameplates.is_empty() {
+        let plan = plan_hud_banks(elements);
         // must equal `bossbar.bars-length` written to config.yml
         let right_end = json!(bars_section_length(elements));
+        let health_vis = if plan.num_banks > 1 {
+            "((((#bossName - $prefix) = #bossName) and ((#bossName - '@kz') = #bossName)) and #bar_visible)"
+        } else {
+            "(((#bossName - $prefix) = #bossName) and #bar_visible)"
+        };
         hud.insert(
             "boss_health_panel".into(),
             json!({
@@ -1267,7 +1480,7 @@ pub fn generate_hud_screen_json_with(namespace: &str, elements: &[Value], opts: 
                     },
                     {
                         "binding_type": "view",
-                        "source_property_name": "(((#bossName - $prefix) = #bossName) and #bar_visible)",
+                        "source_property_name": health_vis,
                         "target_property_name": "#visible"
                     }
                 ]
@@ -1294,33 +1507,33 @@ pub fn generate_hud_screen_json_with(namespace: &str, elements: &[Value], opts: 
             }),
         ];
 
-        let mut slot_start = right_end;
-        let mut slot_ranges: Vec<(String, String)> = vec![];
-        for (idx, slot) in slots.iter().enumerate() {
-            let len = get_bossbar_slot_raw_length(slot);
-            let start = slot_start.clone();
-            let end = js_add(Some(&start), Some(&len));
-            slot_ranges.push((js_string(Some(&start)), js_string(Some(&end))));
-            panel_bindings.push(json!({
-                "binding_type": "view",
-                "source_property_name": format!("(('%.{}s' * #string) - ('%.{}s' * #string))", js_string(Some(&end)), js_string(Some(&start))),
-                "target_property_name": format!("#left_string_{}", idx + 1)
-            }));
-            slot_start = end;
+        let slot_ranges: Vec<(String, String)> = plan
+            .text_places
+            .iter()
+            .map(|pl| (pl.start.to_string(), pl.end.to_string()))
+            .collect();
+        for (idx, pl) in plan.text_places.iter().enumerate() {
+            if pl.bank == 0 {
+                panel_bindings.push(json!({
+                    "binding_type": "view",
+                    "source_property_name": format!("(('%.{}s' * #string) - ('%.{}s' * #string))", pl.end, pl.start),
+                    "target_property_name": format!("#left_string_{}", idx + 1)
+                }));
+            }
         }
-        let mut np_start = slot_start;
-        let mut np_ranges: Vec<(String, String)> = vec![];
-        for (idx, np) in nameplates.iter().enumerate() {
-            let len = get_bossbar_slot_raw_length(np);
-            let start = np_start.clone();
-            let end = js_add(Some(&start), Some(&len));
-            np_ranges.push((js_string(Some(&start)), js_string(Some(&end))));
-            panel_bindings.push(json!({
-                "binding_type": "view",
-                "source_property_name": format!("(('%.{}s' * #string) - ('%.{}s' * #string))", js_string(Some(&end)), js_string(Some(&start))),
-                "target_property_name": format!("#nameplate_string_{}", idx + 1)
-            }));
-            np_start = end;
+        let np_ranges: Vec<(String, String)> = plan
+            .np_places
+            .iter()
+            .map(|pl| (pl.start.to_string(), pl.end.to_string()))
+            .collect();
+        for (idx, pl) in plan.np_places.iter().enumerate() {
+            if pl.bank == 0 {
+                panel_bindings.push(json!({
+                    "binding_type": "view",
+                    "source_property_name": format!("(('%.{}s' * #string) - ('%.{}s' * #string))", pl.end, pl.start),
+                    "target_property_name": format!("#nameplate_string_{}", idx + 1)
+                }));
+            }
         }
 
         hud.insert(
@@ -1354,6 +1567,7 @@ pub fn generate_hud_screen_json_with(namespace: &str, elements: &[Value], opts: 
             hud.insert("nameplate_slot_sp_text_panel".into(), json!({ "type": "panel", "size": [1, 1] }));
             for idx in 0..nameplates.len() {
                 let n = idx + 1;
+                let np_bank = plan.np_places[idx].bank;
                 hud.insert(
                     format!("nameplate_slot_{}_text_panel", n),
                     json!({
@@ -1367,7 +1581,7 @@ pub fn generate_hud_screen_json_with(namespace: &str, elements: &[Value], opts: 
                                     "font_size": "normal",
                                     "layer": 1,
                                     "offset": [3, 0],
-                                    "bindings": own_slice_bindings(&np_ranges[idx])
+                                    "bindings": own_slice_bindings_for(&np_ranges[idx], np_bank)
                                 }
                             },
                             {
@@ -1396,9 +1610,10 @@ pub fn generate_hud_screen_json_with(namespace: &str, elements: &[Value], opts: 
             }
         }
 
-        let mut all_controls: Vec<Value> = vec![];
+        let mut per_bank_controls: Vec<Vec<Value>> = vec![vec![]; plan.num_banks];
         for (idx, slot) in slots.iter().enumerate() {
             let n = idx + 1;
+            let bank = plan.text_places[idx].bank;
             let color = or(get(slot, "color"), json!([1, 1, 1]));
             let font_size = or(get(slot, "font_size"), json!("normal"));
             let shadow = or_undef(get(slot, "shadow"), json!(false));
@@ -1432,19 +1647,56 @@ pub fn generate_hud_screen_json_with(namespace: &str, elements: &[Value], opts: 
                                 "shadow": shadow,
                                 "font_size": font_size,
                                 "layer": or(get(slot, "layer"), json!(101)),
-                                "bindings": own_slice_bindings(&slot_ranges[idx])
+                                "bindings": own_slice_bindings_for(&slot_ranges[idx], bank)
                             }
                         }
                     ]
                 }),
             );
-            all_controls.push(Value::Object(o));
+            per_bank_controls[bank].push(Value::Object(o));
         }
-        if let Some(ns) = nameplate_stack {
-            all_controls.push(ns);
+        if let (Some(ns), Some(nb)) = (nameplate_stack, plan.np_bank) {
+            per_bank_controls[nb].push(ns);
         }
         if let Some(Value::Object(p)) = hud.get_mut("custom_bossbars_panel") {
-            p.insert("controls".into(), Value::Array(all_controls));
+            p.insert("controls".into(), Value::Array(per_bank_controls[0].clone()));
+        }
+
+        for bank in 1..plan.num_banks {
+            let panel_name = format!("custom_bossbars_bank_{}_panel", bank);
+            let factory_name = format!("custom_bossbars_bank_{}_factory", bank);
+            let pfx = format!("{}:", bank_prefix_str(bank));
+            let b_bindings = vec![
+                json!({
+                    "binding_type": "collection",
+                    "binding_collection_name": "boss_bars",
+                    "binding_name": "#bossName"
+                }),
+                own_bank_visible_binding(bank),
+                json!({
+                    "binding_type": "view",
+                    "source_property_name": strip_bank_prefix(bank),
+                    "target_property_name": "#string"
+                }),
+            ];
+            hud.insert(
+                panel_name.clone(),
+                json!({
+                    "type": "panel",
+                    "$prefix": pfx,
+                    "size": ["100%", "100%"],
+                    "anchor_from": "top_left",
+                    "anchor_to": "top_left",
+                    "offset": [0, format!("-{}%", bank * 100)],
+                    "bindings": b_bindings,
+                    "controls": per_bank_controls[bank]
+                }),
+            );
+            hud.insert(
+                factory_name.clone(),
+                bossbar_factory_rows(&format!("hud.{}", panel_name), bank + 1),
+            );
+            extra_bank_factories.push(factory_name);
         }
     }
 
@@ -1470,6 +1722,15 @@ pub fn generate_hud_screen_json_with(namespace: &str, elements: &[Value], opts: 
                 "operation": "insert_back",
                 "value": { "custom_bossbars_factory@hud.custom_bossbars_factory": {} }
             }));
+            for fac in extra_bank_factories {
+                let mut o = Obj::new();
+                o.insert(format!("{}@hud.{}", fac, fac), json!({}));
+                root_mods.push(json!({
+                    "array_name": "controls",
+                    "operation": "insert_back",
+                    "value": Value::Object(o)
+                }));
+            }
         }
         hud.insert("root_panel".into(), json!({ "modifications": root_mods }));
     }
@@ -1860,22 +2121,56 @@ const KZ_STORE: &str = "kz_hud_store";
 /// `/kzbos` toggle-off payload: subtracting it leaves no prefix → HUD hidden.
 const KZ_OFF_SUFFIX: &str = ":~off";
 
+fn bank_store_name(bank: usize) -> String {
+    if bank == 0 {
+        KZ_STORE.to_string()
+    } else {
+        format!("{}_{}", KZ_STORE, bank)
+    }
+}
+
+fn bank_store_match_prefix(bank: usize) -> String {
+    if bank == 0 {
+        NEWBOS_PREFIX.to_string()
+    } else {
+        format!("{}:", bank_prefix_str(bank))
+    }
+}
+
+fn bank_off_token(bank: usize) -> String {
+    if bank == 0 {
+        format!("{}{}", NEWBOS_PREFIX, KZ_OFF_SUFFIX)
+    } else {
+        format!("{}~off", bank_store_match_prefix(bank))
+    }
+}
+
 fn is_bossbar_collection_binding(b: &Value) -> bool {
     str_eq(get(b, "binding_collection_name"), "boss_bars") && str_eq(get(b, "binding_name"), "#bossName")
 }
 
 /// `#bossName` read from the store instead of a boss bar.
-fn store_bossname_binding() -> Value {
+fn store_bossname_binding_for(bank: usize) -> Value {
     json!({
         "binding_type": "view",
-        "source_control_name": KZ_STORE,
-        "source_property_name": format!("(#kz_saved - '{}{}')", NEWBOS_PREFIX, KZ_OFF_SUFFIX),
+        "source_control_name": bank_store_name(bank),
+        "source_property_name": format!("(#kz_saved - '{}')", bank_off_token(bank)),
         "target_property_name": "#bossName"
     })
 }
 
+fn detect_bank_in_bindings(bindings: &[Value]) -> Option<usize> {
+    let serialized = Value::Array(bindings.to_vec()).to_string();
+    for b in 1..MAX_HUD_BANKS {
+        if serialized.contains(&format!("@kz{}:", b)) {
+            return Some(b);
+        }
+    }
+    None
+}
+
 /// Rewrites one value tree: collection `#bossName` → store, `boss_bars` grid → single instance.
-fn rewrite_bossbar_reads(v: &mut Value) {
+fn rewrite_bossbar_reads_for(v: &mut Value, bank_hint: Option<usize>) {
     match v {
         Value::Object(o) => {
             let is_grid = str_eq(o.get("type"), "grid") && str_eq(o.get("collection_name"), "boss_bars");
@@ -1887,34 +2182,47 @@ fn rewrite_bossbar_reads(v: &mut Value) {
                 return;
             }
             if let Some(Value::Array(bindings)) = o.get_mut("bindings") {
+                let inferred = detect_bank_in_bindings(bindings).or(bank_hint).unwrap_or(0);
                 for b in bindings.iter_mut() {
                     if is_bossbar_collection_binding(b) {
-                        *b = store_bossname_binding();
+                        *b = store_bossname_binding_for(inferred);
                     }
                 }
             }
-            for (_, child) in o.iter_mut() {
-                rewrite_bossbar_reads(child);
+            for (k, child) in o.iter_mut() {
+                let mut next_hint = bank_hint;
+                if let Some(rest) = k.strip_prefix("custom_bossbars_bank_") {
+                    if let Some(num_str) = rest.strip_suffix("_panel") {
+                        if let Ok(b_idx) = num_str.parse::<usize>() {
+                            next_hint = Some(b_idx);
+                            if let Value::Object(panel_obj) = child {
+                                panel_obj.insert("offset".into(), json!([0, 0]));
+                            }
+                        }
+                    }
+                }
+                rewrite_bossbar_reads_for(child, next_hint);
             }
         }
         Value::Array(a) => {
             for child in a.iter_mut() {
-                rewrite_bossbar_reads(child);
+                rewrite_bossbar_reads_for(child, bank_hint);
             }
         }
         _ => {}
     }
 }
 
-/// True when `src` (an expression of a string) contains our prefix.
-fn has_prefix_expr(src: &str) -> String {
-    format!("(not (({s} - '{p}') = {s}))", s = src, p = NEWBOS_PREFIX)
+/// True when `src` (an expression of a string) contains `prefix`.
+fn has_str_expr(src: &str, prefix: &str) -> String {
+    format!("(not (({s} - '{p}') = {s}))", s = src, p = prefix)
 }
 
 /// The store (wiki.bedrock.dev "Preserve Title Texts"): saves the title when it has our prefix
 /// and differs from the saved one (the copy binding only runs on `visibility_changed`; the panel
 /// turns visible for that one update and hides again because the strings are then equal).
-fn hud_store_control() -> Value {
+fn hud_store_control_for(bank: usize) -> Value {
+    let pfx = bank_store_match_prefix(bank);
     json!({
         "type": "panel",
         "size": [0, 0],
@@ -1931,7 +2239,7 @@ fn hud_store_control() -> Value {
                 "binding_type": "view",
                 "source_property_name": format!(
                     "((not (#hud_title_text_string = #kz_saved)) and {})",
-                    has_prefix_expr("#hud_title_text_string")
+                    has_str_expr("#hud_title_text_string", &pfx)
                 ),
                 "target_property_name": "#visible"
             }
@@ -1974,6 +2282,13 @@ pub fn apply_hud_channel_with(files: &mut Files, channel: HudChannel, debug: boo
     if channel == HudChannel::Bossbar {
         return;
     }
+    let extra_banks: Vec<usize> = match files.get("ui/hud_screen.json") {
+        Some(Value::Object(o)) => (1..MAX_HUD_BANKS)
+            .filter(|b| o.contains_key(&format!("custom_bossbars_bank_{}_panel", b)))
+            .collect(),
+        _ => vec![],
+    };
+
     for (path, v) in files.iter_mut() {
         if path.ends_with(".json") && path != "ui/_ui_defs.json" {
             if path == "ui/hud_screen.json" {
@@ -1984,7 +2299,7 @@ pub fn apply_hud_channel_with(files: &mut Files, channel: HudChannel, debug: boo
                     }
                 }
             }
-            rewrite_bossbar_reads(v);
+            rewrite_bossbar_reads_for(v, None);
         }
     }
     let screen = match files.get_mut("ui/hud_screen.json") {
@@ -1993,8 +2308,23 @@ pub fn apply_hud_channel_with(files: &mut Files, channel: HudChannel, debug: boo
     };
     // one object per control, like the wiki examples
     let mut added: Vec<Value> = vec![json!({ format!("{}@hud.{}", KZ_STORE, KZ_STORE): {} })];
+    for &b in &extra_banks {
+        let store_id = bank_store_name(b);
+        let mut o = Obj::new();
+        o.insert(format!("{}@hud.{}", store_id, store_id), json!({}));
+        added.push(Value::Object(o));
+    }
     if !debug {
-        // hide the vanilla title (and its subtitle) while it shows our data string
+        // hide the vanilla title (and its subtitle) while it shows our data string (bank 0 or overflow banks)
+        let title_vis = if extra_banks.is_empty() {
+            format!("(not {})", has_str_expr("#hud_title_text_string", NEWBOS_PREFIX))
+        } else {
+            format!(
+                "(not ({} or {}))",
+                has_str_expr("#hud_title_text_string", NEWBOS_PREFIX),
+                has_str_expr("#hud_title_text_string", "@kz")
+            )
+        };
         screen.insert(
             "hud_title_text".into(),
             json!({
@@ -2002,14 +2332,17 @@ pub fn apply_hud_channel_with(files: &mut Files, channel: HudChannel, debug: boo
                     { "binding_name": "#hud_title_text_string", "binding_type": "global" },
                     {
                         "binding_type": "view",
-                        "source_property_name": format!("(not {})", has_prefix_expr("#hud_title_text_string")),
+                        "source_property_name": title_vis,
                         "target_property_name": "#visible"
                     }
                 ]
             }),
         );
     }
-    screen.insert(KZ_STORE.into(), hud_store_control());
+    screen.insert(KZ_STORE.into(), hud_store_control_for(0));
+    for &b in &extra_banks {
+        screen.insert(bank_store_name(b), hud_store_control_for(b));
+    }
     if debug {
         screen.insert("kz_channel_debug".into(), channel_debug_label());
         added.push(json!({ "kz_channel_debug@hud.kz_channel_debug": {} }));
@@ -2500,5 +2833,49 @@ mod channel_tests {
         assert_eq!(HudOptions::from_data(&json!({ "hudChannel": "actionbar" })).channel, HudChannel::Bossbar);
         assert_eq!(HudOptions::from_data(&json!({ "hudChannel": "title" })).channel, HudChannel::Title);
         assert_eq!(HudOptions::from_data(&json!({ "hudChannel": "???" })).channel, HudChannel::Bossbar);
+    }
+
+    #[test]
+    fn multi_bank_splits_above_255_bytes() {
+        let mut els: Vec<Value> = vec![json!({
+            "id": 1, "type": "bar", "name": "hp", "barType": "hp",
+            "barTexturePath": "textures/hotbar/fill_kh/horizontal/16",
+            "barMaxSize": [40, 5], "size": [40, 5], "offset": [0, 0],
+            "anchor_from": "top_left", "anchor_to": "top_left"
+        })];
+        for i in 1..=15 {
+            els.push(json!({
+                "id": 10 + i, "type": "text", "name": format!("s{}", i),
+                "collection_index": 0, "pad_auto": false, "pad_length": 30,
+                "papi_placeholder": format!("%stat_{}%", i),
+                "offset": [5, i * 10], "anchor_from": "top_left", "anchor_to": "top_left"
+            }));
+        }
+        let plan = plan_hud_banks(&els);
+        assert!(plan.num_banks >= 3, "15x30=450B+ should split across >=3 banks (got {})", plan.num_banks);
+
+        let yml = generate_kaizer_multibar_config_yml_with(&els, HudChannel::Title);
+        assert!(yml.contains("  banks:\n"));
+        assert!(yml.contains("    bank_1:\n      prefix: \"@kz1:\"\n"));
+        assert!(yml.contains("    slot_15:\n"));
+
+        // Bossbar mode: overflow bank panels + grids
+        let bb = generate_split_files_patched_with("ns", &els, None, &HudOptions::default());
+        let bb_screen = &bb["ui/hud_screen.json"];
+        assert!(bb_screen.get("custom_bossbars_bank_1_panel").is_some());
+        assert_eq!(bb_screen["custom_bossbars_bank_1_factory"]["grid_dimensions"], json!([1, 2]));
+        assert_eq!(bb_screen["custom_bossbars_bank_1_panel"]["offset"], json!([0, "-100%"]));
+        let h_vis = bb_screen["boss_health_panel"]["bindings"][2]["source_property_name"].as_str().unwrap();
+        assert!(h_vis.contains("'@kz'"));
+
+        // Title mode: persistent kz_hud_store_1 + hidden vanilla title matching @kz
+        let tt = generate_split_files_patched_with("ns", &els, None, &opts(HudChannel::Title));
+        let tt_screen = &tt["ui/hud_screen.json"];
+        assert!(tt_screen.get("kz_hud_store_1").is_some());
+        assert_eq!(tt_screen["custom_bossbars_bank_1_panel"]["offset"], json!([0, 0]));
+        let b1_str = serde_json::to_string(&tt_screen["custom_bossbars_bank_1_panel"]).unwrap();
+        assert!(b1_str.contains("kz_hud_store_1"));
+        assert!(tt_screen["hud_title_text"]["bindings"][1]["source_property_name"].as_str().unwrap().contains("'@kz'"));
+        refs_resolve(&tt);
     }
 }

@@ -2,55 +2,51 @@ package com.kaizer.kaizermultibar.bar.strategy;
 
 import com.kaizer.kaizermultibar.KaizerMultiBarCore;
 import com.kaizer.kaizermultibar.util.PrefixBuilder;
+import com.kaizer.kaizermultibar.util.SchedulerUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Sends the same HUD data string as {@link CombinedBarStrategy}, but through the title instead
- * of a boss bar ({@code bossbar.channel: title}).
- *
- * The HUD pack (exported with the same channel) keeps the last title that starts with our
- * prefix and hides it from the vanilla title, so the string only has to be sent when it
- * changes — plus every {@code bossbar.channel-resend-ticks} as a safety net (e.g. after the
- * client rebuilt its HUD). Sending less often also means other plugins' titles are replaced
- * less often.
- *
- * An action bar channel was tried and removed (2026-11-24): a Bedrock pack cannot keep action
- * bar data apart from other plugins' action bar messages.
+ * Sends HUD data strings through {@link Player#sendTitle} ({@code bossbar.channel: title}),
+ * supporting both single-bank HUDs and Multi-Bank HUDs (>255 bytes across {@code bossbar.banks}).
+ * Each bank has its own persistent store panel ({@code kz_hud_store}, {@code kz_hud_store_1}, ...),
+ * so only banks whose data changed are transmitted (spaced 1 tick apart when multiple banks update).
  */
 public class ChannelBarStrategy extends AbstractBarStrategy {
 
     public enum Channel {
         TITLE;
 
-        /** null = boss bar (or unknown value, e.g. the removed "actionbar") */
         public static Channel parse(String value) {
             if (value == null) return null;
             return "title".equals(value.trim().toLowerCase(java.util.Locale.ROOT)) ? TITLE : null;
         }
     }
 
-    /** Hides the HUD: the pack subtracts this whole string, so no prefix is left. */
+    /** Primary off-payload kept for backward compatibility. */
     public static final String OFF_PAYLOAD = PrefixBuilder.PREFIX + "~off";
     /** How long a (hidden) title stays on the client. The pack keeps the data after it ends. */
     private static final int TITLE_STAY_TICKS = 40;
 
+    private final KaizerMultiBarCore plugin;
     private final Channel channel;
     private final long resendMillis;
-    /** Only used to build the string (never creates a boss bar). */
     private final CombinedBarStrategy builder;
 
     private final Set<UUID> active = ConcurrentHashMap.newKeySet();
     private final Set<UUID> hidden = ConcurrentHashMap.newKeySet();
-    private final Map<UUID, String> lastSent = new ConcurrentHashMap<>();
-    private final Map<UUID, Long> lastSentAt = new ConcurrentHashMap<>();
+    private final Map<UUID, Map<Integer, String>> lastSent = new ConcurrentHashMap<>();
+    private final Map<UUID, Map<Integer, Long>> lastSentAt = new ConcurrentHashMap<>();
 
     public ChannelBarStrategy(KaizerMultiBarCore plugin, Channel channel) {
+        this.plugin = plugin;
         this.channel = channel;
         this.builder = new CombinedBarStrategy(plugin);
         long ticks = plugin.getConfig().getLong("bossbar.channel-resend-ticks", 100L);
@@ -65,7 +61,7 @@ public class ChannelBarStrategy extends AbstractBarStrategy {
     public void initPlayer(Player player) {
         UUID id = player.getUniqueId();
         active.add(id);
-        forget(id); // send on the next update
+        forget(id);
     }
 
     @Override
@@ -73,19 +69,55 @@ public class ChannelBarStrategy extends AbstractBarStrategy {
         UUID id = player.getUniqueId();
         if (!active.contains(id)) return;
 
-        String data = hidden.contains(id) ? OFF_PAYLOAD : builder.buildTitle(player);
-        if (data == null) return;
+        List<String> payloads = hidden.contains(id)
+                ? buildOffPayloads()
+                : builder.buildBankTitles(player);
+        if (payloads.isEmpty()) return;
 
         long now = System.currentTimeMillis();
-        String last = lastSent.get(id);
-        Long at = lastSentAt.get(id);
-        boolean changed = !data.equals(last);
-        boolean due = resendMillis > 0 && (at == null || now - at >= resendMillis);
-        if (!changed && !due) return;
+        Map<Integer, String> sentMap = lastSent.computeIfAbsent(id, k -> new ConcurrentHashMap<>());
+        Map<Integer, Long> atMap = lastSentAt.computeIfAbsent(id, k -> new ConcurrentHashMap<>());
 
-        send(player, data);
-        lastSent.put(id, data);
-        lastSentAt.put(id, now);
+        List<Integer> dirtyBanks = new ArrayList<>();
+        for (int i = 0; i < payloads.size(); i++) {
+            String data = payloads.get(i);
+            if (data == null) continue;
+            String last = sentMap.get(i);
+            Long at = atMap.get(i);
+            boolean changed = !data.equals(last);
+            boolean due = resendMillis > 0 && (at == null || now - at >= resendMillis);
+            if (changed || due) dirtyBanks.add(i);
+        }
+        if (dirtyBanks.isEmpty()) return;
+
+        // Send the first dirty bank immediately; stagger extra dirty banks 1 tick apart so each
+        // persists into its own kz_hud_store_<k> without overwriting an earlier bank on the same tick.
+        int firstBank = dirtyBanks.get(0);
+        String firstData = payloads.get(firstBank);
+        send(player, firstData);
+        sentMap.put(firstBank, firstData);
+        atMap.put(firstBank, now);
+
+        for (int d = 1; d < dirtyBanks.size(); d++) {
+            final int bankIdx = dirtyBanks.get(d);
+            final String data = payloads.get(bankIdx);
+            sentMap.put(bankIdx, data);
+            atMap.put(bankIdx, now);
+            SchedulerUtil.runTaskLaterForPlayer(plugin.getPlugin(), player, () -> {
+                if (player.isOnline() && active.contains(id)) {
+                    send(player, data);
+                }
+            }, d);
+        }
+    }
+
+    private List<String> buildOffPayloads() {
+        List<String> prefixes = builder.getBankPrefixes();
+        List<String> off = new ArrayList<>(prefixes.size());
+        for (String p : prefixes) {
+            off.add(p + "~off");
+        }
+        return off;
     }
 
     @Override
@@ -93,7 +125,14 @@ public class ChannelBarStrategy extends AbstractBarStrategy {
         UUID id = player.getUniqueId();
         boolean wasActive = active.remove(id);
         if (wasActive && lastSent.containsKey(id) && player.isOnline()) {
-            send(player, OFF_PAYLOAD); // the pack keeps the last data otherwise
+            List<String> offs = buildOffPayloads();
+            for (int i = 0; i < offs.size(); i++) {
+                final String p = offs.get(i);
+                if (i == 0) send(player, p);
+                else SchedulerUtil.runTaskLaterForPlayer(plugin.getPlugin(), player, () -> {
+                    if (player.isOnline()) send(player, p);
+                }, i);
+            }
         }
         forget(id);
         hidden.remove(id);
@@ -101,15 +140,18 @@ public class ChannelBarStrategy extends AbstractBarStrategy {
 
     @Override
     public void removeAll() {
+        List<String> offs = buildOffPayloads();
         for (UUID id : active) {
             Player p = Bukkit.getPlayer(id);
-            if (p != null && p.isOnline() && lastSent.containsKey(id)) send(p, OFF_PAYLOAD);
+            if (p != null && p.isOnline() && lastSent.containsKey(id)) {
+                for (String off : offs) send(p, off);
+            }
         }
         active.clear();
         hidden.clear();
         lastSent.clear();
         lastSentAt.clear();
-        builder.removeAll(); // reloads the visibility conditions
+        builder.removeAll();
     }
 
     @Override
@@ -137,8 +179,6 @@ public class ChannelBarStrategy extends AbstractBarStrategy {
 
     @SuppressWarnings("deprecation")
     private void send(Player player, String data) {
-        // String API = the same legacy-text conversion as BossBar#setTitle (CraftChatMessage),
-        // so the byte layout the pack slices is identical to the boss bar channel.
         player.sendTitle(data, null, 0, TITLE_STAY_TICKS, 0);
     }
 }

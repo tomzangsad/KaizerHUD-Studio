@@ -2260,7 +2260,8 @@ function bindInput(id, event, callback) {
 function padBudgetText() {
   if (typeof window.bossbarTitleBudget !== "function") return { text: "", over: false };
   const b = window.bossbarTitleBudget(App.elements);
-  return { text: `Bossbar ${b.total} / ${b.limit}`, over: b.over, title: `prefix 25 + bars ${b.bars} + slots ${b.pads}` };
+  const label = b.banks > 1 ? `HUD ${b.total}B (${b.banks} banks)` : `Bossbar ${b.total} / ${b.singleLimit || 255}`;
+  return { text: label, over: b.over, title: `prefix 25 + bars ${b.bars} + slots ${b.pads} (${b.banks} bank${b.banks > 1 ? 's' : ''}, needs KaizerMultiBar 2.2+ if >1)` };
 }
 
 /* Pad length of a bossbar text / nameplate: "Auto" sizes it from the placeholders
@@ -2269,7 +2270,7 @@ function renderPadInput(el) {
   const auto = el.pad_auto !== false;
   const value = auto ? autoPadLength(el.papi_placeholder) : parseInt(el.pad_length) || 30;
   return `<label style="display:inline-flex;align-items:center;gap:3px;margin-right:6px;font-size:11px;white-space:nowrap" title="Auto: room for the longest value of the placeholders (e.g. health 4 digits, coordinates 9 each)"><input type="checkbox" id="prop-pad-auto" ${auto ? "checked" : ""} /> Auto</label>
-            <input type="number" id="prop-pad-length" value="${value}" min="1" max="200" step="1" ${auto ? "disabled" : ""} title="Bytes this text takes in the bossbar; longer values are cut" style="width:64px" />`;
+            <input type="number" id="prop-pad-length" value="${value}" min="1" max="250" step="1" ${auto ? "disabled" : ""} title="Bytes this text takes in the bank (up to 250 per slot); HUD auto-splits into multiple banks when total exceeds 255B" style="width:64px" />`;
 }
 
 function refreshPadInput(elId) {

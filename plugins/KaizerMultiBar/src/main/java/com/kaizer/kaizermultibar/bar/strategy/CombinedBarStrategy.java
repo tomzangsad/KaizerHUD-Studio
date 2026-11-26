@@ -20,7 +20,8 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Strategy for combined mode — one BossBar per player containing all slots.
+ * Strategy for combined mode — one primary BossBar plus optional overflow bank BossBars
+ * (`bossbar.banks`) when a HUD exceeds the 255-byte single-title budget.
  */
 public class CombinedBarStrategy extends AbstractBarStrategy {
 
@@ -28,7 +29,7 @@ public class CombinedBarStrategy extends AbstractBarStrategy {
     private static final int DEFAULT_BARS_LENGTH = 100;
 
     private final KaizerMultiBarCore plugin;
-    private final Map<UUID, BossBar> bars = new HashMap<>();
+    private final Map<UUID, List<BossBar>> bars = new HashMap<>();
     private final VisibilityConditionManager visibilityManager;
 
     public CombinedBarStrategy(KaizerMultiBarCore plugin) {
@@ -38,44 +39,56 @@ public class CombinedBarStrategy extends AbstractBarStrategy {
 
     @Override
     public void initPlayer(Player player) {
-        BossBar existing = bars.get(player.getUniqueId());
+        List<BossBar> existing = bars.get(player.getUniqueId());
         if (existing != null) {
-            untrackBarUuid(existing); // must untrack before removeAll so UUID leaves managedBarUuids
-            existing.removeAll();
+            for (BossBar old : existing) {
+                untrackBarUuid(old); // must untrack before removeAll so UUID leaves managedBarUuids
+                old.removeAll();
+            }
         }
 
-        BossBar bar = Bukkit.createBossBar("", BarColor.WHITE, BarStyle.SOLID);
-        trackBarUuid(bar);      // register UUID before sending ADD packet to client
-        trySetPriority(bar);
-        bars.put(player.getUniqueId(), bar);  // must be BEFORE addPlayer so hasBarsFor() = true during packet listener
-        bar.addPlayer(player);  // sends ADD packet — UUID is already in managedBarUuids
+        int count = 1 + getExtraBankKeys().size();
+        List<BossBar> created = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            BossBar bar = Bukkit.createBossBar("", BarColor.WHITE, BarStyle.SOLID);
+            trackBarUuid(bar);      // register UUID before sending ADD packet to client
+            trySetPriority(bar);
+            created.add(bar);
+        }
+        bars.put(player.getUniqueId(), created); // must be BEFORE addPlayer so hasBarsFor() = true during packet listener
+        for (BossBar bar : created) {
+            bar.addPlayer(player);
+        }
     }
 
     @Override
     public void updatePlayer(Player player) {
-        BossBar bar = bars.get(player.getUniqueId());
-        if (bar == null) return;
+        List<BossBar> playerBars = bars.get(player.getUniqueId());
+        if (playerBars == null || playerBars.isEmpty()) return;
 
-        String title = buildTitle(player);
-        if (title == null) return;
-        bar.setTitle(title);
-        bar.setProgress(0.0);
+        List<String> titles = buildBankTitles(player);
+        if (titles.isEmpty()) return;
+        int n = Math.min(playerBars.size(), titles.size());
+        for (int i = 0; i < n; i++) {
+            BossBar bar = playerBars.get(i);
+            String title = titles.get(i);
+            if (title == null) continue;
+            bar.setTitle(title);
+            bar.setProgress(0.0);
+        }
     }
 
     /**
-     * The whole HUD data string for {@code player}: prefix + bars section + slots + visibility
-     * markers. Also used by {@link ChannelBarStrategy} (action bar / title), so every channel
-     * sends exactly the same text. Returns null when {@code bossbar.bars} is missing.
+     * Bank 0 HUD data string for {@code player}: prefix + bars section + Bank 0 slots + visibility
+     * markers. Returns null when {@code bossbar.bars} is missing.
      */
     public String buildTitle(Player player) {
         ConfigurationSection barsSection = plugin.getConfig().getConfigurationSection("bossbar.bars");
         if (barsSection == null) return null;
 
-        // Lengths are raw (formatting codes count) in the unit the HUD pack slices with.
         TextFormatter.LengthUnit unit = TextFormatter.LengthUnit.parse(plugin.getConfig().getString("bossbar.length-unit", "bytes"));
         int barsLength = plugin.getConfig().getInt("bossbar.bars-length", DEFAULT_BARS_LENGTH);
 
-        // Right section: bar markers, each padded to its configured length, total padded to bars-length
         StringBuilder right = new StringBuilder();
         for (String key : barsSection.getKeys(false)) {
             String raw = barsSection.getString(key + ".text", "");
@@ -85,12 +98,11 @@ public class CombinedBarStrategy extends AbstractBarStrategy {
         }
         String rightPadded = TextFormatter.padRight(right.toString(), barsLength, unit);
 
-        // Left section: slot entries ordered by slot index
         StringBuilder left = new StringBuilder();
         ConfigurationSection slotsSection = plugin.getConfig().getConfigurationSection("bossbar.slots");
         if (slotsSection != null) {
             List<String> keys = new ArrayList<>(slotsSection.getKeys(false));
-            keys.sort((a, b) -> Integer.compare(slotIndex(a), slotIndex(b)));
+            keys.sort((a, b) -> Integer.compare(slotOrderKey(a), slotOrderKey(b)));
             for (String key : keys) {
                 String raw = slotsSection.getString(key + ".text", "");
                 int pad = slotsSection.getInt(key + ".pad-length", 30);
@@ -99,7 +111,6 @@ public class CombinedBarStrategy extends AbstractBarStrategy {
             }
         }
 
-        // Visibility conditions part - append to title like slots
         StringBuilder visibilityPart = new StringBuilder();
         Set<String> activeConditions = visibilityManager.getActiveConditions(player);
         for (String cond : activeConditions) {
@@ -109,40 +120,119 @@ public class CombinedBarStrategy extends AbstractBarStrategy {
         return PrefixBuilder.PREFIX + rightPadded + left + visibilityPart;
     }
 
+    /**
+     * Returns all bank prefixes in order: index 0 is primary, indices 1..N come from {@code bossbar.banks}.
+     */
+    public List<String> getBankPrefixes() {
+        List<String> out = new ArrayList<>();
+        out.add(PrefixBuilder.PREFIX);
+        ConfigurationSection banksSection = plugin.getConfig().getConfigurationSection("bossbar.banks");
+        if (banksSection != null) {
+            for (String bankKey : getExtraBankKeys()) {
+                out.add(banksSection.getString(bankKey + ".prefix", "@kz" + out.size() + ":"));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Builds one payload string per bank for {@code player}. Index 0 equals {@link #buildTitle(Player)}.
+     */
+    public List<String> buildBankTitles(Player player) {
+        String bank0 = buildTitle(player);
+        if (bank0 == null) return List.of();
+        List<String> result = new ArrayList<>();
+        result.add(bank0);
+
+        ConfigurationSection banksSection = plugin.getConfig().getConfigurationSection("bossbar.banks");
+        if (banksSection == null) return result;
+
+        TextFormatter.LengthUnit unit = TextFormatter.LengthUnit.parse(plugin.getConfig().getString("bossbar.length-unit", "bytes"));
+        int bankIdx = 1;
+        for (String bankKey : getExtraBankKeys()) {
+            ConfigurationSection bankSec = banksSection.getConfigurationSection(bankKey);
+            if (bankSec == null) continue;
+            String prefix = bankSec.getString("prefix", "@kz" + bankIdx + ":");
+            StringBuilder sb = new StringBuilder(prefix);
+            ConfigurationSection slotsSec = bankSec.getConfigurationSection("slots");
+            if (slotsSec != null) {
+                for (String key : slotsSec.getKeys(false)) {
+                    String raw = slotsSec.getString(key + ".text", "");
+                    int pad = slotsSec.getInt(key + ".pad-length", 30);
+                    String parsed = TextFormatter.format(KaizerMultiBarCore.isPapiPresent() ? PapiHelper.setPlaceholders(player, raw) : raw);
+                    sb.append(TextFormatter.padRight(parsed, pad, unit));
+                }
+            }
+            result.add(sb.toString());
+            bankIdx++;
+        }
+        return result;
+    }
+
+    private List<String> getExtraBankKeys() {
+        ConfigurationSection banksSection = plugin.getConfig().getConfigurationSection("bossbar.banks");
+        if (banksSection == null) return List.of();
+        List<String> keys = new ArrayList<>(banksSection.getKeys(false));
+        keys.sort((a, b) -> Integer.compare(bankIndex(a), bankIndex(b)));
+        return keys;
+    }
+
     @Override
     public void removePlayer(Player player) {
-        BossBar bar = bars.remove(player.getUniqueId());
-        if (bar != null) {
-            bar.removeAll();
-            untrackBarUuid(bar);
+        List<BossBar> playerBars = bars.remove(player.getUniqueId());
+        if (playerBars != null) {
+            for (BossBar bar : playerBars) {
+                bar.removeAll();
+                untrackBarUuid(bar);
+            }
         }
     }
 
     @Override
     public void removeAll() {
-        bars.values().forEach(bar -> {
-            untrackBarUuid(bar);
-            bar.removeAll();
+        bars.values().forEach(list -> {
+            for (BossBar bar : list) {
+                untrackBarUuid(bar);
+                bar.removeAll();
+            }
         });
         bars.clear();
-        
-        // Reload visibility manager
         visibilityManager.reload();
     }
 
     @Override
     public void toggleVisibility(Player player) {
-        BossBar bar = bars.get(player.getUniqueId());
-        if (bar != null) bar.setVisible(!bar.isVisible());
+        List<BossBar> playerBars = bars.get(player.getUniqueId());
+        if (playerBars != null && !playerBars.isEmpty()) {
+            boolean nextVisible = !playerBars.get(0).isVisible();
+            for (BossBar bar : playerBars) {
+                bar.setVisible(nextVisible);
+            }
+        }
     }
 
     @Override
     public boolean hasBarsFor(Player player) {
-        return bars.containsKey(player.getUniqueId());
+        List<BossBar> list = bars.get(player.getUniqueId());
+        return list != null && !list.isEmpty();
     }
 
-    private int slotIndex(String key) {
+    private int slotOrderKey(String key) {
         if (key != null && key.startsWith("slot_")) {
+            try {
+                return Integer.parseInt(key.substring(5));
+            } catch (NumberFormatException ignored) {}
+        }
+        if (key != null && key.startsWith("nameplate_slot_")) {
+            try {
+                return 1_000_000 + Integer.parseInt(key.substring("nameplate_slot_".length()));
+            } catch (NumberFormatException ignored) {}
+        }
+        return Integer.MAX_VALUE;
+    }
+
+    private int bankIndex(String key) {
+        if (key != null && key.startsWith("bank_")) {
             try {
                 return Integer.parseInt(key.substring(5));
             } catch (NumberFormatException ignored) {}

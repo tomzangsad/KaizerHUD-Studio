@@ -2,9 +2,11 @@
    .mcpack Export (ZIP)
    ======================================== */
 
-// Bossbar title budget — mirrors bossbar_title_length() in src-tauri/src/codegen.rs:
-// "@zelisce/custom_bossbars:" + bars section (5 default bars x 6 + custom bars) + every slot/nameplate pad.
+// Bossbar title budget — mirrors plan_hud_banks() in src-tauri/src/codegen.rs:
+// Single bank <= 255 bytes; overflow HUDs auto-split into up to 8 banks (@kz1:..@kz7:, 250 bytes each).
 const BOSSBAR_TITLE_LIMIT = 255;
+const MAX_HUD_BANKS = 8;
+const OVERFLOW_BANK_CAP = 250;
 function bossbarTitleBudget(elements) {
     const els = elements || App.elements || [];
     const customBars = els.filter(e => e.type === 'bar' && e.barType === 'custom');
@@ -13,13 +15,10 @@ function bossbarTitleBudget(elements) {
         const tag = String(bar.barCustomTag || '').trim() || ('c' + String.fromCharCode(97 + (i % 26)));
         bars += new TextEncoder().encode('@' + (i + 6) + tag).length + 2;
     });
-    const pads = els
-        .filter(e => e.type === 'text' || e.type === 'nameplate')
-        .reduce((sum, e) => sum + effectivePadLength(e), 0);
-    // visibility conditions: one "@v01" marker per different condition (codegen.rs visibility_keys;
-    // "!=" and inverted ones share the marker of their "=="), added to the end of the title while
-    // the "==" test is true. Counted at the most that can be true at once: one value per
-    // placeholder for "==", every other comparison on its own.
+    const textPads = els.filter(e => e.type === 'text').map(e => Math.max(1, effectivePadLength(e)));
+    const npPads = els.filter(e => e.type === 'nameplate').map(e => Math.max(1, effectivePadLength(e)));
+    const pads = textPads.reduce((a, b) => a + b, 0) + npPads.reduce((a, b) => a + b, 0);
+
     const conds = new Set();
     els.forEach((e) => {
         getVisibilityConditions(e).forEach((c) => {
@@ -34,7 +33,45 @@ function bossbarTitleBudget(elements) {
     });
     const markers = atOnce.size ? atOnce.size * (2 + Math.max(2, String(conds.size).length)) : 0;
     const total = 25 + bars + pads + markers;
-    return { total, bars, pads, markers, conditions: conds.size, limit: BOSSBAR_TITLE_LIMIT, over: total > BOSSBAR_TITLE_LIMIT };
+
+    if (total <= BOSSBAR_TITLE_LIMIT) {
+        return { total, bars, pads, markers, conditions: conds.size, banks: 1, limit: BOSSBAR_TITLE_LIMIT, singleLimit: BOSSBAR_TITLE_LIMIT, over: false };
+    }
+
+    const cap0 = Math.max(0, BOSSBAR_TITLE_LIMIT - (25 + bars + markers));
+    const sumNp = npPads.reduce((a, b) => a + b, 0);
+    const npInBank0 = npPads.length > 0 && sumNp <= cap0;
+    let b0Rem = npInBank0 ? cap0 - sumNp : cap0;
+    let banks = 1;
+    let curExtra = (!npInBank0 && npPads.length > 0) ? sumNp : 0;
+    let singleSlotTooLong = npPads.some(p => p > OVERFLOW_BANK_CAP) || textPads.some(p => p > OVERFLOW_BANK_CAP);
+
+    for (const pad of textPads) {
+        if (banks === 1 && curExtra === 0 && pad <= b0Rem) {
+            b0Rem -= pad;
+        } else {
+            if (banks === 1 && curExtra === 0) banks = 2;
+            if (curExtra > 0 && curExtra + pad > OVERFLOW_BANK_CAP) {
+                banks++;
+                curExtra = pad;
+            } else {
+                curExtra += pad;
+            }
+        }
+    }
+    if (!npInBank0 && npPads.length > 0 && banks < 2) banks = 2;
+    const multiLimit = BOSSBAR_TITLE_LIMIT + (MAX_HUD_BANKS - 1) * OVERFLOW_BANK_CAP;
+    return {
+        total,
+        bars,
+        pads,
+        markers,
+        conditions: conds.size,
+        banks,
+        limit: multiLimit,
+        singleLimit: BOSSBAR_TITLE_LIMIT,
+        over: banks > MAX_HUD_BANKS || singleSlotTooLong
+    };
 }
 window.bossbarTitleBudget = bossbarTitleBudget;
 
@@ -142,15 +179,10 @@ function validateElements() {
 
     const budget = bossbarTitleBudget(App.elements);
     if (budget.over) {
-        const maxPads = budget.limit - 25 - budget.bars;
-        const markerEn = budget.markers ? ` + ${budget.conditions} conditions (${budget.markers})` : '';
-        const markerTh = budget.markers ? ` + เงื่อนไข ${budget.conditions} ข้อ (${budget.markers})` : '';
         return confirm(
-            `⚠️ HUD data (bossbar / title) is ${budget.total} / ${budget.limit} bytes\n` +
-            `prefix 25 + bars ${budget.bars} + slots ${budget.pads}${markerEn}\n` +
-            `Trailing slots may be truncated in game — reduce slot Pad Length so the total is <= ${maxPads}.\n\n` +
-            `[TH] ข้อมูล HUD ยาว ${budget.total} / ${budget.limit} ตัวอักษร` +
-            `${markerTh} — slot ท้ายๆ อาจถูกตัดในเกม (ลด Pad Length ให้รวมไม่เกิน ${maxPads})\n\n` +
+            `⚠️ HUD data uses ${budget.banks} banks (${budget.total} bytes, max ${MAX_HUD_BANKS} banks / single slot <= ${OVERFLOW_BANK_CAP}B)\n` +
+            `Trailing slots may be truncated in game — reduce some slot Pad Lengths.\n\n` +
+            `[TH] ข้อมูล HUD ต้องใช้ ${budget.banks} banks (${budget.total} ไบต์ เกินลิมิต ${MAX_HUD_BANKS} banks หรือมีช่องเดียวเกิน ${OVERFLOW_BANK_CAP} ไบต์)\n\n` +
             `Export anyway? / Export ต่อเลยไหม?`
         );
     }

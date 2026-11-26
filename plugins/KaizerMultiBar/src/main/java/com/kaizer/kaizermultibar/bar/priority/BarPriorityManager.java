@@ -158,7 +158,7 @@ public class BarPriorityManager {
                 List<UUID> order = clientBarOrder.computeIfAbsent(pid, k -> new CopyOnWriteArrayList<>());
                 order.remove(bar);
                 order.add(bar);
-                if (ours || firstManagedIndex(order) > 0) requestRefresh(player);
+                if (ours || needsReorder(order)) requestRefresh(player);
             }
             case REMOVE -> {
                 if (held != null && held.remove(bar) != null) {
@@ -188,10 +188,10 @@ public class BarPriorityManager {
     // Priority enforcement
     // -----------------------------------------------------------------------
 
-    /** Safety net called on a timer: makes sure our bar is still first. */
+    /** Safety net called on a timer: makes sure all of our bank bossbars stay at the top. */
     public void checkAndFix(Player player) {
         List<UUID> order = clientBarOrder.get(player.getUniqueId());
-        if (order != null && firstManagedIndex(order) > 0) requestRefresh(player);
+        if (order != null && needsReorder(order)) requestRefresh(player);
     }
 
     /** Batches fixes into one per tick. */
@@ -211,20 +211,25 @@ public class BarPriorityManager {
         }
     }
 
-    /** Re-adds the external bars that sit above ours so they drop below. */
+    /** Re-adds external bars that sit before our last managed bank so our banks occupy indices 0..K-1. */
     private void forceToTop(Player player) {
         UUID pid = player.getUniqueId();
         List<UUID> order = clientBarOrder.get(pid);
         if (order == null) return;
-        int first = firstManagedIndex(order);
-        if (first <= 0) return;
+        int lastManaged = lastManagedIndex(order);
+        if (lastManaged < 0) return;
 
+        Set<UUID> managed = barManager.getManagedBarUuids();
         Map<UUID, BarState> ext = externalBars.getOrDefault(pid, Map.of());
-        List<UUID> above = new ArrayList<>(order.subList(0, first));
+        List<UUID> above = new ArrayList<>();
+        for (int i = 0; i < lastManaged; i++) {
+            UUID id = order.get(i);
+            if (!managed.contains(id)) above.add(id);
+        }
+        if (above.isEmpty()) return;
+
         for (UUID id : above) {
             if (!ext.containsKey(id)) {
-                // We never saw this bar's contents (it existed before we started):
-                // removing it would delete it for good, so leave the order alone.
                 return;
             }
         }
@@ -261,11 +266,22 @@ public class BarPriorityManager {
         } catch (Throwable ignored) {}
     }
 
-    private int firstManagedIndex(List<UUID> order) {
+    private int lastManagedIndex(List<UUID> order) {
         Set<UUID> managed = barManager.getManagedBarUuids();
+        int last = -1;
         for (int i = 0; i < order.size(); i++) {
-            if (managed.contains(order.get(i))) return i;
+            if (managed.contains(order.get(i))) last = i;
         }
-        return -1;
+        return last;
+    }
+
+    private boolean needsReorder(List<UUID> order) {
+        Set<UUID> managed = barManager.getManagedBarUuids();
+        int last = lastManagedIndex(order);
+        if (last < 0) return false;
+        for (int i = 0; i < last; i++) {
+            if (!managed.contains(order.get(i))) return true;
+        }
+        return false;
     }
 }

@@ -2,6 +2,18 @@
 
 > เริ่มไฟล์นี้ 2026-11-23 (ก่อนหน้านี้บันทึกอยู่ใน `HANDOFF.md` และ `docs/*.md`)
 
+## v1.0.4 (2026-11-26)
+
+### English
+- Added automatic Multi-Bank HUD overflow support (up to 8 banks / ~2,000 bytes) for both Bossbar and Title channels in HUD Studio and KaizerMultiBar 2.2.0
+- Added Antigravity-style in-app software updater via GitHub Releases with background checking, manual download progress, and manual Restart & Apply
+- Upgraded GUI Studio UI Flow and Link UI with existing-button binding, Confirm popup flow (Yes/No/Back), pagination, themed link buttons, arrow labels, one-click unlink, and + Ask Confirm shortcut
+
+### ภาษาไทย
+- รองรับข้อมูล HUD เกิน 255 ไบต์อัตโนมัติ (Multi-Bank สูงสุด 8 Banks / ~2,000 ไบต์) ใช้ได้ทั้งช่อง Bossbar และ Title ใน HUD Studio + KaizerMultiBar 2.2.0
+- เพิ่มระบบอัปเดตในตัวโปรแกรมสไตล์ Antigravity ผ่าน GitHub Releases (เช็กพื้นหลัง + กดดาวน์โหลดพร้อมหลอด % + กด Restart เพื่ออัปเดตเองเมื่อพร้อม)
+- อัปเกรด UI Flow & Link UI ใน GUI Studio ให้ผูกกับปุ่มเดิมได้โดยไม่สร้างกล่องเทาซ้อน, รองรับ Confirm flow (`Yes`/`No`/`Back`), Pagination, ป้ายชื่อบนลูกศร, ปุ่ม Unlink และ `+ Ask Confirm`
+
 ## v1.0.3 (2026-11-26)
 
 ### English

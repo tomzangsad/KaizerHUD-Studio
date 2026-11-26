@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const args = process.argv.slice(2);
 const DRY_RUN = args.includes('--dry-run') || process.env.DRY_RUN === '1';
@@ -15,6 +17,9 @@ const EXTRA_NOTE = (process.env.EXTRA_NOTE || '').trim();
 const RAW_WEBHOOK = (process.env.DISCORD_WEBHOOK_URL || '').trim();
 const WEBHOOK_URL = RAW_WEBHOOK.replace(/\/github\/?$/i, '');
 
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const CHANGELOG_PATH = path.resolve(HERE, '../../CHANGELOG.md');
+
 function fmtBytes(bytes) {
   const n = Number(bytes) || 0;
   if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(2)} MB`;
@@ -26,6 +31,10 @@ function clip(text, max) {
   const s = String(text || '').trim();
   if (s.length <= max) return s;
   return s.slice(0, Math.max(0, max - 3)).trimEnd() + '...';
+}
+
+function escapeRegExp(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function ghHeaders() {
@@ -55,6 +64,38 @@ async function loadRelease() {
   return await fetchJson(endpoint);
 }
 
+function extractChangelogBullets(tag) {
+  if (!tag || !fs.existsSync(CHANGELOG_PATH)) return [];
+  const raw = fs.readFileSync(CHANGELOG_PATH, 'utf8').replace(/\r\n/g, '\n');
+  const headingRe = new RegExp(`^##\\s+${escapeRegExp(tag)}(?:\\b|\\s|\\()`, 'im');
+  const match = headingRe.exec(raw);
+  if (!match) return [];
+
+  const afterHeader = raw.slice(match.index + match[0].length);
+  const nextVer = /^##\s+/m.exec(afterHeader);
+  const section = nextVer ? afterHeader.slice(0, nextVer.index) : afterHeader;
+
+  const enMatch = /^###\s+English\b/im.exec(section);
+  const scope = enMatch
+    ? (() => {
+        const rest = section.slice(enMatch.index + enMatch[0].length);
+        const nextSub = /^###\s+/m.exec(rest);
+        return nextSub ? rest.slice(0, nextSub.index) : rest;
+      })()
+    : section;
+
+  const bullets = [];
+  for (const line of scope.split('\n')) {
+    const t = line.trim();
+    if (!/^[-*]\s+/.test(t)) continue;
+    const text = t.replace(/^[-*]\s+/, '').trim();
+    if (!text || /[\u0E00-\u0E7F]/.test(text)) continue;
+    bullets.push(`- ${clip(text, 160)}`);
+    if (bullets.length >= 12) break;
+  }
+  return bullets;
+}
+
 function extractBodyBullets(body) {
   const raw = String(body || '').replace(/\r\n/g, '\n');
   const bullets = [];
@@ -62,10 +103,9 @@ function extractBodyBullets(body) {
     const t = line.trim();
     if (!/^[-*]\s+/.test(t)) continue;
     let text = t.replace(/^[-*]\s+/, '').trim();
-    // Trim GitHub PR attribution suffix cleanly
     text = text.replace(/\s+by\s+@\S+\s+in\s+https:\/\/\S+$/i, '').trim();
-    if (!text) continue;
-    bullets.push(`- ${clip(text, 140)}`);
+    if (!text || /[\u0E00-\u0E7F]/.test(text)) continue;
+    bullets.push(`- ${clip(text, 160)}`);
     if (bullets.length >= 12) break;
   }
   return bullets;
@@ -84,11 +124,14 @@ async function resolvePrevTag(body, currentTag) {
 }
 
 async function extractChanges(release) {
+  const tag = release.tag_name || TAG;
+  const fromChangelog = extractChangelogBullets(tag);
+  if (fromChangelog.length) return fromChangelog;
+
   const fromBody = extractBodyBullets(release.body);
   if (fromBody.length) return fromBody;
   if (MOCK_FILE) return [];
 
-  const tag = release.tag_name || TAG;
   const prevTag = await resolvePrevTag(release.body, tag);
   if (!prevTag || !tag) return [];
 
@@ -97,12 +140,14 @@ async function extractChanges(release) {
       `https://api.github.com/repos/${REPO}/compare/${encodeURIComponent(prevTag)}...${encodeURIComponent(tag)}`
     );
     const commits = Array.isArray(cmp.commits) ? cmp.commits : [];
-    const subjects = [];
+    const nonMerge = [];
     for (const c of commits) {
       const msg = String(c?.commit?.message || '').split('\n')[0].trim();
       if (!msg || /^Merge\b/i.test(msg)) continue;
-      subjects.push(msg);
+      nonMerge.push(msg);
     }
+    const userFacing = nonMerge.filter(m => !/^(ci|chore)(\([^)]*\))?:/i.test(m));
+    const subjects = userFacing.length ? userFacing : nonMerge;
     const maxItems = 12;
     const shown = subjects.slice(0, maxItems).map(s => `- ${clip(s, 140)}`);
     if (subjects.length > maxItems) {

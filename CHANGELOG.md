@@ -2,6 +2,28 @@
 
 > เริ่มไฟล์นี้ 2026-11-23 (ก่อนหน้านี้บันทึกอยู่ใน `HANDOFF.md` และ `docs/*.md`)
 
+## v1.0.3 (2026-11-26)
+
+### English
+- Added 5 Modern RPG 2x high-resolution GUI Studio themes (Astral Gold, Crimson Sanctum, Verdant Relic, Glacier Glass, Arcane Velvet)
+- Added UI Flow & Connections view, Quick Link navigation, menu history (`back`), and scroll-wheel pagination (`prev-page` / `next-page`)
+- Added hover tooltips for buttons, items, player heads, and 3D player models on Java and in GUI Studio preview
+- Added client-side lighting for 3D player models, deferred opening reveal, temporary HUD hiding, and click-drag 3D model rotation on Java
+- Improved Java cursor responsiveness using direct Netty rotation packets and automatic mouse sensitivity tracking
+- Added KaizerUI Java Developer API (`kz.kaizerui.api`) with `MenuOpenEvent`, `MenuClickEvent` (`event:<key>`), `MenuCloseEvent`, per-player placeholders, and dynamic text/item overrides
+- Added zero-dependency local MCP Server (`mcp-server/`) with 17 tools and 2 resources for AI-assisted GUI editing
+- Added automatic release version syncing and Discord Embed release notifications
+
+### ภาษาไทย
+- เพิ่มชุดสี High-Res 2x สไตล์ Modern RPG 5 ชุดใน GUI Studio (Astral Gold, Crimson Sanctum, Verdant Relic, Glacier Glass, Arcane Velvet)
+- เพิ่มหน้าต่าง UI Flow & Connections, Quick Link บนปุ่ม, ประวัติย้อนกลับเมนู (`back`) และเลื่อนลูกกลิ้งเมาส์เปลี่ยนหน้า (`prev-page` / `next-page`)
+- เพิ่ม Hover Tooltip สำหรับปุ่ม, ไอเทม, หัวผู้เล่น และตัวละคร 3D ทั้งบน Java และในโหมด Preview ของ GUI Studio
+- เพิ่มแสงสว่างรอบตัวละคร 3D ฝั่ง client, ชะลอการโชว์โมเดล 3D/ไอเทมให้พร้อม Opening, ซ่อน HUD ชั่วคราวระหว่างเปิดเมนู และหมุนตัวละคร 3D บน Java ด้วยการคลิก-ลาก
+- ปรับปรุงความลื่นของเคอร์เซอร์ฝั่ง Java โดยอ่าน rotation packet ตรงจาก Netty พร้อมคำนวณ sensitivity เมาส์อัตโนมัติ
+- เพิ่ม KaizerUI Java Developer API (`kz.kaizerui.api`) รองรับ `MenuOpenEvent`, `MenuClickEvent` (`event:<key>`), `MenuCloseEvent`, placeholder รายผู้เล่น และ override ข้อความ/ไอเทมแบบ dynamic
+- เพิ่ม Local MCP Server (`mcp-server/`) แบบ zero-dependency (17 tools, 2 resources) สำหรับสร้างและจัดการโปรเจกต์ GUI Studio ผ่าน AI
+- เพิ่มระบบซิงก์เลขเวอร์ชันจาก Tag และส่งการ์ดแจ้งเตือน Release เข้า Discord อัตโนมัติ
+
 ## v1.0.1 (2026-11-25)
 
 ### English

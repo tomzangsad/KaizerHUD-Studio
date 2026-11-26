@@ -93,30 +93,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
       - uses: actions/download-artifact@v4
         with:
           path: dist
+      - name: Prepare release notes
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          OUT_FILE: release-body.md
+        run: node .github/scripts/prepare-release-notes.mjs
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
-          body: |
-            ## What to Download / ไฟล์ไหนใช้ทำอะไร
-
-            | File | English | ภาษาไทย |
-            |---|---|---|
-            | `KaizerHUD-Studio_*_x64-setup.exe` | **Windows Installer** *(recommended — adds Start Menu & Desktop shortcut)* | **ตัวติดตั้ง Windows** *(แนะนำ — สร้างไอคอนหน้า Desktop / Start Menu)* |
-            | `kaizerhud-portable.exe` | **Portable Windows app** *(run directly without installing)* | **ตัวโปรแกรมแบบพกพา** *(เปิดใช้งานได้ทันที ไม่ต้องติดตั้ง)* |
-            | `KaizerMultiBar-2.1.0.jar` | **HUD Studio server plugin** *(put in Paper/Purpur/Folia `plugins/`)* | **ปลั๊กอินสำหรับ HUD Studio** *(ใส่ใน `plugins/` บน Paper/Purpur/Folia 1.21.x–26.x)* |
-            | `KaizerUI-1.0.0.jar` | **GUI Studio server plugin** *(optional — only if using cursor menus)* | **ปลั๊กอินสำหรับ GUI Studio** *(ลงเฉพาะเมื่อใช้เมนู GUI)* |
-
-            > **Note:** `Source code (zip)` and `Source code (tar.gz)` are for developers only — see [docs/DEVELOPMENT.md](https://github.com/${{ github.repository }}/blob/main/docs/DEVELOPMENT.md).
-            > **Docs / คู่มือ:** [User Guide (EN / TH)](https://github.com/${{ github.repository }}/blob/main/docs/USER_GUIDE.md) · [Plugin Setup (EN / TH)](https://github.com/${{ github.repository }}/blob/main/plugins/README.md) · [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)
-
-            ---
+          generate_release_notes: false
+          body_path: release-body.md
           files: |
             dist/kaizerhud-windows/*
             dist/kaizer-plugins/**/*.jar

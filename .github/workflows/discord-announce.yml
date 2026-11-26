@@ -11,7 +11,7 @@ on:
       mention:
         description: "Optional mention (e.g. @everyone or <@&ROLE_ID>)"
         required: false
-        default: ""
+        default: "<@&1298176398069858314>"
         type: string
       note:
         description: "Optional extra highlight note"
@@ -33,6 +33,6 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ inputs.tag }}
-          DISCORD_MENTION: ${{ inputs.mention || vars.DISCORD_MENTION }}
+          DISCORD_MENTION: ${{ inputs.mention || vars.DISCORD_MENTION || '<@&1298176398069858314>' }}
           EXTRA_NOTE: ${{ inputs.note }}
         run: node .github/scripts/notify-discord.mjs

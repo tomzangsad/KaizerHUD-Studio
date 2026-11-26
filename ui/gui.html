@@ -209,6 +209,8 @@
       <div class="gs-pages-hint">Each menu page is opened in game with<br><code>/kui open &lt;id&gt;</code> or its own command.</div>
     </aside>
 
+    <div class="kz-resizer-v" id="gs-pages-resizer" title="Drag to resize · Double-click to reset"></div>
+
     <main class="gs-center doc-area">
       <div class="doc-tabs">
         <div class="doc-tab active">
@@ -235,12 +237,15 @@
       <div class="gs-canvas-info" id="gs-canvas-info"></div>
     </main>
 
+    <div class="kz-resizer-v" id="gs-dock-resizer" title="Drag to resize · Double-click to reset"></div>
+
     <aside id="dock" class="gs-dock">
       <section class="dock-panel dock-properties">
         <div class="dock-head"><div class="dock-tab active"><svg><use href="#g-sliders"/></svg>Properties</div></div>
         <div class="gs-props" id="gs-props"></div>
       </section>
-      <section class="dock-panel gs-layers-panel">
+      <div class="dock-splitter" id="gs-dock-splitter" title="Drag to resize · Double-click to reset"></div>
+      <section class="dock-panel gs-layers-panel" id="gs-layers-panel">
         <div class="dock-head">
           <div class="dock-tab active"><svg><use href="#g-layers"/></svg>Layers</div>
           <div class="gs-head-actions">

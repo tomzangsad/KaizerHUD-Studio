@@ -156,15 +156,16 @@ public class BossBarManager {
     // -----------------------------------------------------------------------
 
     private BarRenderStrategy buildStrategy() {
-        // bossbar.channel: bossbar (default) | title — must match the exported .mcpack
-        String channelName = plugin.getConfig().getString("bossbar.channel", "bossbar");
+        // bossbar.channel: title (default, Multi-Bank) | bossbar (legacy fallback if explicitly set)
+        String channelName = plugin.getConfig().getString("bossbar.channel", "title");
         ChannelBarStrategy.Channel channel = ChannelBarStrategy.Channel.parse(channelName);
         if (channel != null) {
             plugin.getLogger().info("HUD data channel: " + channel.name().toLowerCase(java.util.Locale.ROOT));
             return new ChannelBarStrategy(plugin, channel);
         }
         if (channelName != null && !channelName.trim().equalsIgnoreCase("bossbar")) {
-            plugin.getLogger().warning("Unknown bossbar.channel '" + channelName + "' - using bossbar.");
+            plugin.getLogger().warning("Unknown bossbar.channel '" + channelName + "' - using title.");
+            return new ChannelBarStrategy(plugin, ChannelBarStrategy.Channel.TITLE);
         }
         boolean combine = plugin.getConfig().getBoolean("bossbar.combine-into-one", true);
         return combine ? new CombinedBarStrategy(plugin) : new SplitBarStrategy(plugin);

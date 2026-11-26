@@ -6,9 +6,9 @@ bossbar:
   update-interval: 5
   # Unit for every pad-length: "bytes" (UTF-8, colour codes count — what Bedrock's %.Ns slices) or "chars"
   length-unit: bytes
-  # How the HUD data reaches Bedrock players: bossbar (default) | title
-  # Must match "Data channel" in KaizerHUD Studio's Export window (the .mcpack reads only that one)
-  channel: bossbar
+  # How the HUD data reaches Bedrock players: title (default, Multi-Bank)
+  # Must match the exported .mcpack from KaizerHUD Studio
+  channel: title
   # title only: the data is sent when it changes, and again every N ticks (0 = only on change)
   channel-resend-ticks: 100
   # Length of the bars section before the slots. KaizerHUD Studio writes the exact sum of the bar pads;

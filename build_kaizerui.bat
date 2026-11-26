@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions
 rem -------------------------------------------------------------
-rem  Build the KaizerUI plugin (plugins\KaizerUI\target\KaizerUI-1.0.0.jar)
+rem  Build the KaizerUI plugin (plugins\KaizerUI\target\KaizerUI-1.1.0.jar)
 rem  - finds a JDK 21+ by itself (JAVA_HOME, C:\Program Files\Java\jdk-2x, Adoptium, Microsoft)
 rem  - uses Maven from PATH / MAVEN_HOME, otherwise downloads a portable Maven once
 rem    into plugins\.tools (no install, nothing changed outside this folder)
@@ -59,9 +59,9 @@ call "%MVN%" -B clean package >> "%LOG%" 2>&1
 echo EXIT %ERRORLEVEL% %DATE% %TIME% >> "%LOG%"
 
 :end
-if exist "%PROJ%\target\KaizerUI-1.0.0.jar" (
+if exist "%PROJ%\target\KaizerUI-1.1.0.jar" (
   echo.
-  echo [OK] plugins\KaizerUI\target\KaizerUI-1.0.0.jar
+  echo [OK] plugins\KaizerUI\target\KaizerUI-1.1.0.jar
 ) else (
   echo.
   echo [X] Build failed - send build_kaizerui_log.txt

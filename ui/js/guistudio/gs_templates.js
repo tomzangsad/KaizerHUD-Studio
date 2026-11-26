@@ -782,7 +782,7 @@
 
     const LAYOUTS = [
         {
-            id: 'hub', name: 'Main Menu', th: 'เมนูหลัก — ปุ่มใหญ่ 6 ปุ่มพร้อมไอคอน', title: 'Main Menu',
+            id: 'hub', name: 'Main Menu', th: 'Main hub — 6 large icon buttons', title: 'Main Menu',
             build(ctx) {
                 const W = 320, H = 180;
                 const els = windowBase(ctx, W, H, ctx.title);
@@ -802,7 +802,7 @@
             }
         },
         {
-            id: 'shop', name: 'Shop', th: 'ร้านค้า — การ์ดสินค้า 4×2 + ราคา + ยอดเงิน', title: 'Shop',
+            id: 'shop', name: 'Shop', th: 'Store — 4×2 item cards + price + balance', title: 'Shop',
             build(ctx) {
                 const W = 320, H = 180;
                 const els = windowBase(ctx, W, H, ctx.title);
@@ -827,7 +827,7 @@
             }
         },
         {
-            id: 'warps', name: 'Warps', th: 'เลือกจุดวาร์ป — การ์ด 3×2', title: 'Warps',
+            id: 'warps', name: 'Warps', th: 'Warp selector — 3×2 cards', title: 'Warps',
             build(ctx) {
                 const W = 320, H = 180;
                 const els = windowBase(ctx, W, H, ctx.title);
@@ -846,7 +846,7 @@
             }
         },
         {
-            id: 'servers', name: 'Server Selector', th: 'เลือกเซิร์ฟเวอร์ — การ์ดสูง 3 ใบ + จำนวนคน', title: 'Servers',
+            id: 'servers', name: 'Server Selector', th: 'Server selector — 3 tall cards + player count', title: 'Servers',
             build(ctx) {
                 const W = 320, H = 180;
                 const els = windowBase(ctx, W, H, ctx.title);
@@ -863,7 +863,7 @@
             }
         },
         {
-            id: 'profile', name: 'Profile', th: 'โปรไฟล์ — แถวข้อมูลผู้เล่น (PAPI)', title: 'Profile',
+            id: 'profile', name: 'Profile', th: 'Profile — player info rows (PAPI)', title: 'Profile',
             build(ctx) {
                 const W = 240, H = 176;
                 const rows = [
@@ -880,7 +880,7 @@
             }
         },
         {
-            id: 'rewards', name: 'Daily Rewards', th: 'รางวัลรายวัน — 7 วัน', title: 'Daily Rewards',
+            id: 'rewards', name: 'Daily Rewards', th: 'Daily rewards — 7-day track', title: 'Daily Rewards',
             build(ctx) {
                 const W = 320, H = 124;
                 const els = windowBase(ctx, W, H, ctx.title);
@@ -898,7 +898,7 @@
             }
         },
         {
-            id: 'confirm', name: 'Confirm', th: 'กล่องยืนยัน — ใช่ / ไม่', title: 'Are you sure?',
+            id: 'confirm', name: 'Confirm', th: 'Confirmation dialog — Yes / No', title: 'Are you sure?',
             build(ctx) {
                 const W = 200, H = 100;
                 const els = windowBase(ctx, W, H, null);
@@ -911,7 +911,7 @@
         },
         /* ── player layouts (2026-11-24): placeholder Steve where the player's head / body goes ── */
         {
-            id: 'leaderboard', name: 'Leaderboard', th: 'อันดับ — โพเดียม 3 คน (หัวผู้เล่น) + อันดับ 4–7 + แถวของเรา', title: 'Top Kills',
+            id: 'leaderboard', name: 'Leaderboard', th: 'Rankings — top 3 podium (player heads) + ranks 4–7 + your row', title: 'Top Kills',
             build(ctx) {
                 const W = 320, H = 180, k = ctx.kit;
                 const lb = (n, f) => `%ajlb_lb_statistic_player_kills_${n}_alltime_${f}%`;
@@ -948,7 +948,7 @@
             }
         },
         {
-            id: 'friends', name: 'Friends', th: 'เพื่อน — การ์ด 2×4 หัวผู้เล่น + ชื่อ + สถานะ', title: 'Friends',
+            id: 'friends', name: 'Friends', th: 'Friends — 2×4 player head cards + name + status', title: 'Friends',
             build(ctx) {
                 const W = 320, H = 180;
                 const els = windowWith(ctx, W, H, ctx.title);
@@ -972,7 +972,7 @@
             }
         },
         {
-            id: 'character', name: 'Character', th: 'ตัวละคร — ตัวผู้เล่นเต็มตัว + ช่องชุดเกราะ + สเตตัส', title: '%player_name%',
+            id: 'character', name: 'Character', th: 'Character sheet — full player model + armor slots + stats', title: '%player_name%',
             build(ctx) {
                 const W = 320, H = 180, k = ctx.kit;
                 const stage = { x: 112, y: 26, w: 96, h: 124 };
@@ -1003,7 +1003,7 @@
             }
         },
         {
-            id: 'wardrobe', name: 'Wardrobe', th: 'ตู้เสื้อผ้า — กดเลือกชุดเกราะ เห็นบนตัวผู้เล่น 3D ทันที', title: 'Wardrobe',
+            id: 'wardrobe', name: 'Wardrobe', th: 'Wardrobe — click armor pieces to preview live on 3D player', title: 'Wardrobe',
             build(ctx) {
                 const W = 320, H = 180, k = ctx.kit;
                 const left = { x: 10, y: 26, w: 138, h: 146 }, stage = { x: 152, y: 26, w: 74, h: 146 }, right = { x: 230, y: 26, w: 80, h: 112 };
@@ -1037,7 +1037,7 @@
             }
         },
         {
-            id: 'outfits', name: 'Wardrobe (outfits)', th: 'ตู้เสื้อผ้า — ตัวผู้เล่น 3D หมุนตามเคอร์เซอร์ + ปุ่มหมวด 4 ปุ่ม (สวยสุดกับชุดสี Flat)', title: 'Wardrobe',
+            id: 'outfits', name: 'Wardrobe (outfits)', th: 'Wardrobe — cursor-tracking 3D player + 4 category buttons (best with Flat kits)', title: 'Wardrobe',
             build(ctx) {
                 const W = 300, H = 210, k = ctx.kit;
                 const stage = { x: 8, y: 25, w: 118, h: 177 };
@@ -1062,7 +1062,7 @@
             }
         },
         {
-            id: 'party', name: 'Party', th: 'ปาร์ตี้ — ตัวผู้เล่น 4 ช่อง + Invite + Ready / Leave', title: 'Party',
+            id: 'party', name: 'Party', th: 'Party — 4 player slots + Invite + Ready / Leave', title: 'Party',
             build(ctx) {
                 const W = 320, H = 180, k = ctx.kit;
                 const st = [0, 1, 2, 3].map(i => ({ x: 16 + i * 74, y: 26, w: 68, h: 112 }));
@@ -1085,7 +1085,7 @@
             }
         },
         {
-            id: 'duel', name: 'Duel', th: 'ท้าดวล — ตัวผู้เล่น 2 ฝั่ง + สเตตัสเทียบกัน + รับ / ปฏิเสธ', title: 'Duel',
+            id: 'duel', name: 'Duel', th: 'Duel — 2-sided player comparison + stats + Accept / Decline', title: 'Duel',
             build(ctx) {
                 const W = 320, H = 156, k = ctx.kit;
                 const L = { x: 14, y: 26, w: 72, h: 88 }, R = { x: 234, y: 26, w: 72, h: 88 };

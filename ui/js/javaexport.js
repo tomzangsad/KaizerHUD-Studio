@@ -758,22 +758,6 @@
         L.push(`KaizerHUD Studio — Java HUD export`);
         L.push(`Plugin: ${plugin === 'betterhud' ? 'BetterHud' : 'MythicHUD'} · Resource pack: ${hostName} · Namespace: ${ns}`);
         L.push('');
-        L.push('== ภาษาไทย ==');
-        L.push(opts.inOutputZip
-            ? '1. ปิดเซิร์ฟเวอร์ แล้วลากทุกโฟลเดอร์ในโฟลเดอร์ plugins/ ของ output.zip ไปวางใน plugins/ ของเซิร์ฟเวอร์ (GeyserMC/ เป็นของเซิร์ฟเวอร์ Geyser)'
-            : '1. ปิดเซิร์ฟเวอร์ แล้วลากทุกโฟลเดอร์ใน zip นี้ไปวางใน plugins/ ของเซิร์ฟเวอร์');
-        if (plugin === 'betterhud') {
-            L.push('   (BetterHud/config.yml จะถูกแทนที่ ควรสำรองไฟล์เดิมก่อน)');
-            if (host !== 'none') L.push(`   ถ้าเคยลง export รุ่นเก่า ให้ลบโฟลเดอร์ ${oldBuild(host, ns)} ทิ้ง (รุ่นใหม่ build ลงโฟลเดอร์ปกติของ BetterHud แล้ว)`);
-        } else {
-            L.push('   แล้วคัดลอกค่าใน MythicHUD/config_kaizerhud_snippet.yml ไปใส่ใน MythicHUD/config.yml (ห้ามแทนทั้งไฟล์)');
-        }
-        hostSteps(L, plugin, host, true);
-        L.push(`3. เปิดเซิร์ฟเวอร์ แล้วพิมพ์ ${plugin === 'betterhud' ? '/hud reload' : '/hud reload all'}${reloadCmd(host) ? ' และ ' + reloadCmd(host) : ''}`);
-        L.push(`HUD ในชุดนี้: ${ids.join(', ')}${opts.defaultOn === false ? ' (ยังไม่ได้เปิดให้ทุกคน)' : ' (เปิดให้ทุกคนอัตโนมัติ)'}`);
-        L.push('หมายเหตุ: ตำแหน่งคำนวณจากหน้าจอ 480×270 ของโปรแกรม ถ้าเพี้ยนเล็กน้อยในเกม ปรับ x / y ในไฟล์ layouts ได้');
-        L.push('');
-        L.push('== English ==');
         L.push(opts.inOutputZip
             ? '1. Stop the server and drop every folder inside output.zip\'s plugins/ folder into the server\'s plugins/ folder (GeyserMC/ is for the Geyser server).'
             : '1. Stop the server and drop every folder of this zip into the server\'s plugins/ folder.');
@@ -782,9 +766,9 @@
             if (host !== 'none') L.push(`   If you installed an older export, delete ${oldBuild(host, ns)} (builds now go to BetterHud's usual folder).`);
         }
         else L.push('   Then copy the keys from MythicHUD/config_kaizerhud_snippet.yml into MythicHUD/config.yml (do not replace the file).');
-        hostSteps(L, plugin, host, false);
+        hostSteps(L, plugin, host);
         L.push(`3. Start the server and run ${plugin === 'betterhud' ? '/hud reload' : '/hud reload all'}${reloadCmd(host) ? ' then ' + reloadCmd(host) : ''}.`);
-        L.push(`HUDs: ${ids.join(', ')}`);
+        L.push(`HUDs: ${ids.join(', ')}${opts.defaultOn === false ? ' (default-on disabled)' : ''}`);
         L.push('Positions come from the 480×270 editor screen; fine-tune x / y in the layouts file if needed.');
         return L.join('\r\n') + '\r\n';
     }
@@ -794,9 +778,9 @@
     function reloadCmd(host) {
         return { itemsadder: '/iazip', oraxen: '/oraxen reload pack', nexo: '/nexo reload all' }[host] || '';
     }
-    function hostSteps(L, plugin, host, th) {
+    function hostSteps(L, plugin, host) {
         if (host === 'itemsadder') {
-            L.push(th ? '2. ItemsAdder/config.yml: ปิด text effects และ hide scoreboard numbers' : '2. ItemsAdder/config.yml: turn off text effects and hide-scoreboard-numbers');
+            L.push('2. ItemsAdder/config.yml: turn off text effects and hide-scoreboard-numbers');
             L.push('     effects:');
             L.push('       hide-scoreboard-numbers: false');
             L.push('       hide-scoreboard-numbers-old-clients: false');
@@ -804,12 +788,11 @@
             L.push('         enabled: false');
             if (plugin === 'mythichud') L.push('     huds:', '       enabled: false');
         } else if (host === 'nexo') {
-            L.push(th ? '2. Nexo/settings.yml: ตั้ง Glyphs.generate_gif_shaders: false' : '2. Nexo/settings.yml: set Glyphs.generate_gif_shaders: false');
+            L.push('2. Nexo/settings.yml: set Glyphs.generate_gif_shaders: false');
         } else if (host === 'oraxen') {
-            L.push(th ? '2. Oraxen/settings.yml: ตั้ง Misc.hide_scoreboard_numbers: false' : '2. Oraxen/settings.yml: set Misc.hide_scoreboard_numbers: false');
+            L.push('2. Oraxen/settings.yml: set Misc.hide_scoreboard_numbers: false');
         } else {
-            L.push(th ? `2. ไม่มีปลั๊กอิน pack: รวมโฟลเดอร์ ${plugin === 'betterhud' ? 'BetterHud/build' : 'MythicHUD/built-pack'} และ resourcepack/ เข้ากับ resource pack ของเซิร์ฟเวอร์เอง`
-                : `2. No pack plugin: merge ${plugin === 'betterhud' ? 'BetterHud/build' : 'MythicHUD/built-pack'} and resourcepack/ into your server resource pack yourself.`);
+            L.push(`2. No pack plugin: merge ${plugin === 'betterhud' ? 'BetterHud/build' : 'MythicHUD/built-pack'} and resourcepack/ into your server resource pack yourself.`);
         }
     }
 

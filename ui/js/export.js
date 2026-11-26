@@ -180,10 +180,9 @@ function validateElements() {
     const budget = bossbarTitleBudget(App.elements);
     if (budget.over) {
         return confirm(
-            `⚠️ HUD data uses ${budget.banks} banks (${budget.total} bytes, max ${MAX_HUD_BANKS} banks / single slot <= ${OVERFLOW_BANK_CAP}B)\n` +
+            `⚠️ HUD data uses ${budget.banks} banks (${budget.total} bytes, max ${MAX_HUD_BANKS} banks / single slot <= ${OVERFLOW_BANK_CAP}B).\n` +
             `Trailing slots may be truncated in game — reduce some slot Pad Lengths.\n\n` +
-            `[TH] ข้อมูล HUD ต้องใช้ ${budget.banks} banks (${budget.total} ไบต์ เกินลิมิต ${MAX_HUD_BANKS} banks หรือมีช่องเดียวเกิน ${OVERFLOW_BANK_CAP} ไบต์)\n\n` +
-            `Export anyway? / Export ต่อเลยไหม?`
+            `Export anyway?`
         );
     }
 
@@ -225,22 +224,11 @@ async function showExportConfirmation() {
         syncJava();
     }
 
-    // Bedrock data channel (saved with the project)
-    const channelRadios = Array.from(document.querySelectorAll('input[name="export-channel"]'));
-    const current = getHudChannel();
-    channelRadios.forEach((r) => { r.checked = r.value === current; });
-    // debug overlay: only for title, never remembered (so a release export is clean)
+    // Bedrock HUD transport: always hidden Title (Multi-Bank); Debug text is never remembered across exports
     const chDebug = document.getElementById('export-ch-debug');
     const chDebugRow = document.getElementById('export-ch-debug-row');
-    const syncChannel = () => {
-        const picked = channelRadios.find((r) => r.checked);
-        const other = !!picked && picked.value !== 'bossbar';
-        if (chDebugRow) chDebugRow.style.display = other ? '' : 'none';
-        if (chDebug && !other) chDebug.checked = false;
-    };
+    if (chDebugRow) chDebugRow.style.display = '';
     if (chDebug) chDebug.checked = false;
-    channelRadios.forEach((r) => { r.onchange = syncChannel; });
-    syncChannel();
 
     modal.style.display = 'flex';
     confirmBtn.disabled = false;
@@ -254,13 +242,12 @@ async function showExportConfirmation() {
                 return;
             }
             options.java = javaChoice;
-            const picked = channelRadios.find((r) => r.checked);
-            if (picked && picked.value !== getHudChannel()) {
-                App.hudChannel = picked.value;
+            if (App.hudChannel !== 'title') {
+                App.hudChannel = 'title';
                 if (window.KZCode && KZCode.refresh) { try { KZCode.refresh(); } catch (e) { /* code view refreshes later */ } }
             }
-            options.hudChannel = getHudChannel();
-            options.hudChannelDebug = !!(chDebug && chDebug.checked && options.hudChannel !== 'bossbar');
+            options.hudChannel = 'title';
+            options.hudChannelDebug = !!(chDebug && chDebug.checked);
             if (hasJava) writeStored('kz_export_java', javaOn.checked ? 'on' : 'off');
             cleanup();
             resolve(options);
@@ -303,7 +290,7 @@ async function exportMcpack() {
             namespace: App.getNamespace ? App.getNamespace() : '',
             widgetsImageData: window.Widgets && typeof Widgets.getWidgetsImageData === 'function' ? Widgets.getWidgetsImageData() : null
         };
-        projectData.hudChannel = options.hudChannel || getHudChannel();
+        projectData.hudChannel = 'title';
         projectData.hudChannelDebug = !!options.hudChannelDebug;
 
         // Java HUD files (BetterHud / MythicHUD) go into the same output.zip under plugins/.
@@ -327,8 +314,7 @@ async function exportMcpack() {
             App.showToast('Export cancelled', 'info');
             return;
         }
-        const via = { bossbar: 'boss bar', title: 'title' }[projectData.hudChannel] || 'boss bar';
-        App.showToast((java ? 'Exported output.zip (Bedrock + Java) successfully!' : 'Exported output.zip successfully!') + ' Bedrock data via ' + via + '.', 'success');
+        App.showToast((java ? 'Exported output.zip (Bedrock + Java) successfully!' : 'Exported output.zip successfully!') + ' Bedrock data via hidden title (Multi-Bank).', 'success');
         if (java) JavaHudExport.showResult({ saved: savedPath, res: java, readme: 'README_KaizerHUD_Java.txt' });
     } catch (err) {
         console.error('Export error:', err);

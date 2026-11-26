@@ -402,7 +402,7 @@
         return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
     }
     function anyModalOpen() {
-        return $$('.kz-modal, .kz-dlg-back').some(m => m.style.display !== 'none' && m.offsetParent !== null);
+        return $$('.kz-modal, .kz-dlg-back, .kz-upd-back').some(m => m.style.display !== 'none' && m.offsetParent !== null);
     }
 
     // Dev mode = the UI comes from the local test server, not from inside the exe
@@ -567,9 +567,143 @@
         $('#btn-tool-help').addEventListener('click', openHelp);
     }
 
-    /* ───────────── dock ───────────── */
+    /* ───────────── dock & resizable panels ───────────── */
+    function setupWidthResizer(opts) {
+        const resizer = $(opts.resizer);
+        const panel = $(opts.panel);
+        if (!resizer || !panel) return;
+
+        const applyWidth = (w) => {
+            panel.style.width = `${w}px`;
+            if (opts.cssVar) document.documentElement.style.setProperty(opts.cssVar, `${w}px`);
+        };
+
+        try {
+            const saved = parseInt(localStorage.getItem(opts.storageKey), 10);
+            if (saved >= opts.min && saved <= opts.max) applyWidth(saved);
+        } catch (e) { /* ignore */ }
+
+        let startX = 0, startW = 0;
+        const clamp = (raw) => {
+            const container = resizer.parentElement ? resizer.parentElement.getBoundingClientRect().width : window.innerWidth;
+            const maxAllowed = Math.max(opts.min, Math.min(opts.max, container - (opts.minCenter || 240)));
+            return Math.max(opts.min, Math.min(maxAllowed, Math.round(raw)));
+        };
+
+        const onMove = (e) => {
+            const dx = e.clientX - startX;
+            const next = clamp(opts.side === 'right' ? startW - dx : startW + dx);
+            applyWidth(next);
+            if (opts.onResize) opts.onResize();
+        };
+
+        const onUp = () => {
+            resizer.classList.remove('dragging');
+            document.body.classList.remove('kz-resizing-col');
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            const cur = parseInt(panel.style.width, 10);
+            if (cur) {
+                try { localStorage.setItem(opts.storageKey, String(cur)); } catch (e) { /* ignore */ }
+            }
+            if (opts.onEnd) opts.onEnd();
+        };
+
+        resizer.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            startX = e.clientX;
+            startW = panel.getBoundingClientRect().width;
+            resizer.classList.add('dragging');
+            document.body.classList.add('kz-resizing-col');
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        });
+
+        resizer.addEventListener('dblclick', () => {
+            panel.style.width = '';
+            if (opts.cssVar) document.documentElement.style.removeProperty(opts.cssVar);
+            try { localStorage.removeItem(opts.storageKey); } catch (e) { /* ignore */ }
+            if (opts.onResize) opts.onResize();
+            if (opts.onEnd) opts.onEnd();
+        });
+    }
+
+    function setupSplitViewResizer() {
+        const resizer = $('#split-view-resizer');
+        const views = $('#doc-views');
+        if (!resizer || !views) return;
+        const STORE = 'kz_split_code_pct';
+
+        const applyPct = (pct) => {
+            document.documentElement.style.setProperty('--split-code-w', `${pct}%`);
+        };
+        try {
+            const saved = parseFloat(localStorage.getItem(STORE));
+            if (saved >= 25 && saved <= 75) applyPct(saved);
+        } catch (e) { /* ignore */ }
+
+        const onMove = (e) => {
+            const rect = views.getBoundingClientRect();
+            if (rect.width <= 0) return;
+            const rawPct = ((rect.right - e.clientX) / rect.width) * 100;
+            const pct = Math.max(25, Math.min(75, Math.round(rawPct * 10) / 10));
+            applyPct(pct);
+            App.render();
+        };
+        const onUp = () => {
+            resizer.classList.remove('dragging');
+            document.body.classList.remove('kz-resizing-col');
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            const cur = parseFloat(document.documentElement.style.getPropertyValue('--split-code-w'));
+            if (cur) {
+                try { localStorage.setItem(STORE, String(cur)); } catch (e) { /* ignore */ }
+            }
+            App.render();
+        };
+
+        resizer.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            resizer.classList.add('dragging');
+            document.body.classList.add('kz-resizing-col');
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        });
+        resizer.addEventListener('dblclick', () => {
+            document.documentElement.style.removeProperty('--split-code-w');
+            try { localStorage.removeItem(STORE); } catch (e) { /* ignore */ }
+            App.render();
+        });
+    }
+
     function setupDock() {
         $$('#dock-lower .dock-tab').forEach(tab => tab.addEventListener('click', () => openDockPane(tab.dataset.pane)));
+
+        setupWidthResizer({
+            resizer: '#dock-resizer',
+            panel: '#dock',
+            side: 'right',
+            min: 240,
+            max: 620,
+            defaultWidth: 340,
+            minCenter: 280,
+            storageKey: 'kz_hud_dock_width',
+            cssVar: '--dock-w',
+            onResize: () => App.render()
+        });
+        setupWidthResizer({
+            resizer: '#code-tree-resizer',
+            panel: '#code-tree',
+            side: 'left',
+            min: 140,
+            max: 420,
+            defaultWidth: 220,
+            minCenter: 220,
+            storageKey: 'kz_code_tree_width'
+        });
+        setupSplitViewResizer();
 
         const splitter = $('#dock-splitter');
         const lower = $('#dock-lower');
@@ -586,17 +720,24 @@
         };
         const onUp = () => {
             splitter.classList.remove('dragging');
+            document.body.classList.remove('kz-resizing-row');
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onUp);
             try { localStorage.setItem(STORE, parseInt(lower.style.flexBasis, 10)); } catch (e) { /* ignore */ }
         };
         splitter.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
             e.preventDefault();
             startY = e.clientY;
             startH = lower.getBoundingClientRect().height;
             splitter.classList.add('dragging');
+            document.body.classList.add('kz-resizing-row');
             document.addEventListener('mousemove', onMove);
             document.addEventListener('mouseup', onUp);
+        });
+        splitter.addEventListener('dblclick', () => {
+            lower.style.flexBasis = '';
+            try { localStorage.removeItem(STORE); } catch (e) { /* ignore */ }
         });
     }
 

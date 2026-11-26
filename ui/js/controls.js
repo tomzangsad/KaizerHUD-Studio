@@ -2260,7 +2260,7 @@ function bindInput(id, event, callback) {
 function padBudgetText() {
   if (typeof window.bossbarTitleBudget !== "function") return { text: "", over: false };
   const b = window.bossbarTitleBudget(App.elements);
-  const label = b.banks > 1 ? `HUD ${b.total}B (${b.banks} banks)` : `Bossbar ${b.total} / ${b.singleLimit || 255}`;
+  const label = b.banks > 1 ? `HUD ${b.total}B (${b.banks} banks)` : `HUD ${b.total} / ${b.singleLimit || 255}`;
   return { text: label, over: b.over, title: `prefix 25 + bars ${b.bars} + slots ${b.pads} (${b.banks} bank${b.banks > 1 ? 's' : ''}, needs KaizerMultiBar 2.2+ if >1)` };
 }
 

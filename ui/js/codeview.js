@@ -171,14 +171,66 @@
             });
     }
 
+    function highlightYamlValue(raw) {
+        let inSingle = false;
+        let inDouble = false;
+        let escaped = false;
+        let commentIdx = -1;
+        for (let i = 0; i < raw.length; i++) {
+            const ch = raw[i];
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (inDouble && ch === '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch === "'" && !inDouble) inSingle = !inSingle;
+            else if (ch === '"' && !inSingle) inDouble = !inDouble;
+            else if (ch === '#' && !inSingle && !inDouble && (i === 0 || /\s/.test(raw[i - 1]))) {
+                commentIdx = i;
+                break;
+            }
+        }
+
+        const valueRaw = commentIdx >= 0 ? raw.slice(0, commentIdx) : raw;
+        const commentRaw = commentIdx >= 0 ? raw.slice(commentIdx) : '';
+        const valMatch = /^([\t ]*)(.*?)([\t ]*)$/.exec(valueRaw);
+        const leadWs = valMatch ? valMatch[1] : '';
+        const core = valMatch ? valMatch[2] : valueRaw;
+        const trailWs = valMatch ? valMatch[3] : '';
+
+        let coreHtml = '';
+        if (core) {
+            if ((core.startsWith('"') && core.endsWith('"') && core.length >= 2)
+                || (core.startsWith("'") && core.endsWith("'") && core.length >= 2)) {
+                coreHtml = `<span class="t-str">${esc(core)}</span>`;
+            } else if (/^(?:true|false|null|~)$/i.test(core)) {
+                coreHtml = `<span class="t-kw">${esc(core)}</span>`;
+            } else if (/^-?\d+(?:\.\d+)?$/.test(core)) {
+                coreHtml = `<span class="t-num">${esc(core)}</span>`;
+            } else {
+                coreHtml = esc(core);
+            }
+        }
+
+        const commentHtml = commentRaw ? `<span class="t-com">${esc(commentRaw)}</span>` : '';
+        return `${esc(leadWs)}${coreHtml}${esc(trailWs)}${commentHtml}`;
+    }
+
     function highlightYaml(src) {
-        return esc(src).split('\n').map(line => {
-            if (/^\s*#/.test(line)) return `<span class="t-com">${line}</span>`;
-            return line
-                .replace(/^(\s*)([\w.-]+)(:)/, '$1<span class="t-key">$2</span>$3')
-                .replace(/(&quot;|")(.*?)"/g, '<span class="t-str">"$2"</span>')
-                .replace(/:\s(true|false)\b/, ': <span class="t-kw">$1</span>')
-                .replace(/:\s(-?\d+)$/, ': <span class="t-num">$1</span>');
+        return src.split(/\r?\n/).map(line => {
+            if (/^\s*#/.test(line)) return `<span class="t-com">${esc(line)}</span>`;
+            const kv = /^(\s*(?:-\s+)?)([\w.-]+)(:)([\t ]*)(.*)$/.exec(line);
+            if (kv) {
+                return `${esc(kv[1])}<span class="t-key">${esc(kv[2])}</span>:${esc(kv[4])}${highlightYamlValue(kv[5])}`;
+            }
+            const li = /^(\s*-\s+)(.*)$/.exec(line);
+            if (li) {
+                return `${esc(li[1])}${highlightYamlValue(li[2])}`;
+            }
+            return highlightYamlValue(line);
         }).join('\n');
     }
 

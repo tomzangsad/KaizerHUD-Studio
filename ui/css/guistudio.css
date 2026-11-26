@@ -255,7 +255,7 @@ body.gs-body { overflow: hidden; }
 
 /* ───────────── dock ───────────── */
 .gs-dock .dock-properties { flex: 1 1 65%; }
-.gs-layers-panel { flex: 0 0 34%; border-top: 1px solid var(--line); }
+.gs-layers-panel { flex: 0 0 260px; }
 .gs-props { flex: 1; overflow: auto; padding: 8px 10px 16px; user-select: none; }
 .gs-prop-title {
     display: flex; align-items: center; gap: 6px;

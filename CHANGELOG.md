@@ -5,14 +5,22 @@
 ## v1.0.4 (2026-11-26)
 
 ### English
-- Added automatic Multi-Bank HUD overflow support (up to 8 banks / ~2,000 bytes) for both Bossbar and Title channels in HUD Studio and KaizerMultiBar 2.2.0
-- Added Antigravity-style in-app software updater via GitHub Releases with background checking, manual download progress, and manual Restart & Apply
-- Upgraded GUI Studio UI Flow and Link UI with existing-button binding, Confirm popup flow (Yes/No/Back), pagination, themed link buttons, arrow labels, one-click unlink, and + Ask Confirm shortcut
+- Recommended install: use the v1.0.4 Windows Installer once to unlock one-click In-App Auto-Updates for all future releases
+- Update both server plugins (`KaizerMultiBar 2.2.0` and `KaizerUI 1.1.0`) to match v1.0.4
+- Switched Bedrock HUD transport to Hidden Title with automatic Multi-Bank overflow (up to 8 banks / ~2,000 bytes) and removed the conflicting Bossbar channel
+- Added in-app software updater via GitHub Releases with background check, download progress, and manual Restart & Apply
+- Upgraded GUI Studio UI Flow and Link UI with existing-button binding, Confirm popup flow (Yes/No/Back), pagination, arrow labels, and one-click unlink
+- Made all sidebars, docks, splitters, code file tree, and split view panels resizable by dragging borders (double-click divider to reset)
+- Fixed YAML code preview syntax highlighting, standardized in-app UI to English, and restyled the HUD Wiki to match the graphite dark theme
 
 ### ภาษาไทย
-- รองรับข้อมูล HUD เกิน 255 ไบต์อัตโนมัติ (Multi-Bank สูงสุด 8 Banks / ~2,000 ไบต์) ใช้ได้ทั้งช่อง Bossbar และ Title ใน HUD Studio + KaizerMultiBar 2.2.0
-- เพิ่มระบบอัปเดตในตัวโปรแกรมสไตล์ Antigravity ผ่าน GitHub Releases (เช็กพื้นหลัง + กดดาวน์โหลดพร้อมหลอด % + กด Restart เพื่ออัปเดตเองเมื่อพร้อม)
+- แนะนำให้ติดตั้งเวอร์ชัน `v1.0.4` ผ่านตัวติดตั้ง Windows (`-setup.exe`) เพื่อให้เวอร์ชันถัดไปสามารถกดอัปเดตได้ทันทีผ่านตัวโปรแกรมในแอป (In-App Auto-Updater)
+- ปรับเลขเวอร์ชันปลั๊กอินเซิร์ฟเวอร์ทั้งสองตัวเป็น `KaizerMultiBar 2.2.0` และ `KaizerUI 1.1.0` เพื่อให้รู้ได้ง่ายว่าควรอัปเดตให้ครบทั้งหมด
+- ถอดช่องทาง Bossbar ที่ชนกับปลั๊กอินอื่นออก ใช้ช่องทาง Hidden Title พร้อมรองรับข้อมูลเกิน 255 ไบต์อัตโนมัติ (Multi-Bank สูงสุด 8 Banks / ~2,000 ไบต์)
+- เพิ่มระบบอัปเดตในตัวโปรแกรมผ่าน GitHub Releases (เช็กพื้นหลัง + ปุ่มมุมบนขึ้นเฉพาะตอนมีอัปเดต + หน้าต่างดาวน์โหลดพร้อมหลอด % + กด Restart & Apply)
 - อัปเกรด UI Flow & Link UI ใน GUI Studio ให้ผูกกับปุ่มเดิมได้โดยไม่สร้างกล่องเทาซ้อน, รองรับ Confirm flow (`Yes`/`No`/`Back`), Pagination, ป้ายชื่อบนลูกศร, ปุ่ม Unlink และ `+ Ask Confirm`
+- เพิ่มการลากยืด-หดขอบทุกหน้าต่างข้างใน HUD Studio และ GUI Studio (ขอบ Dock, เมนู, Tree โค้ด, Split View และเส้นแบ่ง Properties/Layers พร้อมจำขนาดไว้และดับเบิลคลิกเพื่อรีเซ็ต)
+- แก้บั๊กไฮไลต์สีไฟล์ `.yml` ใน Code Preview, ปรับข้อความในโปรแกรมเป็นภาษาอังกฤษทั้งหมด และปรับธีมหน้า HUD Wiki เป็น Graphite Dark
 
 ## v1.0.3 (2026-11-26)
 

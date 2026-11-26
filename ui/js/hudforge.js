@@ -1966,7 +1966,7 @@
                     <div class="hf2-left">
                         <div class="hf2-pane" data-pane="pick">
                             <label class="hf2-search"><svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M11 11l4 4" stroke="currentColor" stroke-width="2"/></svg>
-                                <input id="hf2-q" type="text" spellcheck="false" placeholder="Search styles…  ค้นหา เช่น dragon, snow, neon" /></label>
+                                <input id="hf2-q" type="text" spellcheck="false" placeholder="Search styles… e.g. dragon, snow, neon" /></label>
                             <div class="hf2-pills">
                                 <button class="hf2-pill" data-genre="all">All</button>
                                 <button class="hf2-pill" data-genre="new">✦ New</button>
@@ -1983,19 +1983,19 @@
                     <div class="hf2-stage">
                         <div class="hf2-title"><b id="hf2-lname"></b><span id="hf2-ldesc"></span><b id="hf2-tune-name" hidden></b></div>
                         <canvas id="hf-preview" width="${SW * S}" height="${SH * S}"></canvas>
-                        <div class="hf2-row"><span class="hf2-lbl">Colour<small>สี</small></span><div class="hf2-dots" id="hf2-dots"></div></div>
-                        <div class="hf2-row"><span class="hf2-lbl">Extras<small>เพิ่มข้อมูล</small></span>
+                        <div class="hf2-row"><span class="hf2-lbl">Colour</span><div class="hf2-dots" id="hf2-dots"></div></div>
+                        <div class="hf2-row"><span class="hf2-lbl">Extras</span>
                             <div class="hf2-quick">
                                 <button class="hf2-q" data-quick="money">Money</button><button class="hf2-q" data-quick="time">Time</button>
                                 <button class="hf2-q" data-quick="coords">Coordinates</button><button class="hf2-q" data-quick="mana">Mana</button>
                                 <button class="hf2-q" data-quick="name">Name</button>
                             </div>
-                            <span style="margin-left:auto;display:flex;align-items:center;gap:8px"><span class="hf2-lbl" style="width:auto">Scene<small>พื้นหลัง</small></span>
+                            <span style="margin-left:auto;display:flex;align-items:center;gap:8px"><span class="hf2-lbl" style="width:auto">Scene</span>
                             <span class="hf2-seg"><button data-bg="day">Day</button><button data-bg="night">Night</button><button data-bg="cave">Cave</button></span></span></div>
                         <div class="hf2-row"><span class="kz-note" id="hf-summary" style="margin-left:0"></span></div>
                         <div class="hf2-tune">
                           <div class="hf2-tune-grid">
-                            <details class="hf2-acc wide" open><summary>Parts <small>แสดงอะไรบ้าง</small></summary><div>
+                            <details class="hf2-acc wide" open><summary>Parts</summary><div>
                                 <div class="hf-checks">
                                     ${partBox('hp', 'Health')}${partBox('food', 'Food')}${partBox('armor', 'Armor')}
                                     ${partBox('air', 'Air')}${partBox('xp', 'XP bar')}${partBox('mana', 'Mana')}
@@ -2003,14 +2003,14 @@
                                     ${partBox('money', 'Money')}${partBox('time', 'Time')}${partBox('coords', 'Coordinates')}
                                     ${partBox('hotbar', 'Hotbar texture')}
                                 </div></div></details>
-                            <details class="hf2-acc"><summary>Bars <small>ขนาด / ปลายแถบ</small></summary><div>
+                            <details class="hf2-acc"><summary>Bars</summary><div>
                                 <div class="hf-row"><span>Bar length</span><input type="range" min="40" max="130" id="hf-barw" /><output id="hf-barw-v"></output></div>
                                 <div class="hf-row"><span>Bar thickness</span><input type="range" min="6" max="14" id="hf-barh" /><output id="hf-barh-v"></output></div>
                                 <div class="hf-chips">${chips(D.SHAPES, 'shape')}</div>
                                 <div class="hf-row" id="hf-segs-row"><span>Segments</span><input type="range" min="4" max="20" id="hf-segs" /><output id="hf-segs-v"></output></div>
                                 <div class="kz-note">Bar length, thickness and ends change the classic styles; the NEW styles draw their own bars.</div>
                             </div></details>
-                            <details class="hf2-acc"><summary>Details <small>ไอคอน / ตัวเลข / กล่อง</small></summary><div>
+                            <details class="hf2-acc"><summary>Details</summary><div>
                                 <div class="hf-checks">
                                     <label class="hf-check"><input type="checkbox" id="hf-icons" />Icons</label>
                                     <label class="hf-check" title="e.g. 20/20"><input type="checkbox" id="hf-values" />Numbers on bars</label>
@@ -2019,18 +2019,18 @@
                                     <label class="hf-check" title="A box behind the whole HUD / card"><input type="checkbox" id="hf-panels" />Background box</label>
                                     <label class="hf-check" title="Dome + hotbar end pieces (classic Fantasy)"><input type="checkbox" id="hf-ornaments" />Hotbar ornaments</label>
                                 </div></div></details>
-                            <details class="hf2-acc"><summary>Bar colours <small>สีของแต่ละแถบ</small></summary><div>
+                            <details class="hf2-acc"><summary>Bar colours</summary><div>
                                 <div class="hf-colors">${STAT_ORDER.map((s) => `<label class="hf-color"><input type="color" data-color="${s}" /><span>${STAT_LABEL[s]}</span></label>`).join('')}</div>
                                 <button class="ghost-btn" id="hf-colors-reset">Use theme colours</button>
                             </div></details>
-                            <details class="hf2-acc"><summary>All colour themes <small>ธีมสีทั้งหมด</small></summary><div>
+                            <details class="hf2-acc"><summary>All colour themes</summary><div>
                                 <div class="hf-tgrid">${D.THEMES.map((t) => `<button class="hf-theme" data-theme="${t.id}" title="${esc(t.th)}"><img alt="" data-thumb="${t.id}" /><span>${esc(t.name)}</span></button>`).join('')}</div>
                             </div></details>
-                            <details class="hf2-acc" id="hf-mana-sec"><summary>Mana placeholder <small>PAPI ของมานา</small></summary><div>
+                            <details class="hf2-acc" id="hf-mana-sec"><summary>Mana placeholder</summary><div>
                                 <div class="hf-row"><span>Value</span><input type="text" id="hf-mana" spellcheck="false" /></div>
                                 <div class="hf-row"><span>Max</span><input type="text" id="hf-mana-max" spellcheck="false" /></div>
                             </div></details>
-                            <details class="hf2-acc"><summary>Texture size <small>ขนาดไฟล์ภาพ</small></summary><div>
+                            <details class="hf2-acc"><summary>Texture size</summary><div>
                                 <div class="hf-row"><span>Texture size</span>
                                     <select id="hf-quality"><option value="1">1× (pixel, smallest)</option><option value="2">2×</option><option value="4">4×</option></select></div>
                             </div></details>
@@ -2092,7 +2092,7 @@
         } else shown = readTemplates().length;
         const empty = back.querySelector('#hf2-empty');
         empty.style.display = shown ? 'none' : 'block';
-        empty.textContent = mine ? 'No saved templates yet — pick a style and press "★ Save as my template". ยังไม่มีแบบที่บันทึกไว้' : 'No style matches. ไม่พบแบบที่ค้นหา';
+        empty.textContent = mine ? 'No saved templates yet — pick a style and press "★ Save as my template".' : 'No style matches.';
         back.querySelectorAll('[data-genre]').forEach((b) => b.classList.toggle('active', b.dataset.genre === ui.genre));
     }
 

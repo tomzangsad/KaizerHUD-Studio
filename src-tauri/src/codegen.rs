@@ -679,11 +679,10 @@ fn has_non_ascii(s: &str) -> bool {
 }
 
 pub fn generate_kaizer_multibar_config_yml(elements: &[Value]) -> String {
-    generate_kaizer_multibar_config_yml_with(elements, HudChannel::Bossbar)
+    generate_kaizer_multibar_config_yml_with(elements, HudChannel::Title)
 }
 
-/// config.yml for the chosen channel. Bossbar output is unchanged (no `channel:` key = bossbar,
-/// which is also what KaizerMultiBar 2.0.0 does); title adds `bossbar.channel`.
+/// config.yml for the chosen channel. Title is the default transport as of v1.0.4.
 pub fn generate_kaizer_multibar_config_yml_with(elements: &[Value], channel: HudChannel) -> String {
     let extra_texts = get_bossbar_slots(elements);
     let custom_bars = get_custom_bar_config_entries(elements);
@@ -704,8 +703,8 @@ pub fn generate_kaizer_multibar_config_yml_with(elements: &[Value], channel: Hud
         push(s);
     }
     if channel != HudChannel::Bossbar {
-        push("  # How the HUD data reaches Bedrock players: bossbar | title");
-        push("  # Must match the option chosen when the .mcpack was exported (needs KaizerMultiBar 2.1+)");
+        push("  # How the HUD data reaches Bedrock players: title (Multi-Bank, KaizerMultiBar 2.2.0+)");
+        push("  # Matches the exported .mcpack (hidden title channel)");
         push(&format!("  channel: {}", channel.config_name()));
         push("  # title: sent when the data changes, and again every N ticks (0 = only on change)");
         push("  channel-resend-ticks: 100");
@@ -930,6 +929,23 @@ fn own_slice_bindings(range: &(String, String)) -> Value {
 
 fn own_slice_bindings_for(range: &(String, String), bank: usize) -> Value {
     let (start, end) = range;
+    let (kz_s_expr, slice_expr) = if bank == 0 {
+        (
+            strip_bank_prefix(0),
+            format!("(('%.{}s' * #kz_s) - ('%.{}s' * #kz_s))", end, start),
+        )
+    } else {
+        // Keep the unique 5-byte "@kz<bank>:" sentinel at index 0..5 so Bedrock's global string
+        // subtraction `A - B` never wipes out a 2nd slot whose padded value equals the 1st slot.
+        let pfx = format!("{}:", bank_prefix_str(bank));
+        let pfx_len = pfx.len();
+        let s = start.parse::<usize>().unwrap_or(0) + pfx_len;
+        let e = end.parse::<usize>().unwrap_or(0) + pfx_len;
+        (
+            format!("('{p}' + ((#bossName - '\u{a7}r{p}') - '{p}'))", p = pfx),
+            format!("(('%.{}s' * #kz_s) - ('%.{}s' * #kz_s))", e, s),
+        )
+    };
     json!([
         {
             "binding_name": "#bossName",
@@ -939,12 +955,12 @@ fn own_slice_bindings_for(range: &(String, String), bank: usize) -> Value {
         {
             "binding_type": "view",
             // remove "prefix:" as one string; `- ':'` would also strip every ':' inside the slots
-            "source_property_name": strip_bank_prefix(bank),
+            "source_property_name": kz_s_expr,
             "target_property_name": "#kz_s"
         },
         {
             "binding_type": "view",
-            "source_property_name": format!("(('%.{}s' * #kz_s) - ('%.{}s' * #kz_s))", end, start),
+            "source_property_name": slice_expr,
             "target_property_name": "#string"
         },
         {
@@ -1103,23 +1119,21 @@ fn panel_wrapper(controls: Vec<Value>, bindings: &Value) -> Value {
 /// The string itself ("@zelisce/custom_bossbars:" + bars + slots + markers) is the same for all.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HudChannel {
-    /// Boss bar title (original): read from the `boss_bars` collection.
+    /// Boss bar title (legacy): removed from Studio UI in v1.0.4 due to multi-plugin bossbar conflicts.
+    #[allow(dead_code)]
     Bossbar,
     /// Title: `#hud_title_text_string`, kept in a store (wiki.bedrock.dev "Preserve Title Texts").
     Title,
 }
 
 impl HudChannel {
-    pub fn parse(s: &str) -> Self {
-        // "actionbar" was tried and removed (2026-11-24): the pack cannot read anything inside the
-        // game's action bar control, so old projects with it fall back to the boss bar
-        match s.trim().to_ascii_lowercase().as_str() {
-            "title" => HudChannel::Title,
-            _ => HudChannel::Bossbar,
-        }
+    pub fn parse(_s: &str) -> Self {
+        // Bossbar channel removed in v1.0.4 due to multi-plugin bossbar conflicts;
+        // actionbar was removed 2026-11-24. All old and new projects migrate to Title.
+        HudChannel::Title
     }
     pub fn from_data(data: &Value) -> Self {
-        get(data, "hudChannel").and_then(|v| v.as_str()).map(Self::parse).unwrap_or(HudChannel::Bossbar)
+        get(data, "hudChannel").and_then(|v| v.as_str()).map(Self::parse).unwrap_or(HudChannel::Title)
     }
     /// Value of `bossbar.channel` in config.yml
     pub fn config_name(self) -> &'static str {
@@ -1150,7 +1164,7 @@ impl Default for HudOptions {
         Self {
             nameplate_position: "top_right".into(),
             nameplate_mobile_offset: DEFAULT_NAMEPLATE_MOBILE_OFFSET,
-            channel: HudChannel::Bossbar,
+            channel: HudChannel::Title,
             channel_debug: false,
         }
     }
@@ -2129,6 +2143,14 @@ fn bank_store_name(bank: usize) -> String {
     }
 }
 
+fn bank_saved_prop(bank: usize) -> String {
+    if bank == 0 {
+        "#kz_saved".to_string()
+    } else {
+        format!("#kz_saved_{}", bank)
+    }
+}
+
 fn bank_store_match_prefix(bank: usize) -> String {
     if bank == 0 {
         NEWBOS_PREFIX.to_string()
@@ -2154,7 +2176,7 @@ fn store_bossname_binding_for(bank: usize) -> Value {
     json!({
         "binding_type": "view",
         "source_control_name": bank_store_name(bank),
-        "source_property_name": format!("(#kz_saved - '{}')", bank_off_token(bank)),
+        "source_property_name": format!("({} - '{}')", bank_saved_prop(bank), bank_off_token(bank)),
         "target_property_name": "#bossName"
     })
 }
@@ -2218,28 +2240,35 @@ fn has_str_expr(src: &str, prefix: &str) -> String {
     format!("(not (({s} - '{p}') = {s}))", s = src, p = prefix)
 }
 
+/// True when `src` (an expression of a string) does NOT contain `prefix`.
+fn lacks_str_expr(src: &str, prefix: &str) -> String {
+    format!("(({s} - '{p}') = {s})", s = src, p = prefix)
+}
+
 /// The store (wiki.bedrock.dev "Preserve Title Texts"): saves the title when it has our prefix
 /// and differs from the saved one (the copy binding only runs on `visibility_changed`; the panel
 /// turns visible for that one update and hides again because the strings are then equal).
 fn hud_store_control_for(bank: usize) -> Value {
     let pfx = bank_store_match_prefix(bank);
+    let saved_prop = bank_saved_prop(bank);
     json!({
         "type": "panel",
         "size": [0, 0],
-        "property_bag": { "#kz_saved": "" },
+        "property_bag": { saved_prop.clone(): "" },
         "bindings": [
             { "binding_name": "#hud_title_text_string", "binding_type": "global" },
             {
                 "binding_name": "#hud_title_text_string",
-                "binding_name_override": "#kz_saved",
+                "binding_name_override": saved_prop,
                 "binding_type": "global",
                 "binding_condition": "visibility_changed"
             },
             {
                 "binding_type": "view",
                 "source_property_name": format!(
-                    "((not (#hud_title_text_string = #kz_saved)) and {})",
-                    has_str_expr("#hud_title_text_string", &pfx)
+                    "((not (#hud_title_text_string = {sp})) and {has})",
+                    sp = saved_prop,
+                    has = has_str_expr("#hud_title_text_string", &pfx)
                 ),
                 "target_property_name": "#visible"
             }
@@ -2306,23 +2335,23 @@ pub fn apply_hud_channel_with(files: &mut Files, channel: HudChannel, debug: boo
         Some(Value::Object(o)) => o,
         _ => return,
     };
-    // one object per control, like the wiki examples
-    let mut added: Vec<Value> = vec![json!({ format!("{}@hud.{}", KZ_STORE, KZ_STORE): {} })];
+    // one insert_back modification per control (Bedrock UI modifications expect an Object value)
+    let mut added_controls: Vec<Value> = vec![json!({ format!("{}@hud.{}", KZ_STORE, KZ_STORE): {} })];
     for &b in &extra_banks {
         let store_id = bank_store_name(b);
         let mut o = Obj::new();
         o.insert(format!("{}@hud.{}", store_id, store_id), json!({}));
-        added.push(Value::Object(o));
+        added_controls.push(Value::Object(o));
     }
     if !debug {
         // hide the vanilla title (and its subtitle) while it shows our data string (bank 0 or overflow banks)
         let title_vis = if extra_banks.is_empty() {
-            format!("(not {})", has_str_expr("#hud_title_text_string", NEWBOS_PREFIX))
+            lacks_str_expr("#hud_title_text_string", NEWBOS_PREFIX)
         } else {
             format!(
-                "(not ({} or {}))",
-                has_str_expr("#hud_title_text_string", NEWBOS_PREFIX),
-                has_str_expr("#hud_title_text_string", "@kz")
+                "({} and {})",
+                lacks_str_expr("#hud_title_text_string", NEWBOS_PREFIX),
+                lacks_str_expr("#hud_title_text_string", "@kz")
             )
         };
         screen.insert(
@@ -2345,13 +2374,15 @@ pub fn apply_hud_channel_with(files: &mut Files, channel: HudChannel, debug: boo
     }
     if debug {
         screen.insert("kz_channel_debug".into(), channel_debug_label());
-        added.push(json!({ "kz_channel_debug@hud.kz_channel_debug": {} }));
+        added_controls.push(json!({ "kz_channel_debug@hud.kz_channel_debug": {} }));
     }
     let root = screen.entry("root_panel".to_string()).or_insert_with(|| json!({ "modifications": [] }));
     if let Value::Object(r) = root {
         let mods = r.entry("modifications".to_string()).or_insert_with(|| json!([]));
         if let Value::Array(m) = mods {
-            m.push(json!({ "array_name": "controls", "operation": "insert_back", "value": added }));
+            for ctrl in added_controls {
+                m.push(json!({ "array_name": "controls", "operation": "insert_back", "value": ctrl }));
+            }
         }
     }
 }
@@ -2752,16 +2783,17 @@ mod channel_tests {
     }
 
     #[test]
-    fn bossbar_is_unchanged() {
+    fn title_is_default_channel() {
         let els = sample();
+        assert_eq!(HudOptions::default().channel, HudChannel::Title);
         let a = generate_split_files_patched_with("ns", &els, None, &HudOptions::default());
         let t = all_text(&a);
-        assert!(t.contains("boss_bars") && !t.contains(KZ_STORE));
+        assert!(!t.contains("boss_bars") && t.contains(KZ_STORE));
         assert_eq!(
             generate_kaizer_multibar_config_yml(&els),
-            generate_kaizer_multibar_config_yml_with(&els, HudChannel::Bossbar)
+            generate_kaizer_multibar_config_yml_with(&els, HudChannel::Title)
         );
-        assert!(!generate_kaizer_multibar_config_yml(&els).contains("channel:"));
+        assert!(generate_kaizer_multibar_config_yml(&els).contains("  channel: title"));
     }
 
     #[test]
@@ -2828,11 +2860,12 @@ mod channel_tests {
 
     #[test]
     fn channel_from_project_data() {
-        assert_eq!(HudOptions::from_data(&json!({})).channel, HudChannel::Bossbar);
-        // removed channel: old projects fall back to the boss bar
-        assert_eq!(HudOptions::from_data(&json!({ "hudChannel": "actionbar" })).channel, HudChannel::Bossbar);
+        assert_eq!(HudOptions::from_data(&json!({})).channel, HudChannel::Title);
+        // removed channels: old projects migrate automatically to Title
+        assert_eq!(HudOptions::from_data(&json!({ "hudChannel": "bossbar" })).channel, HudChannel::Title);
+        assert_eq!(HudOptions::from_data(&json!({ "hudChannel": "actionbar" })).channel, HudChannel::Title);
         assert_eq!(HudOptions::from_data(&json!({ "hudChannel": "title" })).channel, HudChannel::Title);
-        assert_eq!(HudOptions::from_data(&json!({ "hudChannel": "???" })).channel, HudChannel::Bossbar);
+        assert_eq!(HudOptions::from_data(&json!({ "hudChannel": "???" })).channel, HudChannel::Title);
     }
 
     #[test]
@@ -2854,13 +2887,13 @@ mod channel_tests {
         let plan = plan_hud_banks(&els);
         assert!(plan.num_banks >= 3, "15x30=450B+ should split across >=3 banks (got {})", plan.num_banks);
 
-        let yml = generate_kaizer_multibar_config_yml_with(&els, HudChannel::Title);
+        let yml = generate_kaizer_multibar_config_yml(&els);
         assert!(yml.contains("  banks:\n"));
         assert!(yml.contains("    bank_1:\n      prefix: \"@kz1:\"\n"));
         assert!(yml.contains("    slot_15:\n"));
 
-        // Bossbar mode: overflow bank panels + grids
-        let bb = generate_split_files_patched_with("ns", &els, None, &HudOptions::default());
+        // Legacy internal bossbar builder coverage
+        let bb = generate_split_files_patched_with("ns", &els, None, &opts(HudChannel::Bossbar));
         let bb_screen = &bb["ui/hud_screen.json"];
         assert!(bb_screen.get("custom_bossbars_bank_1_panel").is_some());
         assert_eq!(bb_screen["custom_bossbars_bank_1_factory"]["grid_dimensions"], json!([1, 2]));
@@ -2868,14 +2901,25 @@ mod channel_tests {
         let h_vis = bb_screen["boss_health_panel"]["bindings"][2]["source_property_name"].as_str().unwrap();
         assert!(h_vis.contains("'@kz'"));
 
-        // Title mode: persistent kz_hud_store_1 + hidden vanilla title matching @kz
-        let tt = generate_split_files_patched_with("ns", &els, None, &opts(HudChannel::Title));
+        // Default Title mode: persistent kz_hud_store_1 + hidden vanilla title matching @kz
+        let tt = generate_split_files_patched_with("ns", &els, None, &HudOptions::default());
         let tt_screen = &tt["ui/hud_screen.json"];
         assert!(tt_screen.get("kz_hud_store_1").is_some());
+        let store1_str = serde_json::to_string(&tt_screen["kz_hud_store_1"]).unwrap();
+        assert!(store1_str.contains("#kz_saved_1"));
         assert_eq!(tt_screen["custom_bossbars_bank_1_panel"]["offset"], json!([0, 0]));
         let b1_str = serde_json::to_string(&tt_screen["custom_bossbars_bank_1_panel"]).unwrap();
         assert!(b1_str.contains("kz_hud_store_1"));
-        assert!(tt_screen["hud_title_text"]["bindings"][1]["source_property_name"].as_str().unwrap().contains("'@kz'"));
+        assert!(b1_str.contains("#kz_saved_1"));
+        assert!(b1_str.contains("('@kz1:' + ((#bossName - '§r@kz1:') - '@kz1:'))"));
+        assert!(b1_str.contains("(('%.35s' * #kz_s) - ('%.5s' * #kz_s))"));
+        assert!(b1_str.contains("(('%.65s' * #kz_s) - ('%.35s' * #kz_s))"));
+        assert!(!b1_str.contains("'%.0s'"));
+        let tt_mods = serde_json::to_string(&tt_screen["root_panel"]["modifications"]).unwrap();
+        assert!(tt_mods.contains("\"value\":{\"kz_hud_store_1@hud.kz_hud_store_1\":{}}"));
+        let title_vis = tt_screen["hud_title_text"]["bindings"][1]["source_property_name"].as_str().unwrap();
+        assert!(!title_vis.contains("(not ("));
+        assert!(title_vis.contains("and ((#hud_title_text_string - '@kz') = #hud_title_text_string)"));
         refs_resolve(&tt);
     }
 }

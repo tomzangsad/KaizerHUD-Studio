@@ -390,7 +390,7 @@
     }
     function setupKeys() {
         document.addEventListener('keydown', (e) => {
-            if (document.querySelector('.gs-modal, .kz-dlg-back')) return;
+            if (document.querySelector('.gs-modal, .kz-dlg-back, .kz-upd-back')) return;
             const ctrl = e.ctrlKey || e.metaKey;
             const k = e.key;
             if (ctrl) {
@@ -419,12 +419,126 @@
         $$('[data-tip]').forEach(b => { b.title = b.dataset.tip; });
     }
 
+    /* ───────────── resizable panels ───────────── */
+    function setupWidthResizer(opts) {
+        const resizer = $(opts.resizer);
+        const panel = $(opts.panel);
+        if (!resizer || !panel) return;
+
+        try {
+            const saved = parseInt(localStorage.getItem(opts.storageKey), 10);
+            if (saved >= opts.min && saved <= opts.max) panel.style.width = `${saved}px`;
+        } catch (e) { /* ignore */ }
+
+        let startX = 0, startW = 0;
+        const clamp = (raw) => {
+            const container = resizer.parentElement ? resizer.parentElement.getBoundingClientRect().width : window.innerWidth;
+            const maxAllowed = Math.max(opts.min, Math.min(opts.max, container - 280));
+            return Math.max(opts.min, Math.min(maxAllowed, Math.round(raw)));
+        };
+
+        const onMove = (e) => {
+            const dx = e.clientX - startX;
+            const next = clamp(opts.side === 'right' ? startW - dx : startW + dx);
+            panel.style.width = `${next}px`;
+            E.applyZoom();
+        };
+        const onUp = () => {
+            resizer.classList.remove('dragging');
+            document.body.classList.remove('kz-resizing-col');
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            const cur = parseInt(panel.style.width, 10);
+            if (cur) {
+                try { localStorage.setItem(opts.storageKey, String(cur)); } catch (e) { /* ignore */ }
+            }
+            E.applyZoom();
+        };
+
+        resizer.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            startX = e.clientX;
+            startW = panel.getBoundingClientRect().width;
+            resizer.classList.add('dragging');
+            document.body.classList.add('kz-resizing-col');
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        });
+        resizer.addEventListener('dblclick', () => {
+            panel.style.width = '';
+            try { localStorage.removeItem(opts.storageKey); } catch (e) { /* ignore */ }
+            E.applyZoom();
+        });
+    }
+
+    function setupResizers() {
+        setupWidthResizer({
+            resizer: '#gs-pages-resizer',
+            panel: '#gs-pages',
+            side: 'left',
+            min: 150,
+            max: 400,
+            storageKey: 'kz_gs_pages_width'
+        });
+        setupWidthResizer({
+            resizer: '#gs-dock-resizer',
+            panel: '#dock',
+            side: 'right',
+            min: 240,
+            max: 620,
+            storageKey: 'kz_gs_dock_width'
+        });
+
+        const splitter = $('#gs-dock-splitter');
+        const lower = $('#gs-layers-panel');
+        const dock = $('#dock');
+        if (!splitter || !lower || !dock) return;
+        const STORE = 'kz_gs_layers_height';
+        try {
+            const saved = parseInt(localStorage.getItem(STORE), 10);
+            if (saved >= 120) lower.style.flexBasis = `${saved}px`;
+        } catch (e) { /* ignore */ }
+
+        let startY = 0, startH = 0;
+        const onMove = (e) => {
+            const dockH = dock.getBoundingClientRect().height;
+            const h = Math.max(120, Math.min(dockH - 160, startH - (e.clientY - startY)));
+            lower.style.flexBasis = `${h}px`;
+        };
+        const onUp = () => {
+            splitter.classList.remove('dragging');
+            document.body.classList.remove('kz-resizing-row');
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            const cur = parseInt(lower.style.flexBasis, 10);
+            if (cur) {
+                try { localStorage.setItem(STORE, String(cur)); } catch (e) { /* ignore */ }
+            }
+        };
+        splitter.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            startY = e.clientY;
+            startH = lower.getBoundingClientRect().height;
+            splitter.classList.add('dragging');
+            document.body.classList.add('kz-resizing-row');
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        });
+        splitter.addEventListener('dblclick', () => {
+            lower.style.flexBasis = '';
+            try { localStorage.removeItem(STORE); } catch (e) { /* ignore */ }
+        });
+    }
+
     /* ───────────── start ───────────── */
     async function start() {
         setupWindow();
         setupMenus();
         setupKeys();
         setupTooltips();
+        setupResizers();
         // read the last project id before refreshDoc() clears it for the empty document
         let last = null;
         try { last = localStorage.getItem(CUR_KEY); } catch (e) { /* ignore */ }

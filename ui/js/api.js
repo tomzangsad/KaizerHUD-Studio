@@ -38,7 +38,7 @@ class APIClient {
             packUuids: projectData.packUuids || null,
             nameplatePosition: projectData.nameplatePosition || 'top_right',
             nameplateMobileOffset: projectData.nameplateMobileOffset != null ? projectData.nameplateMobileOffset : 26,
-            hudChannel: projectData.hudChannel || 'bossbar',
+            hudChannel: 'title',
             syncFolder: projectData.syncFolder || null
         };
 

@@ -217,8 +217,11 @@
         </div>
       </div>
 
+      <div class="kz-resizer-v" id="split-view-resizer" title="Drag to resize · Double-click to reset"></div>
+
       <section id="code-view">
         <aside class="code-tree" id="code-tree"></aside>
+        <div class="kz-resizer-v" id="code-tree-resizer" title="Drag to resize · Double-click to reset"></div>
         <div class="code-main">
           <div class="code-head">
             <span class="code-path" id="code-path"></span>
@@ -241,6 +244,7 @@
     </main>
 
     <!-- Dock -->
+    <div class="kz-resizer-v" id="dock-resizer" title="Drag to resize · Double-click to reset"></div>
     <aside id="dock">
       <section class="dock-panel dock-properties">
         <div class="dock-head">
@@ -377,20 +381,12 @@
           <div><span>Output</span><b>output.zip</b></div>
         </div>
         <fieldset class="kz-fieldset" id="export-channel-box">
-          <legend>Bedrock data channel</legend>
-          <label class="kz-radio">
-            <input type="radio" name="export-channel" value="bossbar" id="export-ch-bossbar" />
-            <span><b>Boss bar</b> <em>— default. Data never replaces other messages; our boss bar must stay first</em></span>
-          </label>
-          <label class="kz-radio">
-            <input type="radio" name="export-channel" value="title" id="export-ch-title" />
-            <span><b>Title</b> <em>— hidden title; few plugins use titles, so it clashes the least</em></span>
-          </label>
+          <legend>Bedrock HUD transport</legend>
+          <p class="kz-note" id="export-channel-note" style="margin-top:0">Uses hidden <b>Title</b> with automatic Multi-Bank overflow (up to 8 banks / ~2,000 bytes, no bossbar conflicts). Requires <code>KaizerMultiBar 2.2.0+</code> — <code>config.yml</code> in <code>output.zip</code> is configured automatically.</p>
           <label class="kz-radio" id="export-ch-debug-row">
             <input type="checkbox" id="export-ch-debug" />
             <span><b>Debug text</b> <em>— testing only: yellow line at the top shows what the pack receives; the title is not hidden</em></span>
           </label>
-          <p class="kz-note" id="export-channel-note">Needs KaizerMultiBar 2.1+. The config.yml in output.zip already has <code>bossbar.channel</code> set to match.</p>
         </fieldset>
         <fieldset class="kz-fieldset" id="export-java-box">
           <legend>Java Edition (optional)</legend>

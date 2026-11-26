@@ -1,8 +1,8 @@
 @echo off
 setlocal EnableExtensions
 rem -------------------------------------------------------------
-rem  Build the KaizerMultiBar plugin (plugins\KaizerMultiBar\target\KaizerMultiBar-2.1.0.jar)
-rem  and copy it to plugins\KaizerMultiBar-2.1.0.jar
+rem  Build the KaizerMultiBar plugin (plugins\KaizerMultiBar\target\KaizerMultiBar-2.2.0.jar)
+rem  and copy it to plugins\KaizerMultiBar-2.2.0.jar
 rem  - finds a JDK 21+ by itself (JAVA_HOME, C:\Program Files\Java\jdk-2x, Adoptium, Microsoft)
 rem  - uses Maven from PATH / MAVEN_HOME, otherwise downloads a portable Maven once
 rem    into plugins\.tools (no install, nothing changed outside this folder)
@@ -10,7 +10,7 @@ rem  Log: build_kaizermultibar_log.txt
 rem -------------------------------------------------------------
 set "ROOT=%~dp0"
 set "PROJ=%ROOT%plugins\KaizerMultiBar"
-set "JAR=KaizerMultiBar-2.1.0.jar"
+set "JAR=KaizerMultiBar-2.2.0.jar"
 set "TOOLS=%ROOT%plugins\.tools"
 set "LOG=%ROOT%build_kaizermultibar_log.txt"
 set "MVN_VER=3.9.9"
@@ -64,7 +64,7 @@ if exist "%PROJ%\target\%JAR%" copy /y "%PROJ%\target\%JAR%" "%ROOT%plugins\%JAR
 :end
 if exist "%PROJ%\target\%JAR%" (
   echo.
-  echo [OK] plugins\%JAR%  ^(put it in the server's plugins\ folder, remove the 2.0.0 jar^)
+  echo [OK] plugins\%JAR%  ^(put it in the server's plugins\ folder, remove older 2.0.x / 2.1.x jars^)
 ) else (
   echo.
   echo [X] Build failed - send build_kaizermultibar_log.txt

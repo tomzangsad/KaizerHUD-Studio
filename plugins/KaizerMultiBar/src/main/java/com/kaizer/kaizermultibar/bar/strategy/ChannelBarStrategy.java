@@ -90,8 +90,8 @@ public class ChannelBarStrategy extends AbstractBarStrategy {
         }
         if (dirtyBanks.isEmpty()) return;
 
-        // Send the first dirty bank immediately; stagger extra dirty banks 1 tick apart so each
-        // persists into its own kz_hud_store_<k> without overwriting an earlier bank on the same tick.
+        // Send the first dirty bank immediately; stagger extra dirty banks 2 ticks apart so each
+        // persists into its own kz_hud_store_<k> without client/TCP tick coalescing dropping one.
         int firstBank = dirtyBanks.get(0);
         String firstData = payloads.get(firstBank);
         send(player, firstData);
@@ -107,7 +107,7 @@ public class ChannelBarStrategy extends AbstractBarStrategy {
                 if (player.isOnline() && active.contains(id)) {
                     send(player, data);
                 }
-            }, d);
+            }, d * 2L);
         }
     }
 
@@ -131,7 +131,7 @@ public class ChannelBarStrategy extends AbstractBarStrategy {
                 if (i == 0) send(player, p);
                 else SchedulerUtil.runTaskLaterForPlayer(plugin.getPlugin(), player, () -> {
                     if (player.isOnline()) send(player, p);
-                }, i);
+                }, i * 2L);
             }
         }
         forget(id);

@@ -117,12 +117,11 @@ function getNameplateSettings() {
   return { position, mobileOffset: Number.isFinite(n) && n >= 0 ? n : DEFAULT_NAMEPLATE_MOBILE_OFFSET };
 }
 
-// How KaizerMultiBar sends the HUD data to Bedrock (Export → Bedrock data channel; codegen.rs HudChannel)
-// ('actionbar' was removed 2026-11-24: Bedrock packs cannot keep action bar data apart → old projects use bossbar)
-const HUD_CHANNELS = ['bossbar', 'title'];
+// How KaizerMultiBar sends the HUD data to Bedrock (codegen.rs HudChannel)
+// ('actionbar' removed 2026-11-24; 'bossbar' removed in v1.0.4 due to multi-plugin bossbar conflicts → all projects use hidden 'title')
+const HUD_CHANNELS = ['title'];
 function getHudChannel() {
-  const app = typeof App !== 'undefined' ? App : {};
-  return HUD_CHANNELS.includes(app.hudChannel) ? app.hudChannel : 'bossbar';
+  return 'title';
 }
 
 /** Extra show/hide conditions ("+ Add condition"), cleaned: [{ papi, op, value, invert }] */

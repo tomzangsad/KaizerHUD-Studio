@@ -28,24 +28,21 @@ function clip(text, max) {
   return s.slice(0, Math.max(0, max - 3)).trimEnd() + '...';
 }
 
-function extractHighlights(body) {
-  const raw = String(body || '').replace(/\r\n/g, '\n').trim();
-  if (!raw) return '';
-  const marker = /^##\s+What's Changed\b/im.exec(raw);
-  let slice = marker ? raw.slice(marker.index + marker[0].length) : raw;
-  // Remove leading separator rules or boilerplate table if fallback
-  const lines = slice
-    .split('\n')
-    .map(l => l.trimEnd())
-    .filter(l => {
-      const t = l.trim();
-      if (!t || t === '---') return false;
-      if (/^##\s+What to Download\b/i.test(t)) return false;
-      if (t.startsWith('| File |') || t.startsWith('|---|') || t.startsWith('| `')) return false;
-      if (t.startsWith('> **Note:**') || t.startsWith('> **Docs')) return false;
-      return true;
-    });
-  return clip(lines.join('\n'), 1500);
+function ghHeaders() {
+  const headers = {
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'kaizerhud-release-notifier',
+  };
+  if (TOKEN) headers.Authorization = `Bearer ${TOKEN}`;
+  return headers;
+}
+
+async function fetchJson(url) {
+  const res = await fetch(url, { headers: ghHeaders() });
+  if (!res.ok) {
+    throw new Error(`GitHub API returned HTTP ${res.status} for ${url}`);
+  }
+  return await res.json();
 }
 
 async function loadRelease() {
@@ -55,98 +52,116 @@ async function loadRelease() {
   const endpoint = (!TAG || TAG.toLowerCase() === 'latest')
     ? `https://api.github.com/repos/${REPO}/releases/latest`
     : `https://api.github.com/repos/${REPO}/releases/tags/${encodeURIComponent(TAG)}`;
-
-  const headers = {
-    Accept: 'application/vnd.github+json',
-    'User-Agent': 'kaizerhud-release-notifier',
-  };
-  if (TOKEN) headers.Authorization = `Bearer ${TOKEN}`;
-
-  const res = await fetch(endpoint, { headers });
-  if (!res.ok) {
-    throw new Error(`GitHub Releases API returned HTTP ${res.status} for ${endpoint}`);
-  }
-  return await res.json();
+  return await fetchJson(endpoint);
 }
 
-function buildPayload(release) {
+function extractBodyBullets(body) {
+  const raw = String(body || '').replace(/\r\n/g, '\n');
+  const bullets = [];
+  for (const line of raw.split('\n')) {
+    const t = line.trim();
+    if (!/^[-*]\s+/.test(t)) continue;
+    let text = t.replace(/^[-*]\s+/, '').trim();
+    // Trim GitHub PR attribution suffix cleanly
+    text = text.replace(/\s+by\s+@\S+\s+in\s+https:\/\/\S+$/i, '').trim();
+    if (!text) continue;
+    bullets.push(`- ${clip(text, 140)}`);
+    if (bullets.length >= 12) break;
+  }
+  return bullets;
+}
+
+async function resolvePrevTag(body, currentTag) {
+  const cmp = /\/compare\/([^\s.]+)\.\.\./.exec(String(body || ''));
+  if (cmp) return cmp[1];
+  try {
+    const releases = await fetchJson(`https://api.github.com/repos/${REPO}/releases?per_page=10`);
+    const prev = releases.find(r => !r.draft && r.tag_name && r.tag_name !== currentTag);
+    return prev ? prev.tag_name : '';
+  } catch {
+    return '';
+  }
+}
+
+async function extractChanges(release) {
+  const fromBody = extractBodyBullets(release.body);
+  if (fromBody.length) return fromBody;
+  if (MOCK_FILE) return [];
+
+  const tag = release.tag_name || TAG;
+  const prevTag = await resolvePrevTag(release.body, tag);
+  if (!prevTag || !tag) return [];
+
+  try {
+    const cmp = await fetchJson(
+      `https://api.github.com/repos/${REPO}/compare/${encodeURIComponent(prevTag)}...${encodeURIComponent(tag)}`
+    );
+    const commits = Array.isArray(cmp.commits) ? cmp.commits : [];
+    const subjects = [];
+    for (const c of commits) {
+      const msg = String(c?.commit?.message || '').split('\n')[0].trim();
+      if (!msg || /^Merge\b/i.test(msg)) continue;
+      subjects.push(msg);
+    }
+    const maxItems = 12;
+    const shown = subjects.slice(0, maxItems).map(s => `- ${clip(s, 140)}`);
+    if (subjects.length > maxItems) {
+      shown.push(`- ... and ${subjects.length - maxItems} more changes`);
+    }
+    return shown;
+  } catch {
+    return [];
+  }
+}
+
+function formatAssets(assets, releaseUrl) {
+  const list = Array.isArray(assets) ? [...assets] : [];
+  if (!list.length) {
+    return [`- [View Release Files](${releaseUrl})`];
+  }
+
+  const labelFor = (name) => {
+    if (/-setup\.exe$/i.test(name)) return { rank: 1, label: 'Windows Installer' };
+    if (/portable.*\.exe$/i.test(name)) return { rank: 2, label: 'Windows Portable' };
+    if (/^KaizerMultiBar-.*\.jar$/i.test(name)) return { rank: 3, label: 'HUD Plugin' };
+    if (/^KaizerUI-.*\.jar$/i.test(name)) return { rank: 4, label: 'GUI Plugin' };
+    return { rank: 5, label: '' };
+  };
+
+  list.sort((a, b) => labelFor(a.name).rank - labelFor(b.name).rank);
+
+  return list.map(a => {
+    const { label } = labelFor(a.name);
+    const suffix = label ? ` - ${label}` : '';
+    return `- [${a.name}](${a.browser_download_url}) (${fmtBytes(a.size)})${suffix}`;
+  });
+}
+
+function buildPayload(release, changes) {
   const tag = release.tag_name || TAG || 'latest';
   const releaseUrl = release.html_url || `https://github.com/${REPO}/releases/tag/${encodeURIComponent(tag)}`;
   const avatarUrl = `https://raw.githubusercontent.com/${REPO}/main/src-tauri/icons/icon.png`;
-  const assets = Array.isArray(release.assets) ? release.assets : [];
 
-  const setupAsset = assets.find(a => /-setup\.exe$/i.test(a.name));
-  const portableAsset = assets.find(a => /portable.*\.exe$/i.test(a.name));
-  const multiBarAsset = assets.find(a => /^KaizerMultiBar-.*\.jar$/i.test(a.name));
-  const uiAsset = assets.find(a => /^KaizerUI-.*\.jar$/i.test(a.name));
-
-  const winLines = [];
-  if (setupAsset) {
-    winLines.push(`- [**${setupAsset.name}**](${setupAsset.browser_download_url}) (${fmtBytes(setupAsset.size)}) - Installer *(Recommended)*`);
-  }
-  if (portableAsset) {
-    winLines.push(`- [**${portableAsset.name}**](${portableAsset.browser_download_url}) (${fmtBytes(portableAsset.size)}) - Portable`);
-  }
-  if (!winLines.length) {
-    winLines.push(`- [View all files on the Release page](${releaseUrl})`);
-  }
-
-  const pluginLines = [];
-  if (multiBarAsset) {
-    pluginLines.push(`- [**${multiBarAsset.name}**](${multiBarAsset.browser_download_url}) (${fmtBytes(multiBarAsset.size)}) - HUD Studio`);
-  }
-  if (uiAsset) {
-    pluginLines.push(`- [**${uiAsset.name}**](${uiAsset.browser_download_url}) (${fmtBytes(uiAsset.size)}) - GUI Studio`);
-  }
-  if (!pluginLines.length) {
-    pluginLines.push(`- [View plugins on the Release page](${releaseUrl})`);
-  }
-
-  const descParts = [
-    `Version **${tag}** is now available for download.`,
-  ];
-  if (EXTRA_NOTE) descParts.push(`\n> ${EXTRA_NOTE}`);
-  const highlights = extractHighlights(release.body);
-  if (highlights) {
-    descParts.push(`\n**What's Changed**\n${highlights}`);
-  }
+  const descSections = [];
+  if (EXTRA_NOTE) descSections.push(EXTRA_NOTE);
+  if (changes.length) descSections.push(`**Changes**\n${changes.join('\n')}`);
+  if (!descSections.length) descSections.push(`Release ${tag} is now available.`);
 
   const embed = {
-    author: {
-      name: 'KaizerHUD Studio',
-      url: `https://github.com/${REPO}`,
-      icon_url: avatarUrl,
-    },
-    title: clip(`KaizerHUD Studio ${tag} Released`, 256),
+    title: clip(`KaizerHUD Studio ${tag}`, 256),
     url: releaseUrl,
     color: 0xf2c86c,
     thumbnail: { url: avatarUrl },
-    description: clip(descParts.join('\n'), 4096),
+    description: clip(descSections.join('\n\n'), 4096),
     fields: [
       {
-        name: 'Windows App',
-        value: clip(winLines.join('\n'), 1024),
-        inline: false,
-      },
-      {
-        name: 'Server Plugins (Paper / Purpur / Folia)',
-        value: clip(pluginLines.join('\n'), 1024),
-        inline: false,
-      },
-      {
-        name: 'Guides & Developer Tools',
-        value: clip([
-          `[Release Page](${releaseUrl})`,
-          `[Wiki](https://github.com/${REPO}/wiki)`,
-          `[User Guide](https://github.com/${REPO}/blob/main/docs/USER_GUIDE.md)`,
-          `[Java API](https://github.com/${REPO}/blob/main/plugins/KaizerUI/API.md)`,
-          `[MCP Server](https://github.com/${REPO}/blob/main/mcp-server/README.md)`,
-        ].join(' | '), 1024),
+        name: 'Downloads',
+        value: clip(formatAssets(release.assets, releaseUrl).join('\n'), 1024),
         inline: false,
       },
     ],
     footer: {
-      text: 'KaizerHUD Studio - Open Source (GPL-3.0)',
+      text: 'KaizerHUD Studio',
     },
     timestamp: release.published_at || new Date().toISOString(),
   };
@@ -164,7 +179,7 @@ function validateDiscordEmbed(payload) {
   if (!e.title || e.title.length > 256) throw new Error('Embed title exceeds 256 chars');
   if (e.description && e.description.length > 4096) throw new Error('Embed description exceeds 4096 chars');
   if (e.fields.length > 25) throw new Error('Embed exceeds 25 fields');
-  let total = (e.title?.length || 0) + (e.description?.length || 0) + (e.footer?.text?.length || 0) + (e.author?.name?.length || 0);
+  let total = (e.title?.length || 0) + (e.description?.length || 0) + (e.footer?.text?.length || 0);
   for (const f of e.fields) {
     if (!f.name || f.name.length > 256) throw new Error(`Field name invalid length: ${f.name}`);
     if (!f.value || f.value.length > 1024) throw new Error(`Field value exceeds 1024 chars: ${f.name}`);
@@ -181,12 +196,13 @@ async function main() {
   }
 
   const release = await loadRelease();
-  const payload = buildPayload(release);
+  const changes = await extractChanges(release);
+  const payload = buildPayload(release, changes);
   const totalChars = validateDiscordEmbed(payload);
 
   if (DRY_RUN) {
     console.log(JSON.stringify(payload, null, 2));
-    console.error(`[dry-run] Valid Discord embed (${totalChars} chars, ${release.assets?.length || 0} assets).`);
+    console.error(`[dry-run] Valid Discord embed (${totalChars} chars, ${changes.length} changes, ${release.assets?.length || 0} assets).`);
     return;
   }
 

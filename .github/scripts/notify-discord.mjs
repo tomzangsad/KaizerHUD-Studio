@@ -81,33 +81,33 @@ function buildPayload(release) {
 
   const winLines = [];
   if (setupAsset) {
-    winLines.push(`• [**${setupAsset.name}**](${setupAsset.browser_download_url}) (${fmtBytes(setupAsset.size)}) — Installer *(แนะนำ)*`);
+    winLines.push(`- [**${setupAsset.name}**](${setupAsset.browser_download_url}) (${fmtBytes(setupAsset.size)}) - Installer *(Recommended)*`);
   }
   if (portableAsset) {
-    winLines.push(`• [**${portableAsset.name}**](${portableAsset.browser_download_url}) (${fmtBytes(portableAsset.size)}) — Portable`);
+    winLines.push(`- [**${portableAsset.name}**](${portableAsset.browser_download_url}) (${fmtBytes(portableAsset.size)}) - Portable`);
   }
   if (!winLines.length) {
-    winLines.push(`• [ดูไฟล์ทั้งหมดในหน้า Release](${releaseUrl})`);
+    winLines.push(`- [View all files on the Release page](${releaseUrl})`);
   }
 
   const pluginLines = [];
   if (multiBarAsset) {
-    pluginLines.push(`• [**${multiBarAsset.name}**](${multiBarAsset.browser_download_url}) (${fmtBytes(multiBarAsset.size)}) — HUD Studio`);
+    pluginLines.push(`- [**${multiBarAsset.name}**](${multiBarAsset.browser_download_url}) (${fmtBytes(multiBarAsset.size)}) - HUD Studio`);
   }
   if (uiAsset) {
-    pluginLines.push(`• [**${uiAsset.name}**](${uiAsset.browser_download_url}) (${fmtBytes(uiAsset.size)}) — GUI Studio`);
+    pluginLines.push(`- [**${uiAsset.name}**](${uiAsset.browser_download_url}) (${fmtBytes(uiAsset.size)}) - GUI Studio`);
   }
   if (!pluginLines.length) {
-    pluginLines.push(`• [ดูปลั๊กอินทั้งหมดในหน้า Release](${releaseUrl})`);
+    pluginLines.push(`- [View plugins on the Release page](${releaseUrl})`);
   }
 
   const descParts = [
-    `อัปเดตเวอร์ชันใหม่ **${tag}** พร้อมให้ดาวน์โหลดแล้ว!`,
+    `Version **${tag}** is now available for download.`,
   ];
-  if (EXTRA_NOTE) descParts.push(`\n> 📌 ${EXTRA_NOTE}`);
+  if (EXTRA_NOTE) descParts.push(`\n> ${EXTRA_NOTE}`);
   const highlights = extractHighlights(release.body);
   if (highlights) {
-    descParts.push(`\n**What's Changed / สรุปการเปลี่ยนแปลง**\n${highlights}`);
+    descParts.push(`\n**What's Changed**\n${highlights}`);
   }
 
   const embed = {
@@ -116,36 +116,36 @@ function buildPayload(release) {
       url: `https://github.com/${REPO}`,
       icon_url: avatarUrl,
     },
-    title: clip(`🚀 KaizerHUD Studio ${tag} Released!`, 256),
+    title: clip(`KaizerHUD Studio ${tag} Released`, 256),
     url: releaseUrl,
     color: 0xf2c86c,
     thumbnail: { url: avatarUrl },
     description: clip(descParts.join('\n'), 4096),
     fields: [
       {
-        name: '🖥️ Windows App',
+        name: 'Windows App',
         value: clip(winLines.join('\n'), 1024),
         inline: false,
       },
       {
-        name: '🔌 Server Plugins (Paper / Purpur / Folia)',
+        name: 'Server Plugins (Paper / Purpur / Folia)',
         value: clip(pluginLines.join('\n'), 1024),
         inline: false,
       },
       {
-        name: '📚 Guides & Developer Tools',
+        name: 'Guides & Developer Tools',
         value: clip([
           `[Release Page](${releaseUrl})`,
-          `[Wiki (EN/TH)](https://github.com/${REPO}/wiki)`,
+          `[Wiki](https://github.com/${REPO}/wiki)`,
           `[User Guide](https://github.com/${REPO}/blob/main/docs/USER_GUIDE.md)`,
           `[Java API](https://github.com/${REPO}/blob/main/plugins/KaizerUI/API.md)`,
           `[MCP Server](https://github.com/${REPO}/blob/main/mcp-server/README.md)`,
-        ].join(' · '), 1024),
+        ].join(' | '), 1024),
         inline: false,
       },
     ],
     footer: {
-      text: 'KaizerHUD Studio • Open Source (GPL-3.0)',
+      text: 'KaizerHUD Studio - Open Source (GPL-3.0)',
     },
     timestamp: release.published_at || new Date().toISOString(),
   };

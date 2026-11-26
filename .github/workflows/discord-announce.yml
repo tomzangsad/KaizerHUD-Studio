@@ -14,7 +14,7 @@ on:
         default: ""
         type: string
       note:
-        description: "Optional extra highlight note (TH / EN)"
+        description: "Optional extra highlight note"
         required: false
         default: ""
         type: string

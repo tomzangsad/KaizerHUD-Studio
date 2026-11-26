@@ -19,6 +19,23 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+      - name: Sync version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $ver = "${{ github.ref_name }}".TrimStart('v')
+          if ($ver -match '^\d+\.\d+\.\d+$') {
+            $confPath = "src-tauri/tauri.conf.json"
+            $conf = Get-Content $confPath -Raw -Encoding UTF8
+            $conf = [regex]::Replace($conf, '"version"\s*:\s*"[^"]+"', "`"version`": `"$ver`"", 1)
+            [System.IO.File]::WriteAllText((Resolve-Path $confPath), $conf, [System.Text.UTF8Encoding]::new($false))
+
+            $cargoPath = "src-tauri/Cargo.toml"
+            $cargo = Get-Content $cargoPath -Raw -Encoding UTF8
+            $cargo = [regex]::Replace($cargo, '(?m)^version\s*=\s*"[^"]+"', "version = `"$ver`"", 1)
+            [System.IO.File]::WriteAllText((Resolve-Path $cargoPath), $cargo, [System.Text.UTF8Encoding]::new($false))
+            Write-Host "Synced app version to $ver"
+          }
       - name: Build release installer and binary
         working-directory: src-tauri
         run: npx --yes @tauri-apps/cli@2 build
@@ -75,6 +92,10 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -99,3 +120,10 @@ jobs:
           files: |
             dist/kaizerhud-windows/*
             dist/kaizer-plugins/**/*.jar
+      - name: Notify Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_MENTION: ${{ vars.DISCORD_MENTION }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node .github/scripts/notify-discord.mjs

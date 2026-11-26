@@ -77,6 +77,8 @@
             backdrop: '#000000',
             backdropAlpha: 0.6,
             bedrockBackdrop: false,
+            prevPage: '',
+            nextPage: '',
             // opening + cascade animation (GS.Motion presets)
             motion: GS.Motion.defaults(),
             elements: []
@@ -117,7 +119,7 @@
                 w: 80, h: 20, image: null, hoverImage: null, frames: [], fps: 8,
                 label: 'Button', labelColor: '#ffffff', labelScale: 1, labelShadow: true,
                 actions: ['message:&aYou clicked a button!'],
-                closeOnClick: false, hoverSound: ''
+                closeOnClick: false, hoverSound: '', tooltip: ''
             });
         } else if (type === 'text') {
             Object.assign(base, { w: 120, h: 12, text: 'Hello %player_name%', color: '#ffffff', scale: 1, shadow: true, align: 'center' });
@@ -125,13 +127,13 @@
             // same idea as the HUD's Player Head: Bedrock = the game's paper doll (only the player
             // looking at the menu), Java = KaizerUI draws the skin. player = whose skin (PAPI ok).
             const head = type === 'player_head';
-            Object.assign(base, { w: 32, h: head ? 32 : 64, player: '%player_name%', hat: true, dollSize: null, dollOffset: null });
+            Object.assign(base, { w: 32, h: head ? 32 : 64, player: '%player_name%', hat: true, dollSize: null, dollOffset: null, tooltip: '' });
             // model on Java: a real 3D player (Mannequin, 1.21.9+) wearing the player's armour,
             // turning as set; flat = the skin drawn as pixels like the head
             if (!head) Object.assign(base, { java3d: true, outfit: 'own', pose: 'standing', turn: 'none', angle: 20, spinSpeed: 45 });
         } else if (type === 'item') {
             // a Minecraft item: Java = the real item (ItemDisplay), Bedrock = the game's texture
-            Object.assign(base, { w: 24, h: 24, item: 'minecraft:diamond_sword', glint: false, look: 'flat', spin: false, bedrockTexture: '' });
+            Object.assign(base, { w: 24, h: 24, item: 'minecraft:diamond_sword', glint: false, look: 'flat', spin: false, bedrockTexture: '', tooltip: '' });
         }
         if (menu) {
             base.x = Math.max(0, Math.round((menu.width - base.w) / 2));
@@ -165,12 +167,17 @@
             mm.id = slug(mm.id, 'menu');
             mm.width = clamp(int(mm.width, DEFAULT_W), 16, MAX_SIDE);
             mm.height = clamp(int(mm.height, DEFAULT_H), 16, MAX_SIDE);
+            mm.prevPage = String(mm.prevPage || '');
+            mm.nextPage = String(mm.nextPage || '');
             mm.motion = Object.assign(GS.Motion.defaults(), mm.motion || {});
             mm.elements = (Array.isArray(mm.elements) ? mm.elements : []).filter(e => e && TYPES.includes(e.type))
                 .map(e => {
                     const ee = Object.assign(newElement(e.type), e);
                     ee.id = ee.id || uid(e.type[0]);
                     if (ee.type === 'button' && !Array.isArray(ee.actions)) ee.actions = [];
+                    if (['button', 'item', 'player_head', 'player_model'].includes(ee.type)) {
+                        ee.tooltip = String(ee.tooltip || '');
+                    }
                     ee.motion = Object.assign(GS.Motion.elementDefaults(ee.type), e.motion || {});
                     if (isPlayer(ee)) {
                         ee.player = String(ee.player == null ? '%player_name%' : ee.player);
@@ -218,6 +225,8 @@
             if (ids.has(m.id)) out.push({ level: 'error', menu: m.id, msg: `Two menus have the id "${m.id}"` });
             ids.add(m.id);
             if (m.command && !/^[a-z0-9_\-]{1,32}$/i.test(m.command)) out.push({ level: 'error', menu: m.id, msg: `Command "${m.command}" must be one word (a-z, 0-9, _ -)` });
+            if (m.prevPage && !p.menus.some(mm => mm.id === m.prevPage)) out.push({ level: 'warn', menu: m.id, msg: `Menu "${m.id}": prevPage "${m.prevPage}" does not exist` });
+            if (m.nextPage && !p.menus.some(mm => mm.id === m.nextPage)) out.push({ level: 'warn', menu: m.id, msg: `Menu "${m.id}": nextPage "${m.nextPage}" does not exist` });
             if (!m.elements.length) out.push({ level: 'warn', menu: m.id, msg: `Menu "${m.id}" is empty` });
             m.elements.forEach(e => {
                 const where = `${m.id} › ${e.name || e.id}`;

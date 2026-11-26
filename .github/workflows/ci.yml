@@ -40,3 +40,14 @@ jobs:
       - name: Build KaizerUI
         working-directory: plugins/KaizerUI
         run: mvn -B clean package
+
+  mcp-test:
+    name: GUI Studio MCP Server (Node.js)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Run MCP server E2E tests
+        run: node mcp-server/test.mjs

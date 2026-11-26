@@ -29,6 +29,15 @@ java:
   # horse   = an invisible untamed horse: the E key (inventory) does nothing while a menu is open
   # display = an invisible display entity: E still opens the inventory (use if horses can't spawn)
   vehicle: horse
+  # Place client-side LIGHT blocks around 3D player models so they stay well-lit at night / in caves
+  light-3d-models: true
+  # Automatically normalize cursor speed from the player's Minecraft mouse sensitivity
+  auto-sensitivity: true
+  # Temporarily hide distracting HUD elements while a Java menu is open (requires PacketEvents)
+  hide-hud:
+    action-bar: true
+    boss-bars: true
+    scoreboard: true
 
 bedrock:
   enabled: true

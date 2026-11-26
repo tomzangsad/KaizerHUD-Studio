@@ -65,6 +65,7 @@
 
     async function drawBig(root) {
         const my = ++renderToken;
+        const k = T().KITS.find(x => x.id === state.kit);
         page = T().build(state.layout, state.kit, { title: state.title || undefined, links: state.linked ? linkPreview() : null });
         const c = await T().renderPreview(page, 2, hover);
         if (my !== renderToken) return;
@@ -72,10 +73,12 @@
         big.width = c.width; big.height = c.height;
         big.getContext('2d').drawImage(c, 0, 0);
         big.style.aspectRatio = `${page.width} / ${page.height}`;
+        big.style.imageRendering = k && k.hiRes ? 'auto' : 'pixelated';
     }
 
     async function drawThumbs(root) {
         const my = renderToken;
+        const k = T().KITS.find(x => x.id === state.kit);
         for (const l of T().LAYOUTS) {
             const cv = root.querySelector(`[data-thumb="${l.id}"]`);
             if (!cv) continue;
@@ -83,7 +86,8 @@
             const c = await T().renderPreview(p, 1, -1);
             if (my !== renderToken && my + 1 !== renderToken) { /* keep drawing: thumbs are cheap */ }
             const g = cv.getContext('2d');
-            g.imageSmoothingEnabled = false;
+            g.imageSmoothingEnabled = !!(k && k.hiRes);
+            cv.style.imageRendering = k && k.hiRes ? 'auto' : 'pixelated';
             g.clearRect(0, 0, cv.width, cv.height);
             const s = Math.min(cv.width / p.width, cv.height / p.height);
             const w = p.width * s, h = p.height * s;
@@ -101,25 +105,28 @@
 
     function toElements(page, menuId) {
         const M = GS.Model, p = GS.Editor.project;
-        const img = (name, data, w, h) => M.addImage(p, { name: `${menuId}_${M.slug(name, 'img')}.png`, data, w, h });
+        const img = (name, data, w, h, res) => M.addImage(p, { name: `${menuId}_${M.slug(name, 'img')}.png`, data, w: w * (res || 1), h: h * (res || 1), res: res || 1 });
         return page.elements.map(e => {
             const base = { id: M.uid(e.type[0]), type: e.type, name: e.name, x: e.x, y: e.y, w: e.w, h: e.h, hidden: false };
-            if (e.type === 'image') return Object.assign(base, { image: img(e.name, e.png, e.w, e.h) });
+            const d = e.detail || 1;
+            if (e.type === 'image') return Object.assign(base, { detail: d, image: img(e.name, e.png, e.w, e.h, d) });
             if (e.type === 'button') {
                 return Object.assign(base, {
-                    image: img(e.name, e.png, e.w, e.h),
-                    hoverImage: e.hoverPng ? img(e.name + '_hover', e.hoverPng, e.w, e.h) : null,
-                    label: e.label || '', labelColor: e.labelColor || '#ffffff', labelScale: 1, labelShadow: true,
-                    actions: (e.actions || []).slice(), closeOnClick: !!e.closeOnClick, hoverSound: ''
+                    detail: d,
+                    image: img(e.name, e.png, e.w, e.h, d),
+                    hoverImage: e.hoverPng ? img(e.name + '_hover', e.hoverPng, e.w, e.h, d) : null,
+                    label: e.label || '', labelColor: e.labelColor || '#ffffff', labelScale: e.labelScale || 1, labelShadow: true,
+                    actions: (e.actions || []).slice(), closeOnClick: !!e.closeOnClick, hoverSound: '',
+                    tooltip: e.tooltip || ''
                 });
             }
             if (M.isPlayer(e)) {
-                Object.assign(base, { player: e.player || '%player_name%', hat: true, dollSize: null, dollOffset: null });
+                Object.assign(base, { player: e.player || '%player_name%', hat: true, dollSize: null, dollOffset: null, tooltip: e.tooltip || '' });
                 if (e.type === 'player_model') Object.assign(base, { java3d: true, outfit: 'own', pose: 'standing', turn: e.turn || 'none', angle: e.angle != null ? e.angle : 20, spinSpeed: e.spinSpeed || 45 });
                 return base;
             }
-            if (e.type === 'item') return Object.assign(base, { item: e.item, glint: !!e.glint, look: e.look || 'flat', spin: !!e.spin, bedrockTexture: '' });
-            return Object.assign(base, { text: e.text, color: e.color || '#ffffff', scale: 1, shadow: e.shadow !== false, align: e.align || 'center' });
+            if (e.type === 'item') return Object.assign(base, { item: e.item, glint: !!e.glint, look: e.look || 'flat', spin: !!e.spin, bedrockTexture: '', tooltip: e.tooltip || '' });
+            return Object.assign(base, { text: e.text, color: e.color || '#ffffff', scale: e.scale || 1, shadow: e.shadow !== false, align: e.align || 'center' });
         });
     }
 

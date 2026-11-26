@@ -201,23 +201,28 @@ README_KaizerUI.txt
 - **เคอร์เซอร์:** ใช้การเปลี่ยน yaw/pitch แบบ relative × `pxPerDeg` × sensitivity × `/kui speed`
   - ไม่มี PacketEvents → ใช้เส้นจาก crosshair ตัดกับ panel แทน
 
-## 6. ยังไม่ได้ทดสอบ / ข้อควรรู้
-- **ทุกอย่างยังไม่ได้ทดสอบในเกมจริง**
-- **สิ่งที่ทดสอบแล้ว:**
-  - UI ด้วย Playwright (เพิ่มรูป / ปุ่ม / ข้อความ / ลาก / หลายหน้า / preview / export / save-reload)
-  - `cargo check` ของทั้งโปรแกรม + `cargo test --lib` 41 ตัว
-  - zip ที่ export จริงผ่าน `build_export`: รูป glyph สูงตรงกับ `height`, JSON parse ได้
-  - ปลั๊กอิน compile ผ่าน (`javac -Xlint:all`) กับ stub ที่เขียนตามลายเซ็นจริงจากซอร์ส Paper / PacketEvents / Floodgate / Geyser / Cumulus
-  - **ยังไม่ได้ build ด้วย Maven จริง**
+## 6. การทดสอบในเกมจริง + ฟีเจอร์ที่อัปเดตล่าสุด (2026-11-26)
+- **ทดสอบในเกมจริงแล้ว** บนเซิร์ฟเวอร์ **Java 1.21.11 + ItemsAdder + PacketEvents** คู่กับ **Bedrock (Geyser + Floodgate)**:
+  - เมนูแสดงผลตรงกันทั้ง 2 ฝั่ง (3D Mannequin + ItemDisplay + Paper Doll หมุนได้บน Bedrock)
+  - หมายเหตุเรื่อง `%player_ping%` บน Bedrock: ต้องเปิดการส่งค่า ping ใน `config.yml` ของ Geyser
+- **แสงสว่างสำหรับ Player Model 3D (`java.light-3d-models: true`):** ปลั๊กอินส่ง fake block `LIGHT[level=15]` เฉพาะฝั่ง client รอบตำแหน่ง Mannequin เพื่อให้ตัวละครสว่างชัดแม้เปิดเมนูตอนกลางคืน/ในถ้ำ และคืนบล็อกเดิมเมื่อปิด
+- **Opening Reveal:** ชะลอการโชว์ 3D Mannequin และ ItemDisplay จนกว่าแอนิเมชัน Opening ของหน้าต่างจะเริ่มปรากฏ ไม่โผล่นำพื้นหลัง
+- **ซ่อน HUD ระหว่างเปิดเมนู (`java.hide-hud`):** ดักซ่อน Action Bar, Boss Bar และ Scoreboard Sidebar ผ่าน PacketEvents ชั่วคราวขณะเปิดเมนู แล้วส่งคืนอัตโนมัติเมื่อปิดหรือปลั๊กอินปิดตัว
+- **ความลื่นของเคอร์เซอร์ & Sensitivity อัตโนมัติ:**
+  - อ่าน rotation packet (`PLAYER_ROTATION` / `PLAYER_POSITION_AND_ROTATION`) ตรงจาก Netty ผ่าน `CameraHook` แล้วยิง `WrapperPlayServerEntityTeleport` ไปที่เคอร์เซอร์ทันที (`teleportDuration = 1`)
+  - `SensitivityTracker` คำนวณ mouse sensitivity ของผู้เล่นจากขั้น pitch ที่หันปกติ (`java.auto-sensitivity: true`) ดูค่าได้ที่ `/kui speed`
+- **หมุนตัวละคร 3D บน Java ด้วยการคลิก–ลาก:** คลิกที่ตัว Mannequin (รองรับทุกโหมดที่ไม่ใช่ `spin`) เคอร์เซอร์จะเปลี่ยนเป็นสีทอง แล้วขยับเมาส์เพื่อหมุนตัวละคร และคลิกอีกครั้งเพื่อปล่อย (รวมถึงในโหมด Preview ของ GUI Studio)
+- **Hover Tooltip (`tooltip`):** เพิ่มช่องใส่ข้อความ tooltip บน Button / Item / Player Head / Player Model — แสดงผลแบบกล่อง Minecraft tooltip ตามตำแหน่งเคอร์เซอร์ทั้งบน Java และใน Preview ของ GUI Studio
+- **การเชื่อมหน้าเมนู & Pagination (`prev-page` / `next-page`, `back` / `next` / `prev`):**
+  - รองรับ action `back` (ย้อนกลับหน้าก่อนหน้าด้วย history stack), `next`, `prev`
+  - บน Java สามารถเลื่อนล้อเมาส์ (scroll) เพื่อเปลี่ยนหน้าตาม `prev-page` / `next-page` ได้ทันที (ใน Preview ใช้ล้อเมาส์เปลี่ยนหน้าได้เช่นกัน)
+  - เพิ่ม **Quick Link** ใน Properties ของปุ่ม, **Navigation & Pagination** ใน Properties ของหน้า, และหน้าต่าง **UI Flow & Connections** ดูแผนภาพลูกศรเชื่อมทุกหน้าและสร้างปุ่มเชื่อมได้ใน 2 คลิก
+- **ชุดสี High-Res 2× (`Modern RPG`):** เพิ่ม 5 ชุดสีใหม่ (`Astral Gold`, `Crimson Sanctum`, `Verdant Relic`, `Glacier Glass`, `Arcane Velvet`) วาดด้วย Canvas 2D ความละเอียด 2× (`detail: 2`) พร้อม Gradient, ขอบโลหะ, แสง Spotlight บนเวทีตัวละคร 3D, ช่องไอเทมโปร่งแสงที่ตัดกับชุดเกราะสีเข้ม, และ Typography Hierarchy (คงชุดสี Pixel / Flat เดิมไว้ทั้งหมด)
 - **ถ้ารูปในเกมกลับด้าน:** `java.flip-facing: true`
 - **ถ้ารูปสูง/ต่ำไป:** `java.offset-y`
-- **Bedrock:** `collection_index` + `collection_details` บนปุ่มที่วางเอง เป็นวิธีที่ใช้กันใน pack ทั่วไป แต่ต้องลองกับ client จริง
-  - ถ้ากดแล้วไม่มีผล ให้ดูที่ `button_mappings`
 - **ขนาดเมนูฝั่ง Bedrock:** มากกว่า ~400×230 อาจล้นจอเล็ก (validate จะเตือน)
 - **ยังไม่ได้ทำ:**
   - CustomForm (ช่องพิมพ์ / slider) ฝั่ง Bedrock
-  - item icon จริง
-  - scroll list
   - ปุ่มที่ไม่มีรูปฝั่ง Java (ตอนนี้แสดงแค่ label และเปลี่ยนสีตอน hover)
 
 ## 7. Motion (animation) — ต้นแบบจาก NxGui แต่ทำแบบของเรา
@@ -288,4 +293,17 @@ README_KaizerUI.txt
 - `GS.McRender.player(canvas, skin, {yaw, headYaw, headPitch, slim, hat})` — ตัวผู้เล่นทั้งตัว (64×64, สกินเก่า 64×32 แปลงด้วย `skin64`) · `GS.Items.drawPlayer(canvas, opt)` / `skinArt('player_model', yaw)` · editor: `<canvas class="gs-doll">` ในกล่อง Player Model, `dollView(e)`, ปุ่ม `.gs-turn` → `dragTurn()` (1.2°/px, เก็บใน `angle`) · Preview: `dollsFollow()` (cursor / mouse) และ `dollsSpin()` (spin)
 - yaw บวก = หน้าหันไปทางซ้ายของคนดู เหมือน yaw ของ Minecraft (`facingYaw() + angle` ในปลั๊กอิน)
 - **Turn = drag** — Java: `click()` บนกล่อง PLAYER_MODEL (ไม่มีปุ่มใต้เคอร์เซอร์) → `grabbed`; `onRotate` เอา yaw ของหัวที่เปลี่ยน × 3 ลบออกจาก `dragYaw` (เมาส์ขวา = หน้าหันขวา) และไม่ขยับเคอร์เซอร์; คลิกถัดไปปล่อย · Bedrock: `bedrockPlayer()` ห่อ doll ด้วย `input_panel` ชื่อ `kz_doll_<id>` (gesture_tracking_button `button.turn_doll`, mapping จาก `button.menu_select`) และ doll `rotation: "gesture_x"` + view bindings จาก panel นั้น — แบบ `skin_viewer_panel` ใน pause_screen.json · editor Preview: `dollGrab()`
+
+---
+
+## 12. Developer API (Java) และ MCP Server (อัปเดต 2026-11-26)
+
+1. **KaizerUI Java Developer API (`kz.kaizerui.api`):**
+   - รองรับ `KaizerUI.get()` และ Bukkit `ServicesManager` สำหรับเปิด/ปิด/รีเฟรชเมนู, ตั้งค่า placeholder รายผู้เล่น (`%key%` / `{key}`), และ override ข้อความหรือไอเท็มแบบ dynamic
+   - รองรับ Bukkit Events: `MenuOpenEvent` (Cancellable + injected placeholders), `MenuClickEvent` (รองรับปุ่ม action `event:<key>`), และ `MenuCloseEvent` (พร้อม `Reason` เช่น `PLAYER_SNEAK`, `SWITCH_MENU`, `API`, `BEDROCK_DISMISSED` ฯลฯ)
+   - ดูรายละเอียดและตัวอย่างโค้ดเพิ่มเติมได้ที่ [API.md](../plugins/KaizerUI/API.md)
+2. **Local MCP Server (`mcp-server/`):**
+   - Node.js ESM MCP server แบบ zero-dependency (stdio JSON-RPC 2.0) ทำงานร่วมกับโฟลเดอร์โปรเจกต์ `gui_projects/` ของ GUI Studio Desktop โดยตรง
+   - มี 17 MCP tools (จัดการโปรเจกต์, เมนู, element, เชื่อม UI Flow, สร้าง PNG ด้วย pure Node, ตรวจสอบ schema, และ export `studio.yml` / `menus/*.yml`) และ 2 resources (`kaizer://docs/schema`, `kaizer://projects`)
+   - ดูวิธีตั้งค่าและรายการคำสั่งทั้งหมดได้ที่ [mcp-server/README.md](../mcp-server/README.md)
 

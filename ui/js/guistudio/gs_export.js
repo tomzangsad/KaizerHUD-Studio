@@ -630,6 +630,8 @@
         L.push(`fullscreen: ${!!menu.fullscreen}`);
         L.push(`backdrop: ${q(menu.backdrop || '#000000')}`);
         L.push(`backdrop-alpha: ${M().clamp(M().num(menu.backdropAlpha, 0.6), 0, 1)}`);
+        if (menu.prevPage) L.push(`prev-page: ${q(menu.prevPage)}`);
+        if (menu.nextPage) L.push(`next-page: ${q(menu.nextPage)}`);
         if (clips.open) L.push(`motion: ${flow({ open: clips.open })}`);
         L.push('elements:');
         const visible = menu.elements.filter(e => !e.hidden && !(e.type === 'image' && !p.images[e.image]) && !(e.type === 'item' && !String(e.item || '').trim()));
@@ -708,6 +710,9 @@
                 L.push(`    align: ${q(e.align || 'center')}`);
                 L.push(`    bedrock-slot: ${slots.get(e.id)}`);
             }
+            if (e.tooltip && String(e.tooltip).trim()) {
+                L.push(`    tooltip: ${q(e.tooltip)}`);
+            }
         });
         return L.join('\n') + '\n';
     }
@@ -776,7 +781,10 @@ Open a menu
 -----------
 ${cmds}
 
-Java players: move the mouse to move the cursor, left click to press, sneak to leave.
+Java players: move the mouse to move the cursor, left click to press, scroll wheel to switch linked pages, sneak to leave.
+Hover tooltips: shown automatically on Java when hovering elements with a tooltip.
+3D Player Model (Java): click any 3D model to grab it, move the mouse to rotate it, click again to release.
+Button actions: supports open:<menu>, back (previous menu), next, prev, close, event:<key> (fires MenuClickEvent API), player:<cmd>, console:<cmd>, message:<text>, sound:<id>, server:<name>.
 Player Head / Player Model: Java shows the real skin of anyone (the server loads skins from Mojang,
 so it needs internet). Bedrock shows the player's own paper doll; a head / model of someone else is Steve.
 Bedrock players: the menu opens as a form with the real mouse / touch.

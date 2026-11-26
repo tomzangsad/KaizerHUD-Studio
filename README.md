@@ -41,7 +41,11 @@ Visual HUD & GUI Studio for **Minecraft Bedrock JSON UI** (via GeyserMC) and **M
 | Plugin | Purpose | Guide |
 |---|---|---|
 | **KaizerMultiBar** (`2.1.0`) | Streams HP, food, armor, air, EXP, PAPI text, and visibility flags to Bedrock HUD packs (Paper / Purpur / Folia 1.21.x–26.x) | [plugins/README.md](plugins/README.md) |
-| **KaizerUI** (`1.0.0`) | Renders GUI Studio menus as interactive holograms on Java and server forms on Bedrock | [plugins/README.md](plugins/README.md) |
+| **KaizerUI** (`1.0.0`) | Renders GUI Studio menus as interactive holograms on Java and server forms on Bedrock (includes Java Developer API `kz.kaizerui.api`) | [plugins/README.md](plugins/README.md) · [Java API](plugins/KaizerUI/API.md) |
+
+## Local MCP Server (AI Assistant Integration)
+
+Use [mcp-server/README.md](mcp-server/README.md) to connect Antigravity, Claude Desktop, or Cursor directly to GUI Studio projects via MCP (`stdio` JSON-RPC 2.0, zero external npm dependencies).
 
 ---
 

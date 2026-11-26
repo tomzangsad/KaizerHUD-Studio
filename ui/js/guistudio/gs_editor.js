@@ -89,6 +89,7 @@
         zoom: 2,
         snap: false,
         previewMode: false,
+        previewHistory: [],
         platform: 'java',
         clipboard: null,
         onChange: null,          // set by shell: marks the document dirty
@@ -199,6 +200,8 @@
             }
             const wrap = $('#gs-elements');
             wrap.innerHTML = '';
+            const tipBox = $('#gs-tooltip');
+            if (tipBox) tipBox.style.display = 'none';
             const selIds = this.selIds();
             m.elements.forEach((e, i) => {
                 if (e.hidden) return;
@@ -374,11 +377,26 @@
 
         renderPages() {
             const ul = $('#gs-page-list');
-            ul.innerHTML = this.project.menus.map((m, i) => `
-                <li class="${i === this.menuIndex ? 'active' : ''}" data-i="${i}">
+            const ids = new Set(this.project.menus.map(x => x.id));
+            ul.innerHTML = this.project.menus.map((m, i) => {
+                const outs = [];
+                m.elements.forEach(e => {
+                    if (e.type !== 'button' || e.hidden) return;
+                    (e.actions || []).forEach(a => {
+                        const t = /^open:(.+)$/i.exec(String(a).trim());
+                        if (t) {
+                            const tid = t[1].trim();
+                            outs.push(`<span class="gs-page-badge ${ids.has(tid) ? '' : 'warn'}" title="Opens ${esc(tid)}">→ ${esc(tid)}</span>`);
+                        }
+                    });
+                });
+                if (m.nextPage) outs.push(`<span class="gs-page-badge page" title="Next page">⇄ ${esc(m.nextPage)}</span>`);
+                return `<li class="${i === this.menuIndex ? 'active' : ''}" data-i="${i}">
                   <span class="gs-page-title">${esc(m.title || m.id)}${this.fullscreenOdd(m) ? ' <span class="gs-page-warn" title="Not full screen like the other pages">⚠</span>' : ''}</span>
                   <span class="gs-page-id">${esc(m.id)}${m.command ? ' · /' + esc(m.command) : ''}</span>
-                </li>`).join('');
+                  ${outs.length ? `<span class="gs-page-links">${outs.slice(0, 4).join('')}${outs.length > 4 ? `<span class="gs-page-badge">+${outs.length - 4}</span>` : ''}</span>` : ''}
+                </li>`;
+            }).join('');
         },
 
         renderLayers() {
@@ -466,13 +484,29 @@
                       ${this.field('Text', 'label', e.label, { wide: true, hint: '&amp; colour codes and %placeholders% work' })}
                       <div class="gs-grid2">${this.field('Colour', 'labelColor', e.labelColor || '#ffffff', { type: 'color' })}${this.field('Size', 'labelScale', e.labelScale, { type: 'number', step: 0.25, min: 0.25 })}</div>
                       ${this.field('Shadow', 'labelShadow', e.labelShadow !== false, { type: 'checkbox' })}</div>`;
+                const navCur = (e.actions || []).map(s => String(s).trim()).find(s => /^open:/.test(s) || s === 'back' || s === 'close' || s === 'next' || s === 'prev') || '';
+                const linkOpts = [
+                    ['', '(No page link)'],
+                    ['back', '← Back (previous menu)'],
+                    ['next', '▶ Next page'],
+                    ['prev', '◀ Previous page'],
+                    ['close', '✕ Close menu']
+                ].concat(this.project.menus.map(mm => ['open:' + mm.id, `Open: ${mm.title || mm.id} (${mm.id})`]));
+                const openTarget = /^open:(.+)$/.exec(navCur);
+                const canJump = openTarget && this.project.menus.some(mm => mm.id === openTarget[1].trim());
                 h += `<div class="gs-section"><div class="gs-sec-head">On click</div>
+                      ${this.field('Quick link (menu navigation)', 'quickLink', navCur, { type: 'select', options: linkOpts })}
+                      <div class="gs-row-actions">
+                        ${canJump ? `<button class="ghost-btn small" data-action="jump-link"><span>Go → ${esc(openTarget[1].trim())}</span></button>` : ''}
+                        <button class="ghost-btn small" data-action="create-link"><span>+ New linked page</span></button>
+                      </div>
                       ${this.field('Actions (one per line)', 'actions', (e.actions || []).join('\n'), {
-                          type: 'textarea', rows: 5,
-                          hint: '<code>player:</code>cmd · <code>console:</code>cmd · <code>open:</code>menu · <code>close</code> · <code>message:</code>text · <code>sound:</code>id · <code>server:</code>name<br>Placeholders like %player_name% work.'
+                          type: 'textarea', rows: 4,
+                          hint: '<code>open:</code>menu · <code>back</code> · <code>next</code> · <code>prev</code> · <code>close</code> · <code>event:</code>key · <code>player:</code>cmd · <code>console:</code>cmd · <code>message:</code>text · <code>sound:</code>id · <code>server:</code>name'
                       })}
                       ${this.field('Close the menu after clicking', 'closeOnClick', !!e.closeOnClick, { type: 'checkbox' })}
-                      ${this.field('Hover sound (optional)', 'hoverSound', e.hoverSound || '', { wide: true, hint: 'Empty = the project hover sound' })}</div>`;
+                      ${this.field('Hover sound (optional)', 'hoverSound', e.hoverSound || '', { wide: true, hint: 'Empty = the project hover sound' })}
+                      ${this.field('Tooltip (hover popup, Java)', 'tooltip', e.tooltip || '', { type: 'textarea', rows: 2, hint: 'Shown on hover in Java &amp; Preview. Supports &amp; colours and %placeholders%.' })}</div>`;
             }
             if (e.type === 'text') {
                 h += `<div class="gs-section"><div class="gs-sec-head">Text</div>
@@ -501,6 +535,8 @@
                       <div class="gs-grid2">${this.field('Doll W', 'dollSize.0', ds[0], { placeholder: String(db.size[0]) })}${this.field('Doll H', 'dollSize.1', ds[1], { placeholder: String(db.size[1]) })}</div>
                       <div class="gs-grid2">${this.field('Doll X', 'dollOffset.0', dof[0], { placeholder: String(db.offset[0]) })}${this.field('Doll Y', 'dollOffset.1', dof[1], { placeholder: String(db.offset[1]) })}</div>
                       <div class="gs-hint">Same as Doll Size / Doll Offset of the HUD's Player Head${e.type === 'player_head' ? ' — the doll is drawn bigger than the box and only the head shows' : ''}. Empty = worked out from the size.</div></div>`;
+                h += `<div class="gs-section"><div class="gs-sec-head">Tooltip</div>
+                      ${this.field('Tooltip (hover popup, Java)', 'tooltip', e.tooltip || '', { type: 'textarea', rows: 2, hint: 'Shown on hover in Java &amp; Preview.' })}</div>`;
             }
             if (e.type === 'item') {
                 const bt = GS.Items ? GS.Items.bedrockTexture(Object.assign({}, e, { bedrockTexture: '' })) : null;
@@ -510,6 +546,7 @@
                       <div class="gs-grid2">${this.field('Look (Java)', 'look', e.look || 'flat', { type: 'select', options: [['flat', 'Like in the inventory'], ['3d', '3D (held item)']] })}${this.field('Enchant glint', 'glint', !!e.glint, { type: 'checkbox' })}</div>
                       ${this.field('Spin (Java)', 'spin', !!e.spin, { type: 'checkbox' })}
                       ${this.field('Bedrock texture', 'bedrockTexture', e.bedrockTexture || '', { wide: true, placeholder: bt || '(not shown on Bedrock)', hint: 'Path in the Bedrock game\'s own pack. Empty = worked out from the id (names differ from Java for some items).' })}
+                      ${this.field('Tooltip (hover popup, Java)', 'tooltip', e.tooltip || '', { type: 'textarea', rows: 2, hint: 'Shown on hover in Java &amp; Preview.' })}
                       <div class="gs-hint">Java shows the real item (ItemsAdder / Nexo items too). The picture here comes from your own Minecraft files — Choose item… → Load.</div></div>`;
             }
             if (e.type === 'image' && e.gen) {
@@ -580,6 +617,7 @@
         menuPropsHtml() {
             const m = this.menu();
             const mo = Object.assign(GS.Motion.defaults(), m.motion || {});
+            const pageOpts = [['', '(None)']].concat(this.project.menus.filter(x => x !== m).map(x => [x.id, `${x.title || x.id} (${x.id})`]));
             return `<div class="gs-prop-title">Menu page</div>
                 <div class="gs-section">
                   ${this.field('Id', 'menu.id', m.id, { wide: true, hint: 'a-z 0-9 _ · used by <code>/kui open ' + esc(m.id) + '</code> and <code>open:' + esc(m.id) + '</code>' })}
@@ -590,6 +628,17 @@
                       [`${m.width}x${m.height}`, `${m.width} × ${m.height} (now)`], ['320x180', '320 × 180 — big pixels'], ['400x225', '400 × 225'],
                       ['480x270', '480 × 270'], ['640x360', '640 × 360 — default']] })}
                   <div class="gs-grid2">${this.field('Text refresh (ticks)', 'menu.refreshTicks', m.refreshTicks, { type: 'number', min: 0 })}${this.field('Open sound', 'menu.openSound', m.openSound)}</div>
+                </div>
+                <div class="gs-section"><div class="gs-sec-head">Navigation &amp; Pagination</div>
+                  <div class="gs-grid2">
+                    ${this.field('Previous page (scroll ↑)', 'menu.prevPage', m.prevPage || '', { type: 'select', options: pageOpts })}
+                    ${this.field('Next page (scroll ↓)', 'menu.nextPage', m.nextPage || '', { type: 'select', options: pageOpts })}
+                  </div>
+                  <div class="gs-row-actions">
+                    <button class="ghost-btn small" data-action="add-next-page"><span>+ Add Next Page (Paginate)</span></button>
+                    <button class="ghost-btn small" data-action="open-flow"><span>UI Flow…</span></button>
+                  </div>
+                  <div class="gs-hint">Java players can scroll the mouse wheel to turn pages, or use buttons with <code>next</code> / <code>prev</code> / <code>open:&lt;id&gt;</code>.</div>
                 </div>
                 <div class="gs-section"><div class="gs-sec-head">Full screen</div>
                   ${this.fullscreenNotice(m)}
@@ -655,12 +704,17 @@
                 if (k === 'id') {
                     const nid = M.slug(val, m.id);
                     if (p.menus.some(x => x !== m && x.id === nid)) { GS.toast(`A menu with id "${nid}" already exists`, 'error'); this.renderProps(); return; }
-                    // keep open:<id> actions pointing at the renamed menu
-                    p.menus.forEach(mm => mm.elements.forEach(e => {
-                        if (Array.isArray(e.actions)) e.actions = e.actions.map(a => String(a).trim() === 'open:' + m.id ? 'open:' + nid : a);
-                    }));
+                    // keep open:<id> actions and pagination pointing at the renamed menu
+                    p.menus.forEach(mm => {
+                        if (mm.prevPage === m.id) mm.prevPage = nid;
+                        if (mm.nextPage === m.id) mm.nextPage = nid;
+                        mm.elements.forEach(e => {
+                            if (Array.isArray(e.actions)) e.actions = e.actions.map(a => String(a).trim() === 'open:' + m.id ? 'open:' + nid : a);
+                        });
+                    });
                     m.id = nid;
-                } else if (k === 'width' || k === 'height') m[k] = M.clamp(M.int(val, m[k]), 16, M.MAX_SIDE);
+                } else if (k === 'prevPage' || k === 'nextPage') m[k] = String(val || '').trim();
+                else if (k === 'width' || k === 'height') m[k] = M.clamp(M.int(val, m[k]), 16, M.MAX_SIDE);
                 else if (k === 'sizePreset') {
                     const [w, h] = String(val).split('x').map(Number);
                     if (w && h) {
@@ -703,6 +757,16 @@
                 this.changed();
                 if (this.previewMode) this.motionReplay();
                 return;
+            }
+            if (key === 'quickLink') {
+                const kept = (e.actions || []).filter(s => {
+                    const t = String(s).trim().toLowerCase();
+                    return !(t.startsWith('open:') || t === 'back' || t === 'close' || t === 'next' || t === 'prev');
+                });
+                if (val) kept.push(val);
+                e.actions = kept;
+                if (val && val !== 'close') e.closeOnClick = false;
+                return this.changed();
             }
             if (key === 'fps') { e.fps = M.clamp(M.num(val, 8), 1, 20); return this.changed(); }
             if (key === 'detail') { e.detail = [1, 2, 4, 8].includes(Number(val)) ? Number(val) : 1; return this.changed(); }
@@ -1355,8 +1419,23 @@
                 }
             });
 
-            // mouse wheel = zoom at the mouse (Shift + wheel = scroll sideways)
+            // mouse wheel = scroll pages in preview, or zoom at the mouse while editing (Shift + wheel = scroll sideways)
             pb.addEventListener('wheel', (ev) => {
+                if (this.previewMode && !ev.ctrlKey) {
+                    const m = this.menu();
+                    const dy = ev.deltaMode === 1 ? ev.deltaY * 33 : ev.deltaY;
+                    const targetId = dy > 0 ? m.nextPage : dy < 0 ? m.prevPage : '';
+                    if (targetId) {
+                        const idx = this.project.menus.findIndex(x => x.id === targetId);
+                        if (idx >= 0) {
+                            ev.preventDefault();
+                            this.menuIndex = idx;
+                            this.renderAll();
+                            this.zoomFit();
+                            return;
+                        }
+                    }
+                }
                 if (ev.shiftKey && !ev.ctrlKey) return;
                 ev.preventDefault();
                 const dy = ev.deltaMode === 1 ? ev.deltaY * 33 : ev.deltaY;   // lines → pixels
@@ -1448,6 +1527,10 @@
                 else if (a === 'play-motion') this.playMotion();
                 else if (a === 'edit-gen') this.editGenerated();
                 else if (a === 'pick-item') this.pickItem();
+                else if (a === 'jump-link') this.jumpLink();
+                else if (a === 'create-link') this.createLinkedPage();
+                else if (a === 'add-next-page') this.addNextPage();
+                else if (a === 'open-flow') this.openFlowDialog();
                 else if (a === 'fs-this' || a === 'fs-all') {
                     this.checkpoint();
                     (a === 'fs-all' ? this.project.menus : [this.menu()]).forEach(mm => { mm.fullscreen = true; });
@@ -1517,7 +1600,7 @@
          */
         dollGrab(ev, p) {
             if (this._grab) { if (this._grab.stopMove) this._grab.stopMove(); this._grab = null; return true; }   // second click drops it
-            const e = this.menu().elements.slice().reverse().find(x => x.type === 'player_model' && !x.hidden && x.turn === 'drag'
+            const e = this.menu().elements.slice().reverse().find(x => x.type === 'player_model' && !x.hidden && x.turn !== 'spin'
                 && p.x >= x.x && p.y >= x.y && p.x < x.x + x.w && p.y < x.y + x.h);
             if (!e) return false;
             this._dolls = this._dolls || {};
@@ -1527,7 +1610,8 @@
                 if (this._grab !== grab) return;
                 const dx = mv.clientX - grab.x;
                 if (Math.abs(dx) > 2) grab.moved = true;
-                this._dolls[e.id] = { yaw: grab.yaw0 - dx * 1.2 };      // drag right = the front turns right
+                const newYaw = grab.yaw0 - dx * 1.2;
+                this._dolls[e.id] = { yaw: newYaw, baseYaw: newYaw };      // drag right = the front turns right
                 this.redrawDoll(e);
             };
             const onUp = () => {
@@ -1544,19 +1628,20 @@
             const m = this.menu();
             this._dolls = this._dolls || {};
             m.elements.forEach(e => {
-                if (e.type !== 'player_model' || e.hidden) return;
-                const base = M.num(e.angle, 0);
+                if (e.type !== 'player_model' || e.hidden || (this._grab && this._grab.id === e.id)) return;
+                const cur = this._dolls[e.id] || {};
+                const base = cur.baseYaw != null ? cur.baseYaw : M.num(e.angle, 0);
                 if (e.turn === 'mouse') {
                     // the whole player turns as the cursor moves over the menu: one side to the other = a full turn
                     const rel = M.clamp((p.x - (e.x + e.w / 2)) / Math.max(1, m.width / 2), -1, 1);
-                    this._dolls[e.id] = { yaw: base - rel * 180 };   // the front follows the cursor's side
+                    this._dolls[e.id] = { yaw: base - rel * 180, baseYaw: base };   // the front follows the cursor's side
                 } else if (e.turn === 'cursor') {
                     // the head looks at the cursor (up to 60° aside, 50° up / down)
                     const hx = e.x + e.w / 2, hy = e.y + e.h * 0.12;
                     const dist = Math.max(e.h, 40);
                     const yawTo = Math.atan2(p.x - hx, dist) * 180 / Math.PI;
                     const pitchTo = Math.atan2(p.y - hy, dist) * 180 / Math.PI;
-                    this._dolls[e.id] = { yaw: base, headYaw: M.clamp(-yawTo, -60, 60), headPitch: M.clamp(-pitchTo, -50, 50) };
+                    this._dolls[e.id] = { yaw: base, baseYaw: base, headYaw: M.clamp(-yawTo, -60, 60), headPitch: M.clamp(-pitchTo, -50, 50) };
                 } else return;
                 this.redrawDoll(e);
             });
@@ -1593,23 +1678,63 @@
             }
             return null;
         },
+        tooltipAt(p) {
+            const els = this.menu().elements;
+            for (let i = els.length - 1; i >= 0; i--) {
+                const e = els[i];
+                if (e.hidden || !e.tooltip || !String(e.tooltip).trim()) continue;
+                if (p.x >= e.x && p.y >= e.y && p.x < e.x + e.w && p.y < e.y + e.h) return e;
+            }
+            return null;
+        },
         previewHover(p) {
             const hit = this.hitTest(p);
             $$('#gs-elements .gs-el').forEach(d => d.classList.toggle('hover', !!hit && d.dataset.id === hit.id));
             if (this._mo) this._mo.hovered = hit ? hit.id : null;
+            const box = $('#gs-tooltip');
+            if (!box) return;
+            const tipEl = this.tooltipAt(p);
+            if (!tipEl) { box.style.display = 'none'; return; }
+            const html = String(tipEl.tooltip).split('\n').map(line => mcToHtml(samplePapi(line), '#ffffff')).join('<br>');
+            box.innerHTML = html;
+            box.style.display = 'block';
+            const m = this.menu();
+            const bw = box.offsetWidth || 80, bh = box.offsetHeight || 20;
+            let tx = p.x + 8, ty = p.y + 8;
+            if (tx + bw > m.width - 2) tx = Math.max(2, p.x - bw - 6);
+            if (ty + bh > m.height - 2) ty = Math.max(2, p.y - bh - 6);
+            box.style.left = Math.round(tx) + 'px';
+            box.style.top = Math.round(ty) + 'px';
         },
         previewClick(p) {
             const hit = this.hitTest(p);
             if (!hit) return;
             if (this._mo) this._mo.press[hit.id] = this._mo.now();
+            const cur = this.menu();
             const acts = (hit.actions || []).map(a => String(a).trim());
             const open = acts.map(a => /^open:(.+)$/.exec(a)).find(Boolean);
-            const others = acts.filter(a => !/^open:/.test(a));
+            const hasBack = acts.some(a => a.toLowerCase() === 'back');
+            const hasNext = acts.some(a => a.toLowerCase() === 'next');
+            const hasPrev = acts.some(a => a.toLowerCase() === 'prev');
+            const others = acts.filter(a => !/^(open:|back$|next$|prev$)/i.test(a));
             if (others.length) GS.toast(others.join('  ·  '));
             if (open) {
                 const i = this.project.menus.findIndex(m => m.id === open[1].trim());
+                if (i >= 0) {
+                    this.previewHistory.push(cur.id);
+                    this.menuIndex = i; this.renderAll(); this.zoomFit();
+                } else GS.toast(`Menu "${open[1]}" does not exist`, 'error');
+            } else if (hasBack) {
+                const prevId = this.previewHistory.pop();
+                const i = prevId ? this.project.menus.findIndex(m => m.id === prevId) : -1;
                 if (i >= 0) { this.menuIndex = i; this.renderAll(); this.zoomFit(); }
-                else GS.toast(`Menu "${open[1]}" does not exist`, 'error');
+                else GS.toast('(menu closes — no previous page)');
+            } else if (hasNext && cur.nextPage) {
+                const i = this.project.menus.findIndex(m => m.id === cur.nextPage);
+                if (i >= 0) { this.menuIndex = i; this.renderAll(); this.zoomFit(); }
+            } else if (hasPrev && cur.prevPage) {
+                const i = this.project.menus.findIndex(m => m.id === cur.prevPage);
+                if (i >= 0) { this.menuIndex = i; this.renderAll(); this.zoomFit(); }
             } else if (hit.closeOnClick || acts.includes('close')) GS.toast('(menu closes)');
         },
         /* ───────────── motion preview (same presets as the game) ───────────── */
@@ -1706,9 +1831,213 @@
 
         togglePreview() {
             this.previewMode = !this.previewMode;
+            if (!this.previewMode) this.previewHistory = [];
             this.renderCanvas();
             this.renderStatus();
-            if (this.previewMode) GS.toast('Preview: hover and click the buttons. Press P or Esc to edit again.');
+            if (this.previewMode) GS.toast('Preview: hover and click the buttons (wheel turns linked pages). Press P or Esc to edit again.');
+        },
+
+        /* ───────────── UI-to-UI linking, pagination & flow map ───────────── */
+
+        jumpLink() {
+            const e = this.element();
+            if (!e || e.type !== 'button') return;
+            const open = (e.actions || []).map(s => /^open:(.+)$/.exec(String(s).trim())).find(Boolean);
+            if (!open) return;
+            const idx = this.project.menus.findIndex(m => m.id === open[1].trim());
+            if (idx >= 0) this.selectMenu(idx);
+            else GS.toast(`Menu "${open[1].trim()}" does not exist`, 'error');
+        },
+
+        async createLinkedPage() {
+            const e = this.element();
+            if (!e || e.type !== 'button') return;
+            const baseName = (e.label || e.name || 'sub_menu').replace(/[&§][0-9a-fk-or]/gi, '').trim() || 'sub_menu';
+            const title = await window.kzPrompt('New linked menu title', baseName);
+            if (title == null || !title.trim()) return;
+            this.checkpoint();
+            const cur = this.menu();
+            const id = this.uniqueMenuId(title.trim());
+            const m = M.newMenu(id, title.trim());
+            m.width = cur.width; m.height = cur.height; m.fullscreen = !!cur.fullscreen;
+            // copy window backdrop image if present so style matches
+            const bg = cur.elements.find(x => x.type === 'image' && x.x === 0 && x.y === 0 && x.w === cur.width && x.h === cur.height);
+            if (bg) m.elements.push(Object.assign(M.newElement('image', m), { name: bg.name, x: 0, y: 0, w: bg.w, h: bg.h, image: bg.image, detail: bg.detail || 1 }));
+            m.elements.push(Object.assign(M.newElement('text', m), { name: 'Title', x: Math.round((m.width - 160) / 2), y: 6, w: 160, h: 14, text: '&l' + title.trim(), align: 'center' }));
+            m.elements.push(Object.assign(M.newElement('button', m), { name: 'Back', label: '← Back', x: m.width - 82, y: m.height - 27, w: 70, h: 18, actions: ['back'] }));
+            this.project.menus.push(m);
+            const kept = (e.actions || []).filter(s => {
+                const t = String(s).trim().toLowerCase();
+                return !(t.startsWith('open:') || t === 'back' || t === 'close' || t === 'next' || t === 'prev');
+            });
+            kept.push('open:' + id);
+            e.actions = kept;
+            e.closeOnClick = false;
+            this.menuIndex = this.project.menus.length - 1;
+            this.selected = null;
+            this.changed();
+            this.zoomFit();
+            GS.toast(`Created & linked "${id}"`, 'ok');
+        },
+
+        addNextPage() {
+            const cur = this.menu();
+            this.checkpoint();
+            const stem = cur.id.replace(/_p\d+$/, '');
+            let n = 2;
+            while (this.project.menus.some(x => x.id === `${stem}_p${n}`)) n++;
+            const id = `${stem}_p${n}`;
+            const next = M.newMenu(id, `${cur.title || cur.id} (${n})`);
+            next.width = cur.width; next.height = cur.height; next.fullscreen = !!cur.fullscreen;
+            next.backdrop = cur.backdrop; next.backdropAlpha = cur.backdropAlpha;
+            const bg = cur.elements.find(x => x.type === 'image' && x.x === 0 && x.y === 0 && x.w === cur.width && x.h === cur.height);
+            if (bg) next.elements.push(Object.assign(M.newElement('image', next), { name: bg.name, x: 0, y: 0, w: bg.w, h: bg.h, image: bg.image, detail: bg.detail || 1 }));
+            const titleEl = cur.elements.find(x => x.type === 'text' && /^title$/i.test(x.name));
+            if (titleEl) next.elements.push(Object.assign(M.newElement('text', next), { name: 'Title', x: titleEl.x, y: titleEl.y, w: titleEl.w, h: titleEl.h, text: `${cur.title || cur.id} (${n})`, color: titleEl.color, scale: titleEl.scale || 1, align: titleEl.align }));
+            // link pagination both ways
+            cur.nextPage = id;
+            next.prevPage = cur.id;
+            if (!cur.elements.some(x => x.type === 'button' && (x.actions || []).some(a => a.trim() === 'next' || a.trim() === 'open:' + id))) {
+                cur.elements.push(Object.assign(M.newElement('button', cur), { name: 'Next Page', label: 'Next ▶', x: cur.width - 78, y: cur.height - 26, w: 66, h: 17, actions: ['next'] }));
+            }
+            next.elements.push(Object.assign(M.newElement('button', next), { name: 'Prev Page', label: '◀ Prev', x: 12, y: next.height - 26, w: 66, h: 17, actions: ['prev'] }));
+            this.project.menus.splice(this.menuIndex + 1, 0, next);
+            this.menuIndex++;
+            this.selected = null;
+            this.changed();
+            this.zoomFit();
+            GS.toast(`Added page "${id}" linked to "${cur.id}"`, 'ok');
+        },
+
+        openFlowDialog() {
+            const p = this.project;
+            const menus = p.menus;
+            const ids = new Set(menus.map(m => m.id));
+            const incoming = new Map(menus.map(m => [m.id, 0]));
+            const edges = [];
+            menus.forEach(m => {
+                if (m.nextPage) {
+                    edges.push({ from: m.id, to: m.nextPage, kind: 'page', label: 'next' });
+                    if (ids.has(m.nextPage)) incoming.set(m.nextPage, (incoming.get(m.nextPage) || 0) + 1);
+                }
+                if (m.prevPage) {
+                    edges.push({ from: m.id, to: m.prevPage, kind: 'page', label: 'prev' });
+                    if (ids.has(m.prevPage)) incoming.set(m.prevPage, (incoming.get(m.prevPage) || 0) + 1);
+                }
+                m.elements.forEach(e => {
+                    if (e.type !== 'button' || e.hidden) return;
+                    (e.actions || []).forEach(a => {
+                        const t = /^open:(.+)$/.exec(String(a).trim());
+                        if (t) {
+                            const tid = t[1].trim();
+                            edges.push({ from: m.id, to: tid, kind: 'open', label: e.label || e.name || 'btn', broken: !ids.has(tid) });
+                            if (ids.has(tid)) incoming.set(tid, (incoming.get(tid) || 0) + 1);
+                        }
+                    });
+                });
+            });
+
+            const cols = Math.max(2, Math.min(4, Math.ceil(Math.sqrt(menus.length))));
+            const cardW = 188, cardH = 88, gapX = 56, gapY = 42, pad = 24;
+            const pos = new Map();
+            menus.forEach((m, idx) => {
+                const c = idx % cols, r = Math.floor(idx / cols);
+                pos.set(m.id, { x: pad + c * (cardW + gapX), y: pad + r * (cardH + gapY) });
+            });
+            const rows = Math.ceil(menus.length / cols);
+            const canvasW = Math.max(640, pad * 2 + cols * cardW + Math.max(0, cols - 1) * gapX);
+            const canvasH = Math.max(260, pad * 2 + rows * cardH + Math.max(0, rows - 1) * gapY);
+
+            const svgPaths = edges.map(ed => {
+                const a = pos.get(ed.from), b = pos.get(ed.to);
+                if (!a || !b) return '';
+                const x1 = a.x + cardW / 2, y1 = a.y + cardH / 2;
+                const x2 = b.x + cardW / 2, y2 = b.y + cardH / 2;
+                const dx = x2 - x1, dy = y2 - y1;
+                const cx1 = x1 + dx * 0.35 - dy * 0.14, cy1 = y1 + dy * 0.35 + dx * 0.14;
+                const cx2 = x1 + dx * 0.65 - dy * 0.14, cy2 = y1 + dy * 0.65 + dx * 0.14;
+                const col = ed.broken ? '#e5534b' : ed.kind === 'page' ? '#46c882' : '#52a0f0';
+                const dash = ed.kind === 'page' ? 'stroke-dasharray="5 4"' : '';
+                return `<path d="M ${x1} ${y1} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${x2} ${y2}" fill="none" stroke="${col}" stroke-width="2" ${dash} marker-end="url(#${ed.kind === 'page' ? 'arr-p' : 'arr-o'})" opacity="0.85"/>`;
+            }).join('');
+
+            const cardsHtml = menus.map((m, idx) => {
+                const pt = pos.get(m.id);
+                const hasBack = m.elements.some(e => e.type === 'button' && (e.actions || []).some(a => a.trim().toLowerCase() === 'back'));
+                const brokenCount = edges.filter(ed => ed.from === m.id && ed.broken).length;
+                const isOrphan = idx > 0 && !m.command && (incoming.get(m.id) || 0) === 0;
+                const tags = [];
+                if (m.command) tags.push(`<span class="gs-page-badge">/${esc(m.command)}</span>`);
+                if (hasBack) tags.push(`<span class="gs-page-badge">↩ back</span>`);
+                if (m.nextPage) tags.push(`<span class="gs-page-badge page">→ ${esc(m.nextPage)}</span>`);
+                if (brokenCount) tags.push(`<span class="gs-page-badge warn">${brokenCount} broken</span>`);
+                if (isOrphan) tags.push(`<span class="gs-page-badge warn">unlinked</span>`);
+                return `<div class="gs-flow-card ${idx === this.menuIndex ? 'active' : ''} ${isOrphan ? 'orphan' : ''}" data-flow-idx="${idx}" style="left:${pt.x}px;top:${pt.y}px">
+                    <div class="gs-flow-title">${esc(m.title || m.id)}</div>
+                    <div class="gs-flow-meta">${esc(m.id)} · ${m.width}×${m.height}</div>
+                    <div class="gs-flow-tags">${tags.join('') || '<span class="gs-page-badge">page</span>'}</div>
+                </div>`;
+            }).join('');
+
+            const opts = menus.map(m => `<option value="${esc(m.id)}">${esc(m.title || m.id)} (${esc(m.id)})</option>`).join('');
+            const body = `
+                <div class="gs-flow-bar">
+                  <span class="gs-muted">Connect:</span>
+                  <select id="gs-flow-from">${opts}</select>
+                  <span>→</span>
+                  <select id="gs-flow-to">${opts}</select>
+                  <input type="text" id="gs-flow-label" placeholder="Button label" value="Open" />
+                  <button class="primary-btn small" id="gs-flow-add">+ Add Link Button</button>
+                </div>
+                <div class="gs-flow-canvas">
+                  <div class="gs-flow-inner" style="width:${canvasW}px;height:${canvasH}px">
+                    <svg class="gs-flow-svg" width="${canvasW}" height="${canvasH}">
+                      <defs>
+                        <marker id="arr-o" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 1 L 10 5 L 0 9 z" fill="#52a0f0"/></marker>
+                        <marker id="arr-p" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 1 L 10 5 L 0 9 z" fill="#46c882"/></marker>
+                      </defs>
+                      ${svgPaths}
+                    </svg>
+                    ${cardsHtml}
+                  </div>
+                </div>
+                <div class="gs-flow-legend">
+                  <span><i style="background:#52a0f0"></i>Button link (<code>open:</code>)</span>
+                  <span><i style="background:#46c882"></i>Pagination (<code>nextPage / prevPage</code>)</span>
+                  <span class="gs-muted">Click any page card to open &amp; edit it.</span>
+                </div>`;
+
+            GS.modal('UI Flow & Connections', body, [['ok', 'Close', 'primary']], {
+                cls: 'xwide',
+                onOpen: (root, done) => {
+                    const fromSel = root.querySelector('#gs-flow-from');
+                    const toSel = root.querySelector('#gs-flow-to');
+                    fromSel.value = this.menu().id;
+                    if (menus.length > 1) toSel.value = menus[(this.menuIndex + 1) % menus.length].id;
+                    root.querySelector('#gs-flow-add').addEventListener('click', () => {
+                        const fromM = menus.find(m => m.id === fromSel.value);
+                        const toM = menus.find(m => m.id === toSel.value);
+                        if (!fromM || !toM) return;
+                        if (fromM === toM) { GS.toast('Pick two different menus', 'error'); return; }
+                        const lbl = root.querySelector('#gs-flow-label').value.trim() || toM.title || toM.id;
+                        this.checkpoint();
+                        fromM.elements.push(Object.assign(M.newElement('button', fromM), {
+                            name: lbl, label: lbl, x: 16, y: fromM.height - 30, w: 88, h: 20, actions: ['open:' + toM.id]
+                        }));
+                        this.changed();
+                        done(null);
+                        this.openFlowDialog();
+                        GS.toast(`Added button "${lbl}" → ${toM.id}`, 'ok');
+                    });
+                    root.querySelectorAll('[data-flow-idx]').forEach(card => {
+                        card.addEventListener('click', () => {
+                            const idx = Number(card.dataset.flowIdx);
+                            done(null);
+                            this.selectMenu(idx);
+                        });
+                    });
+                }
+            });
         }
     };
 

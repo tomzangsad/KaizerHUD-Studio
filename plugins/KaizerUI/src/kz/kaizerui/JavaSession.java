@@ -1,12 +1,17 @@
 package kz.kaizerui;
 
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
+import kz.kaizerui.api.event.MenuCloseEvent;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Color;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.block.Block;
+import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.Levelled;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Horse;
@@ -22,8 +27,11 @@ import org.joml.Vector3f;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * A menu open for one Java player, drawn with TextDisplay holograms.
@@ -84,7 +92,15 @@ final class JavaSession {
     private ScheduledTask rotationTask;
     boolean closing;
     private TextDisplay cursor;
+    private volatile int cursorEntityId = -1;
+    private volatile float cursorYaw;
+    private final Object inputLock = new Object();
+    private final AtomicBoolean hoverSyncQueued = new AtomicBoolean(false);
     private final List<Entity> menuEntities = new ArrayList<>();
+    private final List<Entity> deferredVisuals = new ArrayList<>();
+    private boolean visualsShown;
+    private final List<Location> fakeLights = new ArrayList<>();
+    private final Set<String> fakeLightKeys = new HashSet<>();
     private final Map<String, List<TextDisplay>> pictures = new HashMap<>();
     private final Map<String, TextDisplay> labels = new HashMap<>();
     private final Map<String, TextDisplay> texts = new HashMap<>();
@@ -107,8 +123,11 @@ final class JavaSession {
     private final Map<String, Float> dragShown = new HashMap<>();
     private static final float DRAG_DEG_PER_DEG = 3f;
     private MenuDef.Element hovered;
+    private MenuDef.Element tooltipEl;
+    private TextDisplay tooltipDisplay;
     private ScheduledTask refreshTask;
     private long lastClick;
+    private long lastScrollMs;
     boolean closed;
 
     /* motion */
@@ -195,12 +214,10 @@ final class JavaSession {
                     CameraHook.setSelfInvisible(player, true);
                 });
             }
-            long[] tick = {0};
-            rotationTask = Sched.entityRepeat(plugin, player, 1, () -> {
-                Location l = player.getLocation();
-                onRotate(l.getYaw(), l.getPitch());
+            CameraHook.hideHud(player, plugin.hideActionBar(), plugin.hideBossBars(), plugin.hideScoreboard());
+            rotationTask = Sched.entityRepeat(plugin, player, 20, () -> {
                 // the server re-sends the player's flags when they change: keep the arm hidden
-                if (++tick[0] % 20 == 0) CameraHook.setSelfInvisible(player, true);
+                CameraHook.setSelfInvisible(player, true);
             });
         }
         build(menu);
@@ -208,23 +225,33 @@ final class JavaSession {
 
     /** Shows another menu in the same session (camera and cursor stay). */
     void switchTo(MenuDef next) {
+        plugin.fireCloseEvent(player, this.menu.id, MenuCloseEvent.Reason.SWITCH_MENU, false);
         clearMenu();
         this.menu = next;
         build(next);
     }
 
     void close() {
+        close(MenuCloseEvent.Reason.API);
+    }
+
+    void close(MenuCloseEvent.Reason reason) {
         if (closed) return;
         closed = true;
         closing = true;
         if (rotationTask != null) { rotationTask.cancel(); rotationTask = null; }
         clearMenu();
+        cursorEntityId = -1;
         if (cursor != null) { cursor.remove(); cursor = null; }
         if (camera != null) {
             if (locked && player.isOnline()) CameraHook.setCamera(player, player.getEntityId());
             camera.remove();
             camera = null;
         }
+        if (locked && player.isOnline()) CameraHook.showHud(player);
+        plugin.fireCloseEvent(player, menu.id, reason, false);
+        plugin.clearHistory(player.getUniqueId());
+        plugin.clearPlayerOverrides(player.getUniqueId());
         if (vehicle != null) {
             vehicle.removePassenger(player);
             vehicle.remove();
@@ -275,12 +302,21 @@ final class JavaSession {
         if (refreshTask != null) { refreshTask.cancel(); refreshTask = null; }
         if (animTask != null) { animTask.cancel(); animTask = null; }
         if (turnTask != null) { turnTask.cancel(); turnTask = null; }
+        restoreFakeLights();
+        grabbed = null;
+        setCursorGrabbing(false);
         models.clear();
         items.clear();
+        dragYaw.clear();
+        dragShown.clear();
         anims.clear();
         animById.clear();
         backdrop = null;
         openClip = null;
+        deferredVisuals.clear();
+        visualsShown = false;
+        if (tooltipDisplay != null) { tooltipDisplay.remove(); tooltipDisplay = null; }
+        tooltipEl = null;
         for (Entity e : menuEntities) if (e.isValid()) e.remove();
         menuEntities.clear();
         pictures.clear();
@@ -324,8 +360,11 @@ final class JavaSession {
         }
         if (m.fullscreen && m.backdropAlpha > 0) backdrop(m, d);
         double halfDeg = Math.toDegrees(Math.atan((m.height * s / 2) / d));
-        pxPerDeg = (m.height / 2.0) / Math.max(1, halfDeg) * plugin.speedOf(player) * studio.sensitivity;
+        double sensScale = plugin.autoSensitivity() ? plugin.sensitivity().scaleFor(player.getUniqueId()) : 1.0;
+        pxPerDeg = (m.height / 2.0) / Math.max(1, halfDeg) * plugin.speedOf(player) * studio.sensitivity * sensScale;
 
+        boolean deferVisuals = openClip != null;
+        visualsShown = !deferVisuals;
         int layer = 1;
         for (MenuDef.Element e : m.elements) {
             double depth = layer++ * LAYER;
@@ -336,36 +375,46 @@ final class JavaSession {
                 }
                 case BUTTON -> {
                     if (!e.tiles.isEmpty()) pictures.put(e.id, picture(a, e.tiles, e.x, e.y, depth));
-                    if (!e.label.isEmpty()) {
-                        labels.put(e.id, text(a, Texts.papi(player, e.label), e.labelColor, e.labelScale, e.labelShadow, "center",
+                    String rawLabel = plugin.dynamicText(player, e.id);
+                    if (rawLabel == null) rawLabel = e.label;
+                    if (!rawLabel.isEmpty()) {
+                        labels.put(e.id, text(a, plugin.resolveText(player, rawLabel), e.labelColor, e.labelScale, e.labelShadow, "center",
                                 e.x, e.y, e.w, e.h, depth + LAYER / 2));
                     }
                 }
-                case TEXT -> texts.put(e.id, text(a, Texts.papi(player, e.text), e.color, e.scale, e.shadow, e.align,
-                        e.x, e.y, e.w, e.h, depth));
+                case TEXT -> {
+                    String rawText = plugin.dynamicText(player, e.id);
+                    if (rawText == null) rawText = e.text;
+                    texts.put(e.id, text(a, plugin.resolveText(player, rawText), e.color, e.scale, e.shadow, e.align,
+                            e.x, e.y, e.w, e.h, depth));
+                }
                 case PLAYER_HEAD -> playerPart(a, e, depth);
                 case PLAYER_MODEL -> {
-                    if (e.java3d && plugin.models3d() && ModelPart.available()) model3d(e, depth);
+                    if (e.java3d && plugin.models3d() && ModelPart.available()) model3d(e, depth, !deferVisuals);
                     else playerPart(a, e, depth);
                 }
-                case ITEM -> itemPart(e, depth);
+                case ITEM -> itemPart(e, depth, !deferVisuals);
             }
         }
-        boolean turning = items.keySet().stream().anyMatch(id -> elementById(m, id).spin)
-                || models.keySet().stream().anyMatch(id -> !"none".equals(elementById(m, id).turn));
-        if (turning) { turnTick = 0; turnTask = Sched.entityRepeat(plugin, player, 1, this::turn); }
-        if (!anims.isEmpty() || (openClip != null && backdrop != null)) {
+        if (!models.isEmpty() || items.keySet().stream().anyMatch(id -> elementById(m, id).spin)) {
+            turnTick = 0;
+            turnTask = Sched.entityRepeat(plugin, player, 1, this::turn);
+        }
+        if (!anims.isEmpty() || openClip != null) {
             animTask = Sched.entityRepeat(plugin, player, 1, this::animate);
         }
 
         if (locked && studio.cursorGlyph != null) {
             // the cursor keeps its place between pages; it is respawned because the scale may change
+            cursorEntityId = -1;
             if (cursor != null) { cursor.remove(); cursor = null; }
             if (!cursorPlaced) { cx = m.width / 2.0; cy = m.height / 2.0; cursorPlaced = true; }
             cx = clamp(cx, minX, maxX);
             cy = clamp(cy, minY, maxY);
             cursor = spawnText(cursorOrigin(), glyphComponent(studio.cursorGlyph), (float) (s / TEXT_PX), false);
-            cursor.setTeleportDuration(2);
+            cursor.setTeleportDuration(1);
+            cursorYaw = cursor.getLocation().getYaw();
+            cursorEntityId = cursor.getEntityId();
         }
         if (m.refreshTicks > 0 && hasPlaceholders(m)) {
             refreshTask = Sched.entityRepeat(plugin, player, m.refreshTicks, this::refreshTexts);
@@ -384,25 +433,43 @@ final class JavaSession {
         return false;
     }
 
+    void refreshNow() {
+        if (!closed) refreshTexts();
+    }
+
     private void refreshTexts() {
         if (closed) return;
         for (MenuDef.Element e : menu.elements) {
-            if (e.type == MenuDef.Type.TEXT && e.text.indexOf('%') >= 0) {
+            if (e.type == MenuDef.Type.TEXT) {
                 TextDisplay t = texts.get(e.id);
-                if (t != null) t.text(Texts.component(Texts.papi(player, e.text), e.color));
-            } else if (e.type == MenuDef.Type.BUTTON && e.label.indexOf('%') >= 0) {
+                String dyn = plugin.dynamicText(player, e.id);
+                String raw = dyn != null ? dyn : e.text;
+                if (t != null && (dyn != null || raw.indexOf('%') >= 0 || raw.indexOf('{') >= 0)) {
+                    t.text(Texts.component(plugin.resolveText(player, raw), e.color));
+                }
+            } else if (e.type == MenuDef.Type.BUTTON) {
                 TextDisplay t = labels.get(e.id);
-                if (t != null) t.text(Texts.component(Texts.papi(player, e.label), e == hovered && !e.hasHover() ? plugin.labelHoverColor() : e.labelColor));
+                String dyn = plugin.dynamicText(player, e.id);
+                String raw = dyn != null ? dyn : e.label;
+                if (t != null && (dyn != null || raw.indexOf('%') >= 0 || raw.indexOf('{') >= 0)) {
+                    t.text(Texts.component(plugin.resolveText(player, raw), e == hovered && !e.hasHover() ? plugin.labelHoverColor() : e.labelColor));
+                }
             } else if (e.type == MenuDef.Type.PLAYER_MODEL && models.containsKey(e.id)) {
                 models.get(e.id).refreshOutfit(player);
-            } else if (e.type == MenuDef.Type.ITEM && Items.dynamic(e.item) && items.containsKey(e.id)) {
-                ItemDisplay d = items.get(e.id);
-                if (d.isValid()) d.setItemStack(Items.resolve(player, e.item, e.glint));
+            } else if (e.type == MenuDef.Type.ITEM && items.containsKey(e.id)) {
+                ItemStack dyn = plugin.dynamicItem(player, e.id);
+                if (dyn != null || Items.dynamic(e.item)) {
+                    ItemDisplay d = items.get(e.id);
+                    if (d.isValid()) d.setItemStack(dyn != null ? dyn : Items.resolve(player, e.item, e.glint));
+                }
             } else if (e.isPlayer() && skinParts.containsKey(e.id)) {
                 // e.g. a leaderboard: the name behind the placeholder changed → show the new skin
                 String name = skinName(e);
                 if (!name.equalsIgnoreCase(skinNames.getOrDefault(e.id, ""))) showSkin(e, name);
             }
+        }
+        if (tooltipEl != null && tooltipDisplay != null && tooltipDisplay.isValid()) {
+            tooltipDisplay.text(Texts.component(plugin.resolveText(player, tooltipEl.tooltip)));
         }
     }
 
@@ -455,24 +522,54 @@ final class JavaSession {
      * Player Model as a real 3D player (see {@link ModelPart}): fitted in the element's box,
      * feet on its bottom, a little in front of the menu so the background never cuts it.
      */
-    private void model3d(MenuDef.Element e, double depth) {
+    private void model3d(MenuDef.Element e, double depth, boolean showNow) {
         double k = Math.min(e.w * s / ModelPart.MODEL_W, e.h * s / ModelPart.MODEL_H);
         double bottom = e.y + (e.h + ModelPart.MODEL_H * k / s) / 2.0;
         Vector feet = world(e.x + e.w / 2.0, bottom, depth + LAYER + 0.16 * k);
         float yaw = facingYaw() + (float) e.angle;
-        ModelPart mp = new ModelPart(plugin, player, world, new Location(world, feet.getX(), feet.getY(), feet.getZ()), k, yaw,
-                skinName(e), isViewer(e), e.outfit, e.crouch);
+        Location feetLoc = new Location(world, feet.getX(), feet.getY(), feet.getZ());
+        ModelPart mp = new ModelPart(plugin, player, world, feetLoc, k, yaw,
+                skinName(e), isViewer(e), e.outfit, e.crouch, showNow);
         menuEntities.add(mp.handle());
+        if (!showNow) deferredVisuals.add(mp.handle());
         models.put(e.id, mp);
-        if ("drag".equals(e.turn)) dragYaw.put(e.id, yaw);
+        dragYaw.put(e.id, yaw);
+        if (plugin.light3dModels()) {
+            placeFakeLight(feetLoc);
+            placeFakeLight(feetLoc.clone().add(0, 0.5 * ModelPart.MODEL_H * k, 0));
+        }
+    }
+
+    private void placeFakeLight(Location loc) {
+        int bx = loc.getBlockX(), by = loc.getBlockY(), bz = loc.getBlockZ();
+        String key = bx + "," + by + "," + bz;
+        if (!fakeLightKeys.add(key)) return;
+        Block block = world.getBlockAt(bx, by, bz);
+        if (!block.getType().isAir()) return;
+        BlockData light = Material.LIGHT.createBlockData(d -> ((Levelled) d).setLevel(15));
+        Location bLoc = new Location(world, bx, by, bz);
+        player.sendBlockChange(bLoc, light);
+        fakeLights.add(bLoc);
+    }
+
+    private void restoreFakeLights() {
+        if (fakeLights.isEmpty()) return;
+        if (player.isOnline()) {
+            for (Location loc : fakeLights) {
+                player.sendBlockChange(loc, loc.getBlock().getBlockData());
+            }
+        }
+        fakeLights.clear();
+        fakeLightKeys.clear();
     }
 
     /**
      * Item element: the real item (ItemDisplay). Flat = drawn like in the inventory and pressed
      * flat so it stays in front of the menu; 3D = the item model, brought forward by its depth.
      */
-    private void itemPart(MenuDef.Element e, double depth) {
-        ItemStack stack = Items.resolve(player, e.item, e.glint);
+    private void itemPart(MenuDef.Element e, double depth, boolean showNow) {
+        ItemStack dyn = plugin.dynamicItem(player, e.id);
+        ItemStack stack = dyn != null ? dyn : Items.resolve(player, e.item, e.glint);
         float k = (float) (Math.min(e.w, e.h) * s);
         Vector pos = world(e.x + e.w / 2.0, e.y + e.h / 2.0, depth + LAYER / 2 + (e.item3d ? k * 0.5 : 0));
         float yaw = facingYaw() + (plugin.itemFlip() ? 180f : 0f);
@@ -485,7 +582,8 @@ final class JavaSession {
             x.setBrightness(new Display.Brightness(15, 15));
             x.setTransformation(new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(k, k, e.item3d ? k : k * 0.05f), new AxisAngle4f()));
         });
-        player.showEntity(plugin, d);
+        if (showNow) player.showEntity(plugin, d);
+        else deferredVisuals.add(d);
         menuEntities.add(d);
         items.put(e.id, d);
     }
@@ -494,33 +592,38 @@ final class JavaSession {
     private void turn() {
         if (closed) return;
         long t = turnTick++;
+        String g = grabbed;
         for (Map.Entry<String, ModelPart> en : models.entrySet()) {
-            MenuDef.Element e = elementById(menu, en.getKey());
+            String id = en.getKey();
+            MenuDef.Element e = elementById(menu, id);
             ModelPart mp = en.getValue();
-            if ("spin".equals(e.turn)) {
-                float yaw = mp.baseYaw + (float) (e.spinSpeed * t / 20.0);
-                mp.look(yaw, yaw, 0f);
-            } else if ("mouse".equals(e.turn) && t % 2 == 0) {
-                // the whole player turns as the cursor moves left / right over the menu: side to side = a full turn (360°)
-                double rel = cx < 0 ? 0 : clamp((cx - (e.x + e.w / 2.0)) / Math.max(1, menu.width / 2.0), -1, 1);
-                float yaw = mp.baseYaw - (float) (rel * 180);   // the front follows the cursor's side
-                mp.look(yaw, yaw, 0f);
-            } else if ("drag".equals(e.turn)) {
-                Float y = dragYaw.get(en.getKey());
-                if (y != null && !y.equals(dragShown.get(en.getKey()))) {
-                    dragShown.put(en.getKey(), y);
+            if (id.equals(g) || "drag".equals(e.turn) || "none".equals(e.turn)) {
+                Float y = dragYaw.get(id);
+                if (y != null && !y.equals(dragShown.get(id))) {
+                    dragShown.put(id, y);
                     mp.look(y, y, 0f);
                 }
+            } else if ("spin".equals(e.turn)) {
+                float base = dragYaw.getOrDefault(id, mp.baseYaw);
+                float yaw = base + (float) (e.spinSpeed * t / 20.0);
+                mp.look(yaw, yaw, 0f);
+            } else if ("mouse".equals(e.turn) && t % 2 == 0) {
+                float base = dragYaw.getOrDefault(id, mp.baseYaw);
+                // the whole player turns as the cursor moves left / right over the menu: side to side = a full turn (360°)
+                double rel = cx < 0 ? 0 : clamp((cx - (e.x + e.w / 2.0)) / Math.max(1, menu.width / 2.0), -1, 1);
+                float yaw = base - (float) (rel * 180);   // the front follows the cursor's side
+                mp.look(yaw, yaw, 0f);
             } else if ("cursor".equals(e.turn) && t % 2 == 0) {
+                float base = dragYaw.getOrDefault(id, mp.baseYaw);
                 Location eye = mp.entity.getEyeLocation();
                 Vector target = world(cx, cy, 0);
                 Vector dir = target.subtract(eye.toVector());
                 double horiz = Math.hypot(dir.getX(), dir.getZ());
                 float headYaw = (float) Math.toDegrees(Math.atan2(-dir.getX(), dir.getZ()));
                 float pitch = (float) -Math.toDegrees(Math.atan2(dir.getY(), Math.max(1e-6, horiz)));
-                float rel = wrap(headYaw - mp.baseYaw);
-                headYaw = mp.baseYaw + (float) clamp(rel, -60, 60);
-                mp.look(mp.baseYaw, headYaw, (float) clamp(pitch, -50, 50));
+                float rel = wrap(headYaw - base);
+                headYaw = base + (float) clamp(rel, -60, 60);
+                mp.look(base, headYaw, (float) clamp(pitch, -50, 50));
             }
         }
         if (t % 2 == 0) {
@@ -726,6 +829,13 @@ final class JavaSession {
         if (tick < ANIM_LEAD) return;
         double t = (tick - ANIM_LEAD) / 20.0;
         double[] ms = openClip != null ? openClip.sample(t) : Motion.rest();
+        if (!visualsShown && !deferredVisuals.isEmpty() && (ms[Motion.ALPHA] >= 45.0 || tick >= ANIM_LEAD + 5)) {
+            visualsShown = true;
+            for (Entity ent : deferredVisuals) {
+                if (ent.isValid()) player.showEntity(plugin, ent);
+            }
+            deferredVisuals.clear();
+        }
         boolean menuMoved = !Motion.same(ms, menuState);
         menuState = ms;
         if (menuMoved && backdrop != null && backdrop.isValid() && backdropColor != null) {
@@ -820,21 +930,20 @@ final class JavaSession {
 
     /* ───────────── input ───────────── */
 
-    /** Head turned (from PlayerMoveEvent, player's thread) */
-    void onRotate(float yaw, float pitch) {
-        if (closed) return;
-        String g = grabbed;
-        if (g != null) {
-            // holding a model: the mouse turns it, the cursor stays where it was
-            if (!grabKnown) { grabLastYaw = yaw; grabKnown = true; }
-            float d = wrap(yaw - grabLastYaw);
-            grabLastYaw = yaw;
-            // mouse right = the front turns to the right (a smaller Minecraft yaw)
-            if (d != 0) dragYaw.computeIfPresent(g, (k, v) -> v - d * DRAG_DEG_PER_DEG);
-            if (locked) { lastYaw = yaw; lastPitch = pitch; rotationKnown = true; }
-            return;
-        }
-        if (locked) {
+    /** Head turned directly from Netty rotation packet (may run on Netty IO thread). */
+    void onPacketRotate(float yaw, float pitch) {
+        if (closed || !locked) return;
+        Vector pos = null;
+        synchronized (inputLock) {
+            String g = grabbed;
+            if (g != null) {
+                if (!grabKnown) { grabLastYaw = yaw; grabKnown = true; }
+                float d = wrap(yaw - grabLastYaw);
+                grabLastYaw = yaw;
+                if (d != 0) dragYaw.computeIfPresent(g, (k, v) -> v - d * DRAG_DEG_PER_DEG);
+                lastYaw = yaw; lastPitch = pitch; rotationKnown = true;
+                return;
+            }
             if (!rotationKnown) { lastYaw = yaw; lastPitch = pitch; rotationKnown = true; return; }
             float dy = wrap(yaw - lastYaw);
             float dp = pitch - lastPitch;
@@ -843,33 +952,142 @@ final class JavaSession {
             if (dy == 0 && dp == 0) return;
             cx = clamp(cx + dy * pxPerDeg, minX, maxX);
             cy = clamp(cy + dp * pxPerDeg, minY, maxY);
-            if (cursor != null && cursor.isValid()) cursor.teleportAsync(toLocation(cursorOrigin()));
-        } else {
-            // crosshair mode: where the look ray meets the panel
-            double yr = Math.toRadians(yaw), pr = Math.toRadians(pitch);
-            Vector dir = new Vector(-Math.sin(yr) * Math.cos(pr), -Math.sin(pr), Math.cos(yr) * Math.cos(pr));
-            double along = dir.dot(f);
-            if (along < 0.05) { cx = -1; cy = -1; }
-            else {
-                Vector hit = cam.clone().add(dir.multiply(studio.distance / along));
-                Vector rel = hit.subtract(center);
-                cx = rel.dot(r) / s + menu.width / 2.0;
-                cy = menu.height / 2.0 - rel.dot(u) / s;
+            if (cursorEntityId != -1) pos = cursorOrigin();
+        }
+        if (pos != null) {
+            CameraHook.teleportEntity(player, cursorEntityId, pos.getX(), pos.getY(), pos.getZ(), cursorYaw, 0f);
+        }
+        if (hoverSyncQueued.compareAndSet(false, true)) {
+            Sched.entity(plugin, player, this::syncHoverAndTooltip);
+        }
+    }
+
+    private void syncHoverAndTooltip() {
+        hoverSyncQueued.set(false);
+        if (closed) return;
+        updateHover();
+        updateTooltipPosition();
+    }
+
+    /** Head turned (from PlayerMoveEvent in crosshair mode, player's thread). */
+    void onRotate(float yaw, float pitch) {
+        if (closed) return;
+        synchronized (inputLock) {
+            String g = grabbed;
+            if (g != null) {
+                if (!grabKnown) { grabLastYaw = yaw; grabKnown = true; }
+                float d = wrap(yaw - grabLastYaw);
+                grabLastYaw = yaw;
+                if (d != 0) dragYaw.computeIfPresent(g, (k, v) -> v - d * DRAG_DEG_PER_DEG);
+                if (locked) { lastYaw = yaw; lastPitch = pitch; rotationKnown = true; }
+                return;
+            }
+            if (locked) {
+                if (!rotationKnown) { lastYaw = yaw; lastPitch = pitch; rotationKnown = true; return; }
+                float dy = wrap(yaw - lastYaw);
+                float dp = pitch - lastPitch;
+                lastYaw = yaw;
+                lastPitch = pitch;
+                if (dy == 0 && dp == 0) return;
+                cx = clamp(cx + dy * pxPerDeg, minX, maxX);
+                cy = clamp(cy + dp * pxPerDeg, minY, maxY);
+                if (cursor != null && cursor.isValid()) cursor.teleportAsync(toLocation(cursorOrigin()));
+            } else {
+                // crosshair mode: where the look ray meets the panel
+                double yr = Math.toRadians(yaw), pr = Math.toRadians(pitch);
+                Vector dir = new Vector(-Math.sin(yr) * Math.cos(pr), -Math.sin(pr), Math.cos(yr) * Math.cos(pr));
+                double along = dir.dot(f);
+                if (along < 0.05) { cx = -1; cy = -1; }
+                else {
+                    Vector hit = cam.clone().add(dir.multiply(studio.distance / along));
+                    Vector rel = hit.subtract(center);
+                    cx = rel.dot(r) / s + menu.width / 2.0;
+                    cy = menu.height / 2.0 - rel.dot(u) / s;
+                }
             }
         }
         updateHover();
+        updateTooltipPosition();
+    }
+
+    /** Mouse wheel scrolled (slot change while locked). */
+    void onScroll(int dir) {
+        if (closed || dir == 0) return;
+        long now = System.currentTimeMillis();
+        if (now - lastScrollMs < 200) return;
+        lastScrollMs = now;
+        String target = dir > 0 ? menu.nextPage : menu.prevPage;
+        if (target == null || target.isEmpty()) return;
+        MenuDef next = plugin.menu(target);
+        if (next == null) return;
+        Actions.playSound(player, studio.clickSound);
+        switchTo(next);
     }
 
     private void updateHover() {
         MenuDef.Element now = menu.buttonAt(cx, cy);
-        if (now == hovered) return;
-        if (hovered != null) setHover(hovered, false);
-        hovered = now;
-        if (now != null) {
-            setHover(now, true);
-            String snd = !now.hoverSound.isBlank() ? now.hoverSound : studio.hoverSound;
-            Actions.playSound(player, snd);
+        if (now != hovered) {
+            if (hovered != null) setHover(hovered, false);
+            hovered = now;
+            if (now != null) {
+                setHover(now, true);
+                String snd = !now.hoverSound.isBlank() ? now.hoverSound : studio.hoverSound;
+                Actions.playSound(player, snd);
+            }
         }
+        MenuDef.Element tip = menu.tooltipAt(cx, cy);
+        if (tip != tooltipEl) {
+            tooltipEl = tip;
+            if (tip == null) {
+                if (tooltipDisplay != null) { tooltipDisplay.remove(); tooltipDisplay = null; }
+            } else {
+                Component txt = Texts.component(plugin.resolveText(player, tip.tooltip));
+                if (tooltipDisplay == null || !tooltipDisplay.isValid()) {
+                    float scale = (float) (s * 0.85 / TEXT_PX);
+                    Vector pos = tooltipWorldPos();
+                    tooltipDisplay = world.spawn(toLocation(pos), TextDisplay.class, d -> {
+                        d.setVisibleByDefault(false);
+                        d.setPersistent(false);
+                        d.text(txt);
+                        d.setBillboard(Display.Billboard.FIXED);
+                        d.setAlignment(TextDisplay.TextAlignment.LEFT);
+                        d.setDefaultBackground(false);
+                        d.setBackgroundColor(Color.fromARGB(235, 16, 0, 16));
+                        d.setShadowed(true);
+                        d.setSeeThrough(false);
+                        d.setLineWidth(220);
+                        d.setBrightness(new Display.Brightness(15, 15));
+                        d.setTransformation(new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(scale, scale, scale), new AxisAngle4f()));
+                        d.setTeleportDuration(1);
+                    });
+                    player.showEntity(plugin, tooltipDisplay);
+                } else {
+                    tooltipDisplay.text(txt);
+                    updateTooltipPosition();
+                }
+            }
+        }
+    }
+
+    private Vector tooltipWorldPos() {
+        double tx = cx + 10;
+        if (tx > maxX - 95) tx = Math.max(minX + 4, cx - 95);
+        double ty = cy + 6;
+        if (ty > maxY - 40) ty = Math.max(minY + 4, cy - 30);
+        return world(tx, ty, (menu.elements.size() + 2) * LAYER);
+    }
+
+    private void updateTooltipPosition() {
+        if (tooltipDisplay == null || !tooltipDisplay.isValid()) return;
+        Location loc = toLocation(tooltipWorldPos());
+        tooltipDisplay.teleportAsync(loc);
+    }
+
+    private void setCursorGrabbing(boolean on) {
+        if (cursor == null || !cursor.isValid() || studio.cursorGlyph == null) return;
+        cursor.text(Component.text(studio.cursorGlyph)
+                .font(Key.key(studio.font))
+                .color(on ? NamedTextColor.GOLD : NamedTextColor.WHITE));
     }
 
     private void setHover(MenuDef.Element e, boolean on) {
@@ -882,7 +1100,9 @@ final class JavaSession {
         }
         TextDisplay lab = labels.get(e.id);
         if (lab != null && !e.hasHover()) {
-            lab.text(Texts.component(Texts.papi(player, e.label), on ? plugin.labelHoverColor() : e.labelColor));
+            String dyn = plugin.dynamicText(player, e.id);
+            String raw = dyn != null ? dyn : e.label;
+            lab.text(Texts.component(plugin.resolveText(player, raw), on ? plugin.labelHoverColor() : e.labelColor));
         }
     }
 
@@ -892,14 +1112,21 @@ final class JavaSession {
         long now = System.currentTimeMillis();
         if (now - lastClick < plugin.clickCooldownMs()) return;
         lastClick = now;
-        if (grabbed != null) { grabbed = null; return; }      // let go of the model
+        if (grabbed != null) {
+            grabbed = null;
+            setCursorGrabbing(false);
+            Actions.playSound(player, studio.clickSound);
+            return;      // let go of the model
+        }
         MenuDef.Element b = hovered;
         if (b == null) {
-            // a click on a Player Model with Turn = drag grabs it
-            for (MenuDef.Element e : menu.elements) {
-                if (e.type == MenuDef.Type.PLAYER_MODEL && "drag".equals(e.turn) && dragYaw.containsKey(e.id) && e.contains(cx, cy)) {
+            // a click on any 3D Player Model grabs it so moving the mouse turns it
+            for (int i = menu.elements.size() - 1; i >= 0; i--) {
+                MenuDef.Element e = menu.elements.get(i);
+                if (e.type == MenuDef.Type.PLAYER_MODEL && models.containsKey(e.id) && !"spin".equals(e.turn) && e.contains(cx, cy)) {
                     grabKnown = false;
                     grabbed = e.id;
+                    setCursorGrabbing(true);
                     Actions.playSound(player, studio.clickSound);
                     return;
                 }
@@ -909,8 +1136,8 @@ final class JavaSession {
         Anim a = animById.get(b.id);
         if (a != null && b.press != null) a.pressAt = now();
         Actions.playSound(player, studio.clickSound);
-        Actions.After after = Actions.run(plugin, player, menu, b);
-        if (after == Actions.After.CLOSE) plugin.java().close(player);
+        Actions.After after = Actions.run(plugin, player, menu, b, false);
+        if (after == Actions.After.CLOSE) plugin.java().close(player, MenuCloseEvent.Reason.BUTTON_CLOSE);
         else if (after == Actions.After.STAY) {
             refreshTexts();
             // console commands run on the next tick: look again so worn items / the model's outfit update

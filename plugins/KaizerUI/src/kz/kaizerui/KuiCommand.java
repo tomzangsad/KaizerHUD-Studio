@@ -64,7 +64,12 @@ final class KuiCommand implements TabExecutor {
             }
             case "speed" -> {
                 if (!(sender instanceof Player p)) { sender.sendMessage(plugin.msg("players-only")); return true; }
-                if (args.length < 2) { sender.sendMessage(Texts.component("&7/" + label + " speed <0.2-5>")); return true; }
+                if (args.length < 2) {
+                    int pct = plugin.sensitivity().detectedPercent(p.getUniqueId());
+                    String auto = pct >= 0 ? (pct + "%") : "learning (look around in game)";
+                    sender.sendMessage(Texts.component("&7Auto-sensitivity: &f" + auto + " &8· &7multiplier: &f" + plugin.speedOf(p) + " &8· &f/" + label + " speed <0.2-5>"));
+                    return true;
+                }
                 double v = Math.max(0.2, Math.min(5, parse(args[1], 1)));
                 plugin.setSpeed(p, v);
                 sender.sendMessage(plugin.msg("speed-set", "%speed%", String.valueOf(v)));

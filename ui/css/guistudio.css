@@ -520,3 +520,73 @@ body.gs-body { overflow: hidden; }
 .gs-warnbox { background: rgba(240, 180, 60, .1); border: 1px solid rgba(240, 180, 60, .4); color: #f3d08a; border-radius: 4px; padding: 8px 10px; margin-bottom: 8px; font-size: 11.5px; line-height: 1.45; }
 .gs-warnbox .gs-row-actions { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
 .gs-page-warn { color: #f0b860; font-size: 11px; }
+
+/* hover tooltip in preview */
+.gs-tooltip {
+    display: none;
+    position: absolute;
+    left: 0; top: 0;
+    z-index: 99997;
+    pointer-events: none;
+    padding: 4px 6px;
+    background: rgba(16, 0, 16, .94);
+    border: 1.5px solid #5000ff;
+    box-shadow: 0 0 0 1px #100010, 0 4px 14px rgba(0, 0, 0, .6);
+    border-radius: 2px;
+    font-family: "Minecraftia", monospace;
+    font-size: 7px;
+    line-height: 1.35;
+    white-space: pre;
+    color: #fff;
+}
+
+/* page link badges in sidebar */
+.gs-page-links {
+    display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px;
+}
+.gs-page-badge {
+    font-size: 9.5px; font-family: Consolas, monospace;
+    padding: 0 4px; border-radius: 3px;
+    background: rgba(82, 160, 240, .16); color: #9bc8ff;
+    border: 1px solid rgba(82, 160, 240, .28);
+}
+.gs-page-badge.page { background: rgba(70, 200, 130, .14); color: #84e8b0; border-color: rgba(70, 200, 130, .28); }
+.gs-page-badge.warn { background: rgba(229, 83, 75, .16); color: #ff9c96; border-color: rgba(229, 83, 75, .35); }
+
+/* UI Flow modal */
+.gs-flow-bar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    padding: 8px 10px; margin-bottom: 10px;
+    background: var(--s-2); border: 1px solid var(--line-soft); border-radius: 5px;
+}
+.gs-flow-bar select, .gs-flow-bar input { height: 24px; padding: 0 6px; font-size: 12px; }
+.gs-flow-bar input { width: 120px; }
+.gs-flow-canvas {
+    position: relative;
+    overflow: auto;
+    height: min(56vh, 480px);
+    background: #14171c;
+    border: 1px solid var(--line-soft);
+    border-radius: 6px;
+}
+.gs-flow-inner { position: relative; min-width: 100%; min-height: 100%; }
+.gs-flow-svg { position: absolute; inset: 0; pointer-events: none; }
+.gs-flow-card {
+    position: absolute;
+    width: 188px;
+    background: var(--s-3);
+    border: 1px solid var(--line-soft);
+    border-radius: 6px;
+    padding: 8px 10px;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(0,0,0,.35);
+    transition: border-color .12s, transform .12s;
+}
+.gs-flow-card:hover { border-color: var(--blue); transform: translateY(-1px); }
+.gs-flow-card.active { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue), 0 8px 20px rgba(0,0,0,.45); }
+.gs-flow-card.orphan { border-color: rgba(240, 180, 60, .55); }
+.gs-flow-title { font-size: 12px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gs-flow-meta { font-size: 10.5px; font-family: Consolas, monospace; color: var(--ink-faint); margin-top: 2px; }
+.gs-flow-tags { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 6px; }
+.gs-flow-legend { display: flex; gap: 14px; font-size: 11px; color: var(--ink-dim); margin-top: 8px; }
+.gs-flow-legend i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 4px; }

@@ -93,7 +93,25 @@
         flatKit('jade', 'Jade', { bg: '#0a1210', edge: '#86a89c', divider: '#21332d', stage: '#3a5249', stageEdge: '#628a7b', well: '#101c18', wellEdge: '#28403a', btn: '#1f9e6a', btnEdge: '#8be0bd', btnHover: '#28b67b', btn2: '#13201b', btn2Edge: '#4f6f64', btn2Hover: '#1d2e27', gem: GEM.green }),
         flatKit('dusk', 'Dusk Violet', { bg: '#100c18', edge: '#998cb3', divider: '#2c2540', stage: '#4a4063', stageEdge: '#77699a', well: '#181226', wellEdge: '#332a4a', btn: '#7a4ee0', btnEdge: '#c4adff', btnHover: '#8c62f0', btn2: '#1b1528', btn2Edge: '#615680', btn2Hover: '#272038', gem: GEM.purple }),
         flatKit('amberline', 'Amber Line', { bg: '#0f0d09', edge: '#a89a7c', divider: '#302a1d', stage: '#4a4232', stageEdge: '#7a6c4f', well: '#191510', wellEdge: '#3a3222', btn: '#d98a1c', btnEdge: '#ffd08a', btnHover: '#eb9c2c', btn2: '#1d1912', btn2Edge: '#6a5d44', btn2Hover: '#2a241a', gem: GEM.amber }),
+        // Modern RPG: 2x high-res anti-aliased Canvas 2D kits (soft shadows, gradients, stage spotlight)
+        rpgKit('rpg_astral', 'Astral Gold', { bgTop: '#16203a', bgBot: '#090d18', glow: 'rgba(255,204,102,0.16)', rim1: '#ffe28a', rim2: '#8c5a18', bannerBg: '#1c294a', bannerEdge: '#e6b85c', stageBg: '#0c1224', stageGlow: 'rgba(255,196,88,0.28)', slotBg: '#273454', slotEdge: '#6a82b5', btn1: '#3d9970', btn2: '#1e6346', btnEdge: '#7cf2ba', btnHover1: '#4db888', btnHover2: '#287d59', btn2Bg: '#1d2742', btn2Edge: '#586d99', btn2Hover: '#29375c', accent: '#ffd26a', mutedText: '#8ea4cc', gem: GEM.amber }),
+        rpgKit('rpg_crimson', 'Crimson Sanctum', { bgTop: '#241018', bgBot: '#0d0609', glow: 'rgba(255,96,112,0.16)', rim1: '#ffb399', rim2: '#7a222d', bannerBg: '#2e131e', bannerEdge: '#e06c75', stageBg: '#14080d', stageGlow: 'rgba(255,90,90,0.28)', slotBg: '#3a1c26', slotEdge: '#9e5264', btn1: '#d14353', btn2: '#8a1e2c', btnEdge: '#ffa3ad', btnHover1: '#e65768', btnHover2: '#a62838', btn2Bg: '#26141b', btn2Edge: '#7a4452', btn2Hover: '#381d27', accent: '#ff8a7a', mutedText: '#c2929c', gem: GEM.red }),
+        rpgKit('rpg_verdant', 'Verdant Relic', { bgTop: '#10241d', bgBot: '#07110d', glow: 'rgba(85,235,160,0.15)', rim1: '#c8f59a', rim2: '#356e48', bannerBg: '#153026', bannerEdge: '#7ad99c', stageBg: '#091712', stageGlow: 'rgba(80,230,150,0.26)', slotBg: '#1c3b2f', slotEdge: '#528f75', btn1: '#26a670', btn2: '#126643', btnEdge: '#80f5c4', btnHover1: '#34bf84', btnHover2: '#1a8055', btn2Bg: '#142921', btn2Edge: '#43735e', btn2Hover: '#1d3b30', accent: '#9af5b8', mutedText: '#88b8a2', gem: GEM.green }),
+        rpgKit('rpg_glacier', 'Glacier Glass', { bgTop: '#13273d', bgBot: '#08121e', glow: 'rgba(110,210,255,0.18)', rim1: '#d6f4ff', rim2: '#3e78a6', bannerBg: '#183350', bannerEdge: '#7ec8ff', stageBg: '#0a1829', stageGlow: 'rgba(100,205,255,0.30)', slotBg: '#213f5e', slotEdge: '#6aa4d6', btn1: '#3085db', btn2: '#1a5091', btnEdge: '#99d1ff', btnHover1: '#4298f0', btnHover2: '#2363b0', btn2Bg: '#172b42', btn2Edge: '#4d769e', btn2Hover: '#223e5e', accent: '#8ad8ff', mutedText: '#91b4d6', gem: GEM.cyan }),
+        rpgKit('rpg_arcane', 'Arcane Velvet', { bgTop: '#211438', bgBot: '#0c0717', glow: 'rgba(195,120,255,0.18)', rim1: '#f0ccff', rim2: '#6b3b99', bannerBg: '#2a1a47', bannerEdge: '#c88cff', stageBg: '#120a21', stageGlow: 'rgba(186,110,255,0.30)', slotBg: '#322052', slotEdge: '#8560bd', btn1: '#8b54e3', btn2: '#5528a3', btnEdge: '#d4b3ff', btnHover1: '#9f6cf2', btnHover2: '#6835bf', btn2Bg: '#23173b', btn2Edge: '#6d509e', btn2Hover: '#312052', accent: '#e0b3ff', mutedText: '#ab94cf', gem: GEM.purple }),
     ];
+
+    /** A Modern RPG 2x Hi-Res kit */
+    function rpgKit(id, name, r) {
+        return {
+            id, name, group: 'Modern RPG', hiRes: true, rpg: r, text: '#f6f8ff',
+            metal: [r.bgBot, r.rim2, r.rim2, r.rim1, r.accent, '#ffffff'],
+            plate: [r.bgBot, r.bgBot, r.bgTop, r.bgTop, r.bannerBg, r.bannerEdge],
+            inset: [r.bgBot, r.stageBg, r.stageBg, r.slotBg, r.slotEdge, r.accent],
+            gem: r.gem,
+            rimW: 2, shape: 'round', r: 2, orn: 'none'
+        };
+    }
 
     /** A flat kit: the pixel fields (used by the swatches and a few layouts) are filled from the flat colours */
     function flatKit(id, name, f) {
@@ -232,9 +250,229 @@
         return rings;
     }
 
+    /* ───────────── Hi-Res 2x Canvas 2D renderer (Modern RPG) ───────────── */
+
+    const HIRES_SCALE = 2;
+
+    function roundRectPath(ctx, x, y, w, h, r) {
+        const rr = Math.min(r, w / 2, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + rr, y);
+        ctx.arcTo(x + w, y, x + w, y + h, rr);
+        ctx.arcTo(x + w, y + h, x, y + h, rr);
+        ctx.arcTo(x, y + h, x, y, rr);
+        ctx.arcTo(x, y, x + w, y, rr);
+        ctx.closePath();
+    }
+
+    function hiResSurface(gw, gh) {
+        const S = HIRES_SCALE;
+        const c = document.createElement('canvas');
+        c.width = gw * S; c.height = gh * S;
+        const ctx = c.getContext('2d');
+        return {
+            w: gw, h: gh, S, canvas: c, ctx, isHiRes: true,
+            px(x, y, col, a) {
+                if (!col) return;
+                ctx.save();
+                if (a != null) ctx.globalAlpha = a;
+                ctx.fillStyle = Array.isArray(col) ? `rgb(${col[0]},${col[1]},${col[2]})` : col;
+                ctx.fillRect(Math.floor(x) * S, Math.floor(y) * S, S, S);
+                ctx.restore();
+            },
+            blit(src, ox, oy) {
+                const sc = src.canvas();
+                ctx.save();
+                ctx.imageSmoothingEnabled = false;
+                ctx.drawImage(sc, ox * S, oy * S, src.w * S, src.h * S);
+                ctx.restore();
+            },
+            png() { return c.toDataURL('image/png'); }
+        };
+    }
+
+    function hiResWell(surf, kit, x, y, w, h, accentColor) {
+        const S = surf.S, ctx = surf.ctx, r = kit.rpg;
+        const sx = x * S, sy = y * S, sw = w * S, sh = h * S;
+        const isSlot = w <= 26 && h <= 26;
+        const isStage = h >= 65 && w >= 56;
+        ctx.save();
+        if (isStage) {
+            roundRectPath(ctx, sx, sy, sw, sh, 10);
+            const bg = ctx.createLinearGradient(sx, sy, sx, sy + sh);
+            bg.addColorStop(0, r.stageBg);
+            bg.addColorStop(1, r.bgBot);
+            ctx.fillStyle = bg;
+            ctx.fill();
+            const rad = ctx.createRadialGradient(sx + sw * 0.5, sy + sh * 0.44, 4, sx + sw * 0.5, sy + sh * 0.44, Math.max(sw, sh) * 0.55);
+            rad.addColorStop(0, r.stageGlow);
+            rad.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = rad;
+            ctx.fill();
+            // pedestal shadow + soft rim under feet
+            ctx.fillStyle = 'rgba(0,0,0,0.45)';
+            ctx.beginPath();
+            ctx.ellipse(sx + sw * 0.5, sy + sh - 18, sw * 0.34, 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = r.accent;
+            ctx.globalAlpha = 0.35;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.ellipse(sx + sw * 0.5, sy + sh - 19, sw * 0.32, 5, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = accentColor || r.slotEdge;
+            ctx.lineWidth = 2;
+            roundRectPath(ctx, sx + 1, sy + 1, sw - 2, sh - 2, 9);
+            ctx.stroke();
+        } else {
+            const rad = isSlot ? 6 : 8;
+            roundRectPath(ctx, sx, sy, sw, sh, rad);
+            const g = ctx.createLinearGradient(sx, sy, sx, sy + sh);
+            g.addColorStop(0, isSlot ? r.slotBg : 'rgba(255,255,255,0.06)');
+            g.addColorStop(1, isSlot ? r.stageBg : 'rgba(0,0,0,0.34)');
+            ctx.fillStyle = g;
+            ctx.fill();
+            ctx.strokeStyle = accentColor || (isSlot ? r.slotEdge : 'rgba(255,255,255,0.14)');
+            ctx.lineWidth = isSlot ? 1.8 : 1.5;
+            roundRectPath(ctx, sx + 0.75, sy + 0.75, sw - 1.5, sh - 1.5, rad);
+            ctx.stroke();
+            if (isSlot) {
+                ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(sx + 4, sy + 2.5);
+                ctx.lineTo(sx + sw - 4, sy + 2.5);
+                ctx.stroke();
+            }
+        }
+        ctx.restore();
+    }
+
+    function hiResPanel(kit, w, h, opts) {
+        const surf = hiResSurface(w, h), S = surf.S, ctx = surf.ctx, r = kit.rpg;
+        const sw = w * S, sh = h * S, pad = 2;
+        ctx.save();
+        // outer shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.42)';
+        roundRectPath(ctx, pad + 3, pad + 4, sw - pad * 2 - 2, sh - pad * 2 - 2, 12);
+        ctx.fill();
+        // base body gradient
+        roundRectPath(ctx, pad, pad, sw - pad * 2 - 2, sh - pad * 2 - 2, 12);
+        const bg = ctx.createLinearGradient(0, 0, 0, sh);
+        bg.addColorStop(0, r.bgTop);
+        bg.addColorStop(1, r.bgBot);
+        ctx.fillStyle = bg;
+        ctx.fill();
+        // ambient top glow
+        const glow = ctx.createRadialGradient(sw * 0.5, sh * 0.14, 10, sw * 0.5, sh * 0.14, sw * 0.65);
+        glow.addColorStop(0, r.glow);
+        glow.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = glow;
+        ctx.fill();
+        // outer metallic rim gradient
+        const rim = ctx.createLinearGradient(0, 0, 0, sh);
+        rim.addColorStop(0, r.rim1);
+        rim.addColorStop(0.5, r.rim2);
+        rim.addColorStop(1, r.bgBot);
+        ctx.strokeStyle = rim;
+        ctx.lineWidth = 2.5;
+        roundRectPath(ctx, pad + 1.25, pad + 1.25, sw - pad * 2 - 4.5, sh - pad * 2 - 4.5, 11);
+        ctx.stroke();
+        // subtle inner specular highlight
+        ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+        ctx.lineWidth = 1;
+        roundRectPath(ctx, pad + 4, pad + 4, sw - pad * 2 - 10, sh - pad * 2 - 10, 9);
+        ctx.stroke();
+        // corner diamond accents
+        ctx.fillStyle = r.accent;
+        [[14, 14], [sw - 16, 14], [14, sh - 16], [sw - 16, sh - 16]].forEach(([cx, cy]) => {
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - 3); ctx.lineTo(cx + 3, cy); ctx.lineTo(cx, cy + 3); ctx.lineTo(cx - 3, cy);
+            ctx.closePath(); ctx.fill();
+        });
+        if (opts.banner) {
+            const bn = opts.banner;
+            const bx = bn.x * S, by = Math.max(0, (bn.y - 2) * S), bw = bn.w * S, bh = (bn.h + 2) * S;
+            ctx.fillStyle = 'rgba(0,0,0,0.45)';
+            roundRectPath(ctx, bx + 2, by + 3, bw, bh, 8);
+            ctx.fill();
+            roundRectPath(ctx, bx, by, bw, bh, 8);
+            const bgrad = ctx.createLinearGradient(bx, by, bx, by + bh);
+            bgrad.addColorStop(0, r.bannerBg);
+            bgrad.addColorStop(1, r.bgBot);
+            ctx.fillStyle = bgrad;
+            ctx.fill();
+            ctx.strokeStyle = r.bannerEdge;
+            ctx.lineWidth = 2;
+            roundRectPath(ctx, bx + 1, by + 1, bw - 2, bh - 2, 7);
+            ctx.stroke();
+        }
+        if (opts.divider) {
+            const dv = opts.divider;
+            const dg = ctx.createLinearGradient(dv.x * S, 0, (dv.x + dv.w) * S, 0);
+            dg.addColorStop(0, 'rgba(255,255,255,0)');
+            dg.addColorStop(0.5, r.accent);
+            dg.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = dg;
+            ctx.globalAlpha = 0.45;
+            ctx.fillRect(dv.x * S, dv.y * S, dv.w * S, 2);
+            ctx.globalAlpha = 1;
+        }
+        ctx.restore();
+        (opts.wells || []).forEach(wl => hiResWell(surf, kit, wl.x, wl.y, wl.w, wl.h));
+        return surf;
+    }
+
+    function hiResButton(kit, w, h, hover, opts) {
+        const surf = hiResSurface(w, h), S = surf.S, ctx = surf.ctx, r = kit.rpg;
+        const sw = w * S, sh = h * S, rad = 8;
+        ctx.save();
+        // drop shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.42)';
+        roundRectPath(ctx, 2, 3, sw - 4, sh - 3, rad);
+        ctx.fill();
+        let c1 = opts.secondary ? r.btn2Bg : r.btn1;
+        let c2 = opts.secondary ? r.bgBot : r.btn2;
+        let edge = opts.secondary ? r.btn2Edge : r.btnEdge;
+        if (hover) {
+            c1 = opts.secondary ? r.btn2Hover : r.btnHover1;
+            c2 = opts.secondary ? r.btn2Bg : r.btnHover2;
+            edge = r.accent;
+        }
+        if (opts.ramp) {
+            c1 = opts.ramp[hover ? 4 : 3];
+            c2 = opts.ramp[hover ? 2 : 1];
+            edge = opts.ramp[5];
+        }
+        roundRectPath(ctx, 1, 1, sw - 3, sh - 4, rad);
+        const g = ctx.createLinearGradient(0, 1, 0, sh - 3);
+        g.addColorStop(0, c1);
+        g.addColorStop(1, c2);
+        ctx.fillStyle = g;
+        ctx.fill();
+        // top highlight bar
+        ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(rad, 2.5);
+        ctx.lineTo(sw - rad - 1, 2.5);
+        ctx.stroke();
+        // border
+        ctx.strokeStyle = edge;
+        ctx.lineWidth = hover ? 2.2 : 1.6;
+        roundRectPath(ctx, 1.25, 1.25, sw - 3.5, sh - 4.5, rad - 1);
+        ctx.stroke();
+        ctx.restore();
+        if (opts.well) hiResWell(surf, kit, opts.well.x, opts.well.y, opts.well.w, opts.well.h);
+        if (opts.icon) surf.blit(opts.icon, opts.iconX, opts.iconY);
+        return surf;
+    }
+
     /** Window background with the kit's rim, a seam and the plate */
     function panel(kit, w, h, opts) {
         opts = opts || {};
+        if (kit.hiRes) return hiResPanel(kit, w, h, opts);
         const b = new Buf(w, h);
         if (kit.flat) {
             const f = kit.flat;
@@ -296,6 +534,7 @@
 
     /** Sunken area (slot / row) */
     function well(b, kit, x, y, w, h) {
+        if (kit.hiRes) return hiResWell(b, kit, x, y, w, h);
         if (kit.flat) return flatBox(b, x, y, w, h, kit.flat.well, kit.flat.wellEdge);
         frame(b, x, y, w, h, {
             shadow: false, shape: 'rect',
@@ -307,6 +546,7 @@
     /** Raised button; hover = brighter rim and body */
     function button(kit, w, h, hover, opts) {
         opts = opts || {};
+        if (kit.hiRes) return hiResButton(kit, w, h, hover, opts);
         const b = new Buf(w, h);
         if (kit.flat) {
             const f = kit.flat;
@@ -456,6 +696,7 @@
 
     /** well with a coloured rim (used for "you" rows and podium tops) */
     function rimWell(b, kit, ramp, x, y, w, h) {
+        if (kit.hiRes) return hiResWell(b, kit, x, y, w, h, ramp === kit.metal ? kit.rpg.rim1 : ramp[4]);
         if (kit.flat) return flatBox(b, x, y, w, h, kit.flat.stage, ramp === kit.metal ? kit.flat.stageEdge : ramp[4]);
         frame(b, x, y, w, h, { shadow: false, shape: 'rect', rings: [{ ramp, lt: 4, mid: 3, dk: 2 }, { ramp: kit.inset, lt: 0, mid: 1, dk: 5 }], body: { ramp: kit.inset, base: 3, light: 2, dark: 3 } });
         // a hint of the rim colour along the top of the floor
@@ -472,13 +713,14 @@
     /** Title: on the plate in pixel kits; flat kits put it top-left over a thin line */
     function titleText(ctx, w, opts, bh, title) {
         if (ctx.kit.flat) return { type: 'text', name: 'Title', x: 8, y: 5, w: Math.round(w / 2), h: 12, text: title, color: ctx.kit.text, shadow: true, align: 'left' };
+        if (ctx.kit.hiRes) return { type: 'text', name: 'Title', x: opts.banner.x, y: opts.banner.y, w: opts.banner.w, h: bh, text: '&l' + title, color: ctx.kit.text, shadow: true, align: 'center', scale: 1.05 };
         return { type: 'text', name: 'Title', x: opts.banner.x, y: opts.banner.y + 1, w: opts.banner.w - 1, h: bh - 2, text: title, color: ctx.kit.text, shadow: true, align: 'center' };
     }
 
     function windowBase(ctx, w, h, title, extra) {
         const bw = Math.min(160, w - 60), bh = 16;
         const opts = Object.assign({ banner: title ? { x: Math.round((w - bw) / 2), y: 5, w: bw, h: bh } : null }, extra || {});
-        const els = [{ type: 'image', name: 'Window', x: 0, y: 0, w, h, png: panel(ctx.kit, w, h, opts).png() }];
+        const els = [{ type: 'image', name: 'Window', x: 0, y: 0, w, h, detail: ctx.kit.hiRes ? HIRES_SCALE : 1, png: panel(ctx.kit, w, h, opts).png() }];
         if (title) els.push(titleText(ctx, w, opts, bh, title));
         return els;
     }
@@ -493,26 +735,28 @@
         if (extra && extra.ramp) opts.ramp = extra.ramp;
         if (extra && extra.secondary) opts.secondary = true;
         return Object.assign({
-            type: 'button', name, x, y, w, h,
+            type: 'button', name, x, y, w, h, detail: ctx.kit.hiRes ? HIRES_SCALE : 1,
             png: button(ctx.kit, w, h, false, opts).png(),
             hoverPng: button(ctx.kit, w, h, true, opts).png(),
-            label, labelColor: ctx.kit.text, actions, closeOnClick: false
+            label, labelColor: ctx.kit.text, actions, closeOnClick: false,
+            tooltip: (extra && extra.tooltip) || ''
         }, extra && extra.closeOnClick ? { closeOnClick: true } : {},
         isItem(icon) ? { _item: { id: icon, x: x + (extra && extra.iconX != null ? extra.iconX : 4), y: y + Math.round((h - 1 - Math.min(16, h - 6)) / 2), s: Math.min(16, h - 6) } } : {});
     }
 
     /** card button: sunken slot with an icon at the top, texts placed by the caller */
-    function cardButton(ctx, name, x, y, w, h, icon, actions, wellSize) {
+    function cardButton(ctx, name, x, y, w, h, icon, actions, wellSize, tooltip) {
         const ws = wellSize || 20;
         // flat kits: dark cards (the coloured fill is kept for real buttons)
-        const opts = { well: { x: Math.round((w - 1 - ws) / 2), y: 5, w: ws, h: ws }, icon: isItem(icon) ? null : drawIcon(icon), secondary: !!ctx.kit.flat };
+        const opts = { well: { x: Math.round((w - 1 - ws) / 2), y: 5, w: ws, h: ws }, icon: isItem(icon) ? null : drawIcon(icon), secondary: !!(ctx.kit.flat || ctx.kit.hiRes) };
         opts.iconX = opts.well.x + Math.round((ws - ICON) / 2) + 1;
         opts.iconY = opts.well.y + Math.round((ws - ICON) / 2) + 1;
         return {
-            type: 'button', name, x, y, w, h,
+            type: 'button', name, x, y, w, h, detail: ctx.kit.hiRes ? HIRES_SCALE : 1,
             png: button(ctx.kit, w, h, false, opts).png(),
             hoverPng: button(ctx.kit, w, h, true, opts).png(),
             label: '', labelColor: ctx.kit.text, actions, closeOnClick: false,
+            tooltip: tooltip || '',
             ...(isItem(icon) ? { _item: { id: icon, x: x + opts.well.x + 2, y: y + opts.well.y + 2, s: ws - 4 } } : {})
         };
     }
@@ -523,12 +767,12 @@
         const opts = Object.assign({ banner: title ? { x: Math.round((w - bw) / 2), y: 5, w: bw, h: bh } : null }, extra || {});
         const b = panel(ctx.kit, w, h, opts);
         if (draw) draw(b);
-        const els = [{ type: 'image', name: 'Window', x: 0, y: 0, w, h, png: b.png() }];
+        const els = [{ type: 'image', name: 'Window', x: 0, y: 0, w, h, detail: ctx.kit.hiRes ? HIRES_SCALE : 1, png: b.png() }];
         if (title) els.push(titleText(ctx, w, opts, bh, title));
         return els;
     }
 
-    const txt = (name, x, y, w, h, text, color, align) => ({ type: 'text', name, x, y, w, h, text, color: color || '#ffffff', shadow: true, align: align || 'center' });
+    const txt = (name, x, y, w, h, text, color, align, scale) => ({ type: 'text', name, x, y, w, h, text, color: color || '#ffffff', shadow: true, align: align || 'center', scale: scale || 1 });
 
     function backOrClose(ctx, w, h) {
         const hub = ctx.link('hub');
@@ -573,9 +817,9 @@
                         `console:eco take %player_name% ${price}`,
                         `console:give %player_name% ${item} 1`,
                         `message:&aYou bought &f${name}&a!`
-                    ]));
+                    ], null, `&b&l${name}\n&7Click to buy 1x\n&ePrice: $${price}`));
                     els.push(txt(name + ' name', x + 2, y + 27, 56, 10, name, ctx.kit.text));
-                    els.push(txt(name + ' price', x + 2, y + 38, 56, 10, `&e$${price}`, '#ffd75e'));
+                    els.push(txt(name + ' price', x + 2, y + 38, 56, 10, `&e$${price}`, '#ffd75e', 'center', ctx.kit.hiRes ? 0.9 : 1));
                 });
                 els.push(txt('Balance', 16, H - 25, 160, 12, '&7Balance: &e%vault_eco_balance_formatted%', '#ffffff', 'left'));
                 els.push(backOrClose(ctx, W, H));
@@ -591,11 +835,11 @@
                 warps.forEach(([icon, name, warp], i) => {
                     const col = i % 3, row = Math.floor(i / 3);
                     const x = 20 + col * 96, y = 28 + row * 58;
-                    const b = cardButton(ctx, name, x, y, 88, 52, icon, [`player:warp ${warp}`]);
+                    const b = cardButton(ctx, name, x, y, 88, 52, icon, [`player:warp ${warp}`], null, `&a&l${name}\n&7Click to teleport\n&8/warp ${warp}`);
                     b.closeOnClick = true;
                     els.push(b);
                     els.push(txt(name + ' name', x + 2, y + 30, 84, 10, name, ctx.kit.text));
-                    els.push(txt(name + ' info', x + 2, y + 40, 84, 8, `&7/warp ${warp}`, '#aaaaaa'));
+                    els.push(txt(name + ' info', x + 2, y + 40, 84, 8, `&7/warp ${warp}`, '#aaaaaa', 'center', ctx.kit.hiRes ? 0.8 : 1));
                 });
                 els.push(backOrClose(ctx, W, H));
                 return { width: W, height: H, elements: els };
@@ -609,9 +853,9 @@
                 const servers = [['minecraft:diamond_pickaxe', 'Survival', 'survival'], ['minecraft:heart_of_the_sea', 'Skyblock', 'skyblock'], ['minecraft:fire_charge', 'BedWars', 'bedwars']];
                 servers.forEach(([icon, name, server], i) => {
                     const x = 16 + i * 98, y = 28;
-                    els.push(cardButton(ctx, name, x, y, 92, 112, icon, [`server:${server}`], 26));
+                    els.push(cardButton(ctx, name, x, y, 92, 112, icon, [`server:${server}`], 26, `&b&l${name}\n&7%bungee_${server}% players online\n&aClick to connect`));
                     els.push(txt(name + ' name', x + 2, y + 38, 88, 12, '&l' + name, ctx.kit.text));
-                    els.push(txt(name + ' players', x + 2, y + 54, 88, 10, `&7%bungee_${server}% online`, '#aaaaaa'));
+                    els.push(txt(name + ' players', x + 2, y + 54, 88, 10, `&7%bungee_${server}% online`, '#aaaaaa', 'center', ctx.kit.hiRes ? 0.85 : 1));
                     els.push(txt(name + ' join', x + 2, y + 90, 88, 10, '&aClick to join', '#55ff55'));
                 });
                 els.push(backOrClose(ctx, W, H));
@@ -643,7 +887,7 @@
                 for (let d = 1; d <= 7; d++) {
                     const x = 15 + (d - 1) * 42, y = 30;
                     const reward = ['bread', 'iron_ingot', 'gold_ingot', 'emerald', 'diamond', 'experience_bottle', 'nether_star'][d - 1];
-                    els.push(cardButton(ctx, 'Day ' + d, x, y, 38, 50, 'minecraft:' + reward, [`player:rewards claim ${d}`], 20));
+                    els.push(cardButton(ctx, 'Day ' + d, x, y, 38, 50, 'minecraft:' + reward, [`player:rewards claim ${d}`], 20, `&6&lDay ${d} Reward\n&7Click to claim`));
                     els.push(txt('Day ' + d + ' text', x + 1, y + 30, 36, 10, 'Day ' + d, ctx.kit.text));
                 }
                 const close = iconButton(ctx, 'Close', 125, H - 30, 70, 18, 'cross', 'Close', ['close']);
@@ -739,17 +983,19 @@
                 const irows = info.map((s, i) => ({ x: 242, y: 30 + i * 30, w: 66, h: 26 }));
                 const els = windowWith(ctx, W, H, ctx.title, { wells: [...slots, ...srows, ...irows] }, (b) => {
                     rimWell(b, k, k.metal, stage.x, stage.y, stage.w, stage.h);
-                    // floor line the model stands on
-                    for (let i = 8; i < stage.w - 8; i++) b.px(stage.x + i, stage.y + stage.h - 12, k.metal[2]);
+                    // floor line the model stands on (hiRes stage draws its own pedestal)
+                    if (!k.hiRes) for (let i = 8; i < stage.w - 8; i++) b.px(stage.x + i, stage.y + stage.h - 12, k.metal[2]);
                     stats.forEach(([icon], i) => b.blit(drawIcon(icon), srows[i].x + 3, srows[i].y + 4));
                 });
-                els.push(bodyEl('You', stage.x + Math.floor((stage.w - 48) / 2), stage.y + stage.h - 12 - 96, 3, null, { turn: 'cursor' }));
+                els.push(bodyEl('You', stage.x + Math.floor((stage.w - 48) / 2), stage.y + stage.h - 12 - 96, 3, null, { turn: 'cursor', tooltip: '&eDrag to rotate\n&7Click model, move mouse, click to drop' }));
                 // what the player wears / holds, in the slots beside the model (Java)
                 const worn = [['Helmet', 'slot:head'], ['Main hand', 'slot:hand'], ['Chestplate', 'slot:chest'], ['Off hand', 'slot:offhand'], ['Leggings', 'slot:legs'], null, ['Boots', 'slot:feet'], null];
-                worn.forEach((w, i) => { if (w) els.push(itemEl(w[0], slots[i].x + 3, slots[i].y + 3, 16, w[1])); });
+                worn.forEach((w, i) => { if (w) els.push(itemEl(w[0], slots[i].x + 3, slots[i].y + 3, 16, w[1], { tooltip: `&f${w[0]}\n&7Equipped gear` })); });
                 stats.forEach(([, text], i) => els.push(txt('Stat ' + (i + 1), srows[i].x + 18, srows[i].y + 5, 46, 10, text, '#ffffff', 'left')));
                 info.forEach(([label, text], i) => {
-                    els.push(txt(label + ' label', irows[i].x + 2, irows[i].y + 3, 62, 9, '&7' + label, '#aaaaaa'));
+                    const lbl = k.hiRes ? '&7' + label.toUpperCase() : '&7' + label;
+                    const lCol = k.hiRes && k.rpg ? k.rpg.mutedText : '#aaaaaa';
+                    els.push(txt(label + ' label', irows[i].x + 2, irows[i].y + 3, 62, 9, lbl, lCol, 'center', k.hiRes ? 0.75 : 1));
                     els.push(txt(label, irows[i].x + 2, irows[i].y + 13, 62, 10, text, k.text));
                 });
                 els.push(backOrClose(ctx, W, H));
@@ -935,8 +1181,10 @@
                 if (e.type === 'button') bi++;
                 const src = e.type === 'button' && bi === hoverIndex ? e.hoverPng : e.png;
                 const img = await new Promise(res => { const im = new Image(); im.onload = () => res(im); im.src = src; });
+                g.imageSmoothingEnabled = (e.detail || 1) > 1;
                 g.drawImage(img, e.x * scale, e.y * scale, e.w * scale, e.h * scale);
-                if (e.type === 'button' && e.label) drawText(g, e.label, e.labelColor, e.x, e.y, e.w, e.h, 'center', scale);
+                g.imageSmoothingEnabled = false;
+                if (e.type === 'button' && e.label) drawText(g, e.label, e.labelColor, e.x, e.y, e.w, e.h, 'center', scale, e.labelScale || 1);
             } else if (e.type === 'item') {
                 const src = GS.Items && GS.Items.url(e.item);
                 if (src) {
@@ -952,25 +1200,26 @@
                 const img = await new Promise(res => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
                 if (img) g.drawImage(img, e.x * scale, e.y * scale, e.w * scale, e.h * scale);
             } else if (e.type === 'text') {
-                drawText(g, e.text, e.color, e.x, e.y, e.w, e.h, e.align, scale);
+                drawText(g, e.text, e.color, e.x, e.y, e.w, e.h, e.align, scale, e.scale || 1);
             }
         }
         return c;
     }
 
-    function drawText(g, text, color, x, y, w, h, align, scale) {
+    function drawText(g, text, color, x, y, w, h, align, scale, textScale) {
+        const ts = (textScale || 1) * scale;
         const parts = runs(text, color || '#ffffff');
-        g.font = `${8 * scale}px Minecraftia, monospace`;
+        g.font = `${8 * ts}px Minecraftia, monospace`;
         g.textBaseline = 'alphabetic';
-        const widthOf = (p) => { g.font = `${p.bold ? 'bold ' : ''}${8 * scale}px Minecraftia, monospace`; return g.measureText(p.t).width; };
+        const widthOf = (p) => { g.font = `${p.bold ? 'bold ' : ''}${8 * ts}px Minecraftia, monospace`; return g.measureText(p.t).width; };
         const total = parts.reduce((n, p) => n + widthOf(p), 0);
         let cx = align === 'left' ? x * scale : align === 'right' ? (x + w) * scale - total : (x + w / 2) * scale - total / 2;
         // like the game: an 8 px glyph box centred in the element, capitals 7 px tall from its top
-        g.font = `${8 * scale}px Minecraftia, monospace`;
-        const capTop = g.measureText('M').actualBoundingBoxAscent || 7 * scale;
-        const cy = (y + h / 2 - 4) * scale + capTop;
+        g.font = `${8 * ts}px Minecraftia, monospace`;
+        const capTop = g.measureText('M').actualBoundingBoxAscent || 7 * ts;
+        const cy = (y + h / 2) * scale - 4 * ts + capTop;
         for (const p of parts) {
-            g.font = `${p.bold ? 'bold ' : ''}${8 * scale}px Minecraftia, monospace`;
+            g.font = `${p.bold ? 'bold ' : ''}${8 * ts}px Minecraftia, monospace`;
             g.fillStyle = 'rgba(0,0,0,.6)';
             g.fillText(p.t, cx + scale, cy + scale);
             g.fillStyle = p.col;

@@ -19,6 +19,8 @@ build*_log.txt
 *.key
 *.pem
 license-tool/
+.mcgui/
+_backup_*/
 
 # Editor / OS files
 .DS_Store

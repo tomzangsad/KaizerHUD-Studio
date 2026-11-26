@@ -49,7 +49,7 @@ final class ModelPart {
      * @param yaw   yaw that faces the camera
      */
     ModelPart(Plugin plugin, Player viewer, World world, Location feet, double scale, float yaw,
-              String skinOf, boolean viewerSkin, boolean outfit, boolean crouch) {
+              String skinOf, boolean viewerSkin, boolean outfit, boolean crouch, boolean showNow) {
         this.baseYaw = yaw;
         this.skinOf = skinOf;
         this.viewerSkin = viewerSkin;
@@ -77,7 +77,11 @@ final class ModelPart {
             m.setBodyYaw(yaw);
             if (outfit && wearer != null) copyOutfit(wearer, m);
         });
-        viewer.showEntity(plugin, entity);
+        if (showNow) viewer.showEntity(plugin, entity);
+    }
+
+    void show(Plugin plugin, Player viewer) {
+        if (entity.isValid()) viewer.showEntity(plugin, entity);
     }
 
     private static void copyOutfit(Player from, Mannequin to) {

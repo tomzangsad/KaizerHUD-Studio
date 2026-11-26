@@ -317,6 +317,7 @@
         'zoom-fit': () => E.zoomFit(),
         'grid': () => { E.snap = !E.snap; E.renderStatus(); },
         'preview': () => E.togglePreview(),
+        'ui-flow': () => E.openFlowDialog(),
         'cursor-settings': () => { E.selected = null; E.propsMode = 'cursor'; E.renderAll(); },
         'fullscreen': () => appWindow ? appWindow.toggleMaximize() : null,
         'help': showHelp,

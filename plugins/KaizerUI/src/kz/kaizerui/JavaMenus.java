@@ -1,5 +1,6 @@
 package kz.kaizerui;
 
+import kz.kaizerui.api.event.MenuCloseEvent;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -41,8 +42,14 @@ final class JavaMenus implements Listener {
 
     boolean isOpen(Player p) { return sessions.containsKey(p.getUniqueId()); }
 
+    void onPacketRotation(UUID id, float yaw, float pitch) {
+        JavaSession s = sessions.get(id);
+        if (s != null && s.locked && !s.closed) s.onPacketRotate(yaw, pitch);
+    }
+
     /** Must run on the player's thread. */
     void open(Player p, MenuDef menu) {
+        if (!plugin.fireOpenEvent(p, menu, false)) return;
         JavaSession cur = sessions.get(p.getUniqueId());
         if (cur != null && !cur.closed) {
             cur.switchTo(menu);
@@ -61,13 +68,17 @@ final class JavaMenus implements Listener {
 
     /** Must run on the player's thread. */
     void close(Player p) {
+        close(p, MenuCloseEvent.Reason.API);
+    }
+
+    void close(Player p, MenuCloseEvent.Reason reason) {
         JavaSession s = sessions.remove(p.getUniqueId());
-        if (s != null) s.close();
+        if (s != null) s.close(reason);
     }
 
     void closeAll() {
         for (JavaSession s : sessions.values()) {
-            try { s.close(); } catch (Throwable ignored) { /* shutting down */ }
+            try { s.close(MenuCloseEvent.Reason.RELOAD); } catch (Throwable ignored) { /* shutting down */ }
         }
         sessions.clear();
     }
@@ -128,14 +139,14 @@ final class JavaMenus implements Listener {
             e.setCancelled(true);
             return;
         }
-        close(p);
+        close(p, MenuCloseEvent.Reason.PLAYER_SNEAK);
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void onSneak(PlayerToggleSneakEvent e) {
         if (!e.isSneaking()) return;
         JavaSession s = session(e.getPlayer());
-        if (s != null && s.studio.exitOnSneak) close(e.getPlayer());
+        if (s != null && s.studio.exitOnSneak) close(e.getPlayer(), MenuCloseEvent.Reason.PLAYER_SNEAK);
     }
 
     /* ───────────── keep the player safe and still while a menu is open ───────────── */
@@ -148,7 +159,7 @@ final class JavaMenus implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onDamaged(EntityDamageEvent e) {
         // being hurt closes the menu so the player can react
-        if (e.getEntity() instanceof Player p && isOpen(p)) close(p);
+        if (e.getEntity() instanceof Player p && isOpen(p)) close(p, MenuCloseEvent.Reason.DAMAGED);
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -168,6 +179,9 @@ final class JavaMenus implements Listener {
         JavaSession s = session(e.getPlayer());
         if (s == null) return;
         e.setCancelled(true);
+        int diff = (e.getNewSlot() - e.getPreviousSlot() + 9) % 9;
+        if (diff >= 1 && diff <= 4) s.onScroll(1);
+        else if (diff >= 5) s.onScroll(-1);
         // the client showed the other slot's item for a moment: hide it again
         if (s.locked) Sched.entityLater(plugin, e.getPlayer(), 1, () -> CameraHook.hideHands(e.getPlayer()));
     }
@@ -188,15 +202,15 @@ final class JavaMenus implements Listener {
         Location to = e.getTo();
         Location lock = s.lockLocation();
         if (to.getWorld() == lock.getWorld() && to.distanceSquared(lock) < 1.0E-3) return;
-        close(e.getPlayer());
+        close(e.getPlayer(), MenuCloseEvent.Reason.TELEPORT);
     }
 
     @EventHandler
-    public void onWorld(PlayerChangedWorldEvent e) { close(e.getPlayer()); }
+    public void onWorld(PlayerChangedWorldEvent e) { close(e.getPlayer(), MenuCloseEvent.Reason.WORLD_CHANGE); }
 
     @EventHandler
-    public void onDeath(PlayerDeathEvent e) { close(e.getEntity()); }
+    public void onDeath(PlayerDeathEvent e) { close(e.getEntity(), MenuCloseEvent.Reason.DEATH); }
 
     @EventHandler
-    public void onQuit(PlayerQuitEvent e) { close(e.getPlayer()); }
+    public void onQuit(PlayerQuitEvent e) { close(e.getPlayer(), MenuCloseEvent.Reason.QUIT); }
 }

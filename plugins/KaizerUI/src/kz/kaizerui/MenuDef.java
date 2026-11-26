@@ -78,6 +78,8 @@ public final class MenuDef {
         public final boolean glint, item3d, spin;
         /** Index of this element among the Bedrock form buttons (-1 = not a form button) */
         public final int bedrockSlot;
+        /** Optional hover tooltip text (Java) */
+        public final String tooltip;
         /** Animated picture: every frame laid out like {@link #tiles} (empty = still picture) */
         public final List<List<Tile>> frames;
         public final double fps;
@@ -131,6 +133,7 @@ public final class MenuDef {
             this.item3d = "3d".equalsIgnoreCase(str(m.get("look"), "flat"));
             this.spin = bool(m.get("spin"), false);
             this.bedrockSlot = num(m.get("bedrock-slot"), -1);
+            this.tooltip = str(m.get("tooltip"), "");
             List<List<Tile>> fr = new ArrayList<>();
             if (m.get("frames") instanceof List<?> list) {
                 for (Object o : list) {
@@ -172,6 +175,7 @@ public final class MenuDef {
     public final boolean fullscreen;
     public final String backdrop;
     public final double backdropAlpha;
+    public final String nextPage, prevPage;
     /** Opening animation of the whole page (null = appears at once) */
     public final Motion.Clip open;
     public final List<Element> elements;
@@ -189,6 +193,8 @@ public final class MenuDef {
         this.fullscreen = y.getBoolean("fullscreen", false);
         this.backdrop = y.getString("backdrop", "#000000");
         this.backdropAlpha = Math.max(0, Math.min(1, y.getDouble("backdrop-alpha", 0.6)));
+        this.nextPage = y.getString("next-page", "").trim();
+        this.prevPage = y.getString("prev-page", "").trim();
         Map<?, ?> mo = Motion.map(y.get("motion"));
         this.open = mo == null ? null : Motion.clip(mo.get("open"));
         List<Element> els = new ArrayList<>();
@@ -207,6 +213,15 @@ public final class MenuDef {
         for (int i = elements.size() - 1; i >= 0; i--) {
             Element e = elements.get(i);
             if (e.type == Type.BUTTON && e.contains(px, py)) return e;
+        }
+        return null;
+    }
+
+    /** Topmost element with a non-blank tooltip under (px, py), or null */
+    public Element tooltipAt(double px, double py) {
+        for (int i = elements.size() - 1; i >= 0; i--) {
+            Element e = elements.get(i);
+            if (!e.tooltip.isBlank() && e.contains(px, py)) return e;
         }
         return null;
     }

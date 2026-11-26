@@ -1,0 +1,17 @@
+{
+  "name": "kaizer-gui-mcp",
+  "version": "1.0.0",
+  "description": "Local Model Context Protocol (MCP) server for KaizerHUD GUI Studio projects",
+  "type": "module",
+  "main": "index.mjs",
+  "bin": {
+    "kaizer-gui-mcp": "./index.mjs"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node index.mjs",
+    "test": "node test.mjs"
+  }
+}

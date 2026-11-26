@@ -1,5 +1,6 @@
 package kz.kaizerui;
 
+import kz.kaizerui.api.event.MenuCloseEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.geysermc.cumulus.form.Form;
@@ -51,13 +52,16 @@ final class BedrockMenus {
 
     /** Sends the menu as a form. Any thread is fine; results come back on the player's thread. */
     void open(Player p, MenuDef menu) {
+        if (!plugin.fireOpenEvent(p, menu, true)) return;
+        plugin.setBedrockMenu(p.getUniqueId(), menu.id);
         String[] slots = new String[Math.max(0, menu.bedrockSlots)];
         for (int i = 0; i < slots.length; i++) slots[i] = String.format("kzs%02d|", i);
         for (MenuDef.Element e : menu.elements) {
             if (e.bedrockSlot < 0 || e.bedrockSlot >= slots.length) continue;
-            String raw = e.type == MenuDef.Type.BUTTON ? e.label : e.text;
+            String dyn = plugin.dynamicText(p, e.id);
+            String raw = dyn != null ? dyn : (e.type == MenuDef.Type.BUTTON ? e.label : e.text);
             // "kzs03|text": the pack shows each form button at its own element by this marker
-            slots[e.bedrockSlot] = String.format("kzs%02d|", e.bedrockSlot) + Texts.section(Texts.papi(p, raw));
+            slots[e.bedrockSlot] = String.format("kzs%02d|", e.bedrockSlot) + Texts.section(plugin.resolveText(p, raw));
         }
         SimpleForm.Builder b = SimpleForm.builder()
                 .title(menu.bedrockTitle)
@@ -67,9 +71,14 @@ final class BedrockMenus {
             int id = res.clickedButtonId();
             Sched.entity(plugin, p, () -> clicked(p, menu, id));
         });
+        b.closedOrInvalidResultHandler(() -> Sched.entity(plugin, p, () -> {
+            plugin.fireCloseEvent(p, menu.id, MenuCloseEvent.Reason.BEDROCK_DISMISSED, true);
+            plugin.clearBedrockSession(p.getUniqueId());
+        }));
         Form form = b.build();
         if (!bridge.send(p.getUniqueId(), form)) {
             plugin.getLogger().warning("Could not send menu " + menu.id + " to Bedrock player " + p.getName());
+            plugin.clearBedrockSession(p.getUniqueId());
             return;
         }
         Actions.playSound(p, menu.openSound);
@@ -83,9 +92,14 @@ final class BedrockMenus {
             Sched.entityLater(plugin, p, 1, () -> open(p, menu));
             return;
         }
-        Actions.After after = Actions.run(plugin, p, menu, e);
-        // a form closes on every click: show the same page again unless the button closes it or opens another
-        if (after == Actions.After.STAY) Sched.entityLater(plugin, p, 2, () -> open(p, menu));
+        Actions.After after = Actions.run(plugin, p, menu, e, true);
+        if (after == Actions.After.CLOSE) {
+            plugin.fireCloseEvent(p, menu.id, MenuCloseEvent.Reason.BUTTON_CLOSE, true);
+            plugin.clearBedrockSession(p.getUniqueId());
+        } else if (after == Actions.After.STAY) {
+            // a form closes on every click: show the same page again unless the button closes it or opens another
+            Sched.entityLater(plugin, p, 2, () -> open(p, menu));
+        }
     }
 
     /* Each bridge is its own class so only the installed plugin's classes are loaded */

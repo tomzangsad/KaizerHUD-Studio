@@ -160,7 +160,8 @@ async function extractChanges(release) {
 }
 
 function formatAssets(assets, releaseUrl) {
-  const list = Array.isArray(assets) ? [...assets] : [];
+  const list = (Array.isArray(assets) ? assets : [])
+    .filter(a => !/(\.sig|\.nsis\.zip|^latest\.json)$/i.test(String(a?.name || '')));
   if (!list.length) {
     return [`- [View Release Files](${releaseUrl})`];
   }

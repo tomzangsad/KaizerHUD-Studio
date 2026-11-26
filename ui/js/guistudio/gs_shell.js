@@ -321,7 +321,8 @@
         'cursor-settings': () => { E.selected = null; E.propsMode = 'cursor'; E.renderAll(); },
         'fullscreen': () => appWindow ? appWindow.toggleMaximize() : null,
         'help': showHelp,
-        'shortcuts': showShortcuts
+        'shortcuts': showShortcuts,
+        'check-updates': () => window.KZUpdater && window.KZUpdater.checkManual()
     };
     function run(cmd) {
         const f = commands[cmd];

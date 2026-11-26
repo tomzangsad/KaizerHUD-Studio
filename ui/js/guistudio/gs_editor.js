@@ -499,6 +499,7 @@
                       <div class="gs-row-actions">
                         ${canJump ? `<button class="ghost-btn small" data-action="jump-link"><span>Go → ${esc(openTarget[1].trim())}</span></button>` : ''}
                         <button class="ghost-btn small" data-action="create-link"><span>+ New linked page</span></button>
+                        <button class="ghost-btn small" data-action="link-confirm"><span>+ Ask Confirm</span></button>
                       </div>
                       ${this.field('Actions (one per line)', 'actions', (e.actions || []).join('\n'), {
                           type: 'textarea', rows: 4,
@@ -1529,6 +1530,7 @@
                 else if (a === 'pick-item') this.pickItem();
                 else if (a === 'jump-link') this.jumpLink();
                 else if (a === 'create-link') this.createLinkedPage();
+                else if (a === 'link-confirm') this.linkConfirmDialog();
                 else if (a === 'add-next-page') this.addNextPage();
                 else if (a === 'open-flow') this.openFlowDialog();
                 else if (a === 'fs-this' || a === 'fs-all') {
@@ -1880,6 +1882,72 @@
             GS.toast(`Created & linked "${id}"`, 'ok');
         },
 
+        wireConfirmPair(triggerBtn, confirmMenu) {
+            const navRe = /^(open:|back$|close$|next$|prev$)/i;
+            const actions = (triggerBtn.actions || []).map(s => String(s).trim()).filter(Boolean);
+            const payload = actions.filter(a => !navRe.test(a));
+            triggerBtn.actions = ['open:' + confirmMenu.id];
+            triggerBtn.closeOnClick = false;
+
+            const stripFmt = (s) => String(s || '').replace(/[&§][0-9a-fk-or]/gi, '').trim();
+            const yesBtn = confirmMenu.elements.find(el => el.type === 'button' && /^(✓|✔)?\s*(yes|ok|confirm|accept)\b/i.test(stripFmt(el.label || el.name)));
+            const noBtn = confirmMenu.elements.find(el => el.type === 'button' && /^(✕|✖|×)?\s*(no|cancel|back|decline)\b/i.test(stripFmt(el.label || el.name)));
+            if (yesBtn && payload.length) {
+                const keptYes = (yesBtn.actions || []).filter(a => !navRe.test(String(a).trim()));
+                yesBtn.actions = keptYes.concat(payload, ['close']);
+                yesBtn.closeOnClick = false;
+            }
+            if (noBtn) {
+                noBtn.actions = ['back'];
+                noBtn.closeOnClick = false;
+            }
+        },
+
+        async linkConfirmDialog() {
+            const e = this.element();
+            if (!e || e.type !== 'button') return;
+            const cur = this.menu();
+            const existing = this.project.menus.find(mm => mm !== cur && /confirm|sure/i.test(`${mm.id} ${mm.title || ''}`));
+            this.checkpoint();
+            if (existing) {
+                this.wireConfirmPair(e, existing);
+                this.changed();
+                GS.toast(`Linked "${e.label || e.name}" → confirm "${existing.id}" (Yes executes action, No returns Back)`, 'ok');
+                return;
+            }
+            const labelClean = (e.label || e.name || 'Action').replace(/[&§][0-9a-fk-or]/gi, '').trim() || 'Action';
+            const cid = this.uniqueMenuId('confirm');
+            const cm = M.newMenu(cid, `Confirm: ${labelClean}`);
+            cm.width = cur.width; cm.height = cur.height; cm.fullscreen = !!cur.fullscreen;
+            cm.backdrop = cur.backdrop; cm.backdropAlpha = cur.backdropAlpha;
+            const bg = cur.elements.find(x => x.type === 'image' && x.x === 0 && x.y === 0 && x.w === cur.width && x.h === cur.height);
+            if (bg) cm.elements.push(Object.assign(M.newElement('image', cm), { name: bg.name, x: 0, y: 0, w: bg.w, h: bg.h, image: bg.image, detail: bg.detail || 1 }));
+            const refBtn = cur.elements.find(x => x.type === 'button' && x.image);
+            const bw = refBtn ? refBtn.w : 88, bh = refBtn ? refBtn.h : 22, gap = 16;
+            const cy = Math.round(cm.height * 0.56);
+            const xYes = Math.round(cm.width / 2 - bw - gap / 2);
+            const xNo = Math.round(cm.width / 2 + gap / 2);
+            const style = refBtn ? { image: refBtn.image, hoverImage: refBtn.hoverImage || null, detail: refBtn.detail || 1, labelColor: refBtn.labelColor || '#ffffff', labelScale: refBtn.labelScale || 1 } : {};
+            cm.elements.push(Object.assign(M.newElement('text', cm), {
+                name: 'Title', x: Math.round((cm.width - 220) / 2), y: Math.max(12, cy - 42), w: 220, h: 16,
+                text: '&lAre you sure?', align: 'center', scale: 1.25
+            }));
+            cm.elements.push(Object.assign(M.newElement('text', cm), {
+                name: 'Prompt', x: Math.round((cm.width - 240) / 2), y: Math.max(28, cy - 22), w: 240, h: 12,
+                text: `&7Confirm &f${labelClean}&7?`, color: '#cccccc', align: 'center'
+            }));
+            cm.elements.push(Object.assign(M.newElement('button', cm), style, {
+                name: 'Yes', label: '&aYes', x: xYes, y: cy, w: bw, h: bh, actions: ['close']
+            }));
+            cm.elements.push(Object.assign(M.newElement('button', cm), style, {
+                name: 'No', label: '&cNo', x: xNo, y: cy, w: bw, h: bh, actions: ['back']
+            }));
+            this.project.menus.push(cm);
+            this.wireConfirmPair(e, cm);
+            this.changed();
+            GS.toast(`Created Confirm menu "${cid}" and linked button "${labelClean}"`, 'ok');
+        },
+
         addNextPage() {
             const cur = this.menu();
             this.checkpoint();
@@ -1917,11 +1985,11 @@
             const edges = [];
             menus.forEach(m => {
                 if (m.nextPage) {
-                    edges.push({ from: m.id, to: m.nextPage, kind: 'page', label: 'next' });
+                    edges.push({ from: m.id, to: m.nextPage, kind: 'page', field: 'nextPage', label: 'nextPage', broken: !ids.has(m.nextPage) });
                     if (ids.has(m.nextPage)) incoming.set(m.nextPage, (incoming.get(m.nextPage) || 0) + 1);
                 }
                 if (m.prevPage) {
-                    edges.push({ from: m.id, to: m.prevPage, kind: 'page', label: 'prev' });
+                    edges.push({ from: m.id, to: m.prevPage, kind: 'page', field: 'prevPage', label: 'prevPage', broken: !ids.has(m.prevPage) });
                     if (ids.has(m.prevPage)) incoming.set(m.prevPage, (incoming.get(m.prevPage) || 0) + 1);
                 }
                 m.elements.forEach(e => {
@@ -1930,7 +1998,8 @@
                         const t = /^open:(.+)$/.exec(String(a).trim());
                         if (t) {
                             const tid = t[1].trim();
-                            edges.push({ from: m.id, to: tid, kind: 'open', label: e.label || e.name || 'btn', broken: !ids.has(tid) });
+                            const rawLbl = String(e.label || e.name || 'btn').replace(/[&§][0-9a-fk-or]/gi, '').trim() || 'btn';
+                            edges.push({ from: m.id, to: tid, kind: 'open', btnId: e.id, label: rawLbl, broken: !ids.has(tid) });
                             if (ids.has(tid)) incoming.set(tid, (incoming.get(tid) || 0) + 1);
                         }
                     });
@@ -1956,9 +2025,15 @@
                 const dx = x2 - x1, dy = y2 - y1;
                 const cx1 = x1 + dx * 0.35 - dy * 0.14, cy1 = y1 + dy * 0.35 + dx * 0.14;
                 const cx2 = x1 + dx * 0.65 - dy * 0.14, cy2 = y1 + dy * 0.65 + dx * 0.14;
+                const mx = 0.125 * x1 + 0.375 * cx1 + 0.375 * cx2 + 0.125 * x2;
+                const my = 0.125 * y1 + 0.375 * cy1 + 0.375 * cy2 + 0.125 * y2;
                 const col = ed.broken ? '#e5534b' : ed.kind === 'page' ? '#46c882' : '#52a0f0';
                 const dash = ed.kind === 'page' ? 'stroke-dasharray="5 4"' : '';
-                return `<path d="M ${x1} ${y1} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${x2} ${y2}" fill="none" stroke="${col}" stroke-width="2" ${dash} marker-end="url(#${ed.kind === 'page' ? 'arr-p' : 'arr-o'})" opacity="0.85"/>`;
+                const tagTxt = ed.label.length > 16 ? ed.label.slice(0, 15) + '…' : ed.label;
+                const pillW = Math.max(36, tagTxt.length * 6.4 + 10);
+                return `<path d="M ${x1} ${y1} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${x2} ${y2}" fill="none" stroke="${col}" stroke-width="2" ${dash} marker-end="url(#${ed.kind === 'page' ? 'arr-p' : 'arr-o'})" opacity="0.85"/>`
+                    + `<rect x="${(mx - pillW / 2).toFixed(1)}" y="${(my - 8).toFixed(1)}" width="${pillW.toFixed(1)}" height="16" rx="4" fill="#181c24" stroke="${col}" stroke-width="1"/>`
+                    + `<text x="${mx.toFixed(1)}" y="${(my + 3.5).toFixed(1)}" text-anchor="middle" fill="#e6edf7" font-size="10" font-family="Segoe UI, sans-serif">${esc(tagTxt)}</text>`;
             }).join('');
 
             const cardsHtml = menus.map((m, idx) => {
@@ -1980,14 +2055,27 @@
             }).join('');
 
             const opts = menus.map(m => `<option value="${esc(m.id)}">${esc(m.title || m.id)} (${esc(m.id)})</option>`).join('');
+            const linksListHtml = edges.length
+                ? edges.map((ed, i) => `<div class="gs-flow-link-row">
+                    <span><b>${esc(ed.from)}</b> <code class="gs-page-badge ${ed.kind === 'page' ? 'page' : ''}">${esc(ed.label)}</code> → <b>${esc(ed.to)}</b>${ed.broken ? ' <em class="gs-page-badge warn">missing</em>' : ''}</span>
+                    <button type="button" class="ghost-btn small danger gs-flow-unlink" data-unlink-idx="${i}">Unlink</button>
+                  </div>`).join('')
+                : `<div class="gs-muted small">No menu connections yet. Choose a mode above to link an existing button, confirm dialog, or page.</div>`;
+
             const body = `
                 <div class="gs-flow-bar">
-                  <span class="gs-muted">Connect:</span>
-                  <select id="gs-flow-from">${opts}</select>
-                  <span>→</span>
-                  <select id="gs-flow-to">${opts}</select>
-                  <input type="text" id="gs-flow-label" placeholder="Button label" value="Open" />
-                  <button class="primary-btn small" id="gs-flow-add">+ Add Link Button</button>
+                  <label>From <select id="gs-flow-from">${opts}</select></label>
+                  <label>Link type <select id="gs-flow-mode">
+                    <option value="bind-btn">Existing button → Open menu</option>
+                    <option value="confirm">Confirm flow (Button → Confirm → Yes / No)</option>
+                    <option value="page">Pagination (Next / Prev page)</option>
+                    <option value="back-btn">Existing button → Back</option>
+                    <option value="new-btn">Create new styled button → Open menu</option>
+                  </select></label>
+                  <label id="gs-flow-btn-wrap">Button <select id="gs-flow-btn"></select></label>
+                  <label id="gs-flow-to-wrap">Target <select id="gs-flow-to">${opts}</select></label>
+                  <label id="gs-flow-label-wrap" style="display:none">Label <input type="text" id="gs-flow-label" placeholder="Button label" value="Open" /></label>
+                  <button type="button" class="primary-btn small" id="gs-flow-apply">Apply Link</button>
                 </div>
                 <div class="gs-flow-canvas">
                   <div class="gs-flow-inner" style="width:${canvasW}px;height:${canvasH}px">
@@ -2005,30 +2093,151 @@
                   <span><i style="background:#52a0f0"></i>Button link (<code>open:</code>)</span>
                   <span><i style="background:#46c882"></i>Pagination (<code>nextPage / prevPage</code>)</span>
                   <span class="gs-muted">Click any page card to open &amp; edit it.</span>
+                </div>
+                <div class="gs-flow-links">
+                  <div class="gs-sec-head">Active Connections (${edges.length})</div>
+                  ${linksListHtml}
                 </div>`;
 
             GS.modal('UI Flow & Connections', body, [['ok', 'Close', 'primary']], {
                 cls: 'xwide',
                 onOpen: (root, done) => {
                     const fromSel = root.querySelector('#gs-flow-from');
+                    const modeSel = root.querySelector('#gs-flow-mode');
+                    const btnSel = root.querySelector('#gs-flow-btn');
                     const toSel = root.querySelector('#gs-flow-to');
+                    const btnWrap = root.querySelector('#gs-flow-btn-wrap');
+                    const toWrap = root.querySelector('#gs-flow-to-wrap');
+                    const labelWrap = root.querySelector('#gs-flow-label-wrap');
+                    const labelInput = root.querySelector('#gs-flow-label');
+
                     fromSel.value = this.menu().id;
                     if (menus.length > 1) toSel.value = menus[(this.menuIndex + 1) % menus.length].id;
-                    root.querySelector('#gs-flow-add').addEventListener('click', () => {
+
+                    const syncControls = () => {
+                        const fromM = menus.find(m => m.id === fromSel.value);
+                        const btns = fromM ? fromM.elements.filter(e => e.type === 'button' && !e.hidden) : [];
+                        const strip = (s) => String(s || '').replace(/[&§][0-9a-fk-or]/gi, '').trim();
+                        btnSel.innerHTML = btns.length
+                            ? btns.map(b => {
+                                const nav = (b.actions || []).map(a => String(a).trim()).find(a => /^(open:|back$|next$|prev$|close$)/i.test(a));
+                                return `<option value="${esc(b.id)}">${esc(strip(b.label || b.name) || b.id)}${nav ? ` [${esc(nav)}]` : ''}</option>`;
+                            }).join('')
+                            : '<option value="">(No buttons on this page)</option>';
+                        if (this.selected && btns.some(b => b.id === this.selected)) btnSel.value = this.selected;
+
+                        const mode = modeSel.value;
+                        if (mode === 'confirm') {
+                            const cm = menus.find(m => m.id !== fromSel.value && /confirm|sure/i.test(`${m.id} ${m.title || ''}`));
+                            if (cm) toSel.value = cm.id;
+                        }
+                        btnWrap.style.display = ['bind-btn', 'confirm', 'back-btn'].includes(mode) ? '' : 'none';
+                        toWrap.style.display = mode === 'back-btn' ? 'none' : '';
+                        labelWrap.style.display = mode === 'new-btn' ? '' : 'none';
+                    };
+
+                    fromSel.addEventListener('change', syncControls);
+                    modeSel.addEventListener('change', syncControls);
+                    syncControls();
+
+                    root.querySelector('#gs-flow-apply').addEventListener('click', () => {
                         const fromM = menus.find(m => m.id === fromSel.value);
                         const toM = menus.find(m => m.id === toSel.value);
-                        if (!fromM || !toM) return;
-                        if (fromM === toM) { GS.toast('Pick two different menus', 'error'); return; }
-                        const lbl = root.querySelector('#gs-flow-label').value.trim() || toM.title || toM.id;
+                        const mode = modeSel.value;
+                        if (!fromM) return;
+
+                        if (mode === 'back-btn') {
+                            const btn = fromM.elements.find(e => e.id === btnSel.value);
+                            if (!btn) { GS.toast('This menu has no button to bind — pick "Create new styled button" instead', 'error'); return; }
+                            this.checkpoint();
+                            const kept = (btn.actions || []).filter(s => !/^(open:|back$|close$|next$|prev$)/i.test(String(s).trim()));
+                            kept.push('back');
+                            btn.actions = kept;
+                            btn.closeOnClick = false;
+                            this.changed();
+                            done(null);
+                            this.openFlowDialog();
+                            GS.toast(`Wired "${btn.label || btn.name}" → back`, 'ok');
+                            return;
+                        }
+
+                        if (!toM || fromM === toM) { GS.toast('Pick two different menus', 'error'); return; }
+
+                        if (mode === 'page') {
+                            this.checkpoint();
+                            fromM.nextPage = toM.id;
+                            toM.prevPage = fromM.id;
+                            this.changed();
+                            done(null);
+                            this.openFlowDialog();
+                            GS.toast(`Linked pagination: ${fromM.id} ↔ ${toM.id}`, 'ok');
+                            return;
+                        }
+
+                        if (mode === 'bind-btn' || mode === 'confirm') {
+                            const btn = fromM.elements.find(e => e.id === btnSel.value);
+                            if (!btn) { GS.toast('No button on this page — use "Create new styled button" or add a button first', 'error'); return; }
+                            this.checkpoint();
+                            if (mode === 'confirm') {
+                                this.wireConfirmPair(btn, toM);
+                            } else {
+                                const kept = (btn.actions || []).filter(s => !/^(open:|back$|close$|next$|prev$)/i.test(String(s).trim()));
+                                kept.push('open:' + toM.id);
+                                btn.actions = kept;
+                                btn.closeOnClick = false;
+                            }
+                            this.changed();
+                            done(null);
+                            this.openFlowDialog();
+                            GS.toast(mode === 'confirm'
+                                ? `Wired confirm flow: ${fromM.id} [${btn.label || btn.name}] → ${toM.id} (Yes/No)`
+                                : `Linked "${btn.label || btn.name}" → ${toM.id}`, 'ok');
+                            return;
+                        }
+
+                        // mode === 'new-btn' — inherit visual styling from existing button if available
+                        const lbl = labelInput.value.trim() || toM.title || toM.id;
+                        const refBtn = fromM.elements.find(e => e.type === 'button' && e.image);
+                        const style = refBtn ? {
+                            image: refBtn.image, hoverImage: refBtn.hoverImage || null, detail: refBtn.detail || 1,
+                            labelColor: refBtn.labelColor || '#ffffff', labelScale: refBtn.labelScale || 1,
+                            w: refBtn.w, h: refBtn.h
+                        } : { w: 88, h: 22 };
+                        const existingCount = fromM.elements.filter(e => e.type === 'button' && e.y >= fromM.height - 40).length;
+                        const bx = Math.min(Math.max(12, 16 + existingCount * (style.w + 8)), Math.max(12, fromM.width - style.w - 12));
+                        const by = Math.max(8, fromM.height - style.h - 10);
                         this.checkpoint();
-                        fromM.elements.push(Object.assign(M.newElement('button', fromM), {
-                            name: lbl, label: lbl, x: 16, y: fromM.height - 30, w: 88, h: 20, actions: ['open:' + toM.id]
+                        fromM.elements.push(Object.assign(M.newElement('button', fromM), style, {
+                            name: lbl, label: lbl, x: bx, y: by, actions: ['open:' + toM.id]
                         }));
                         this.changed();
                         done(null);
                         this.openFlowDialog();
                         GS.toast(`Added button "${lbl}" → ${toM.id}`, 'ok');
                     });
+
+                    root.querySelectorAll('[data-unlink-idx]').forEach(ub => {
+                        ub.addEventListener('click', () => {
+                            const ed = edges[Number(ub.dataset.unlinkIdx)];
+                            if (!ed) return;
+                            const fromM = menus.find(m => m.id === ed.from);
+                            if (!fromM) return;
+                            this.checkpoint();
+                            if (ed.kind === 'page') {
+                                fromM[ed.field] = '';
+                            } else if (ed.btnId) {
+                                const btn = fromM.elements.find(e => e.id === ed.btnId);
+                                if (btn) {
+                                    btn.actions = (btn.actions || []).filter(a => String(a).trim() !== 'open:' + ed.to);
+                                }
+                            }
+                            this.changed();
+                            done(null);
+                            this.openFlowDialog();
+                            GS.toast('Connection removed');
+                        });
+                    });
+
                     root.querySelectorAll('[data-flow-idx]').forEach(card => {
                         card.addEventListener('click', () => {
                             const idx = Number(card.dataset.flowIdx);

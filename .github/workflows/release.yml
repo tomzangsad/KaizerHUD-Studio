@@ -38,19 +38,30 @@ jobs:
           }
       - name: Build release installer and binary
         working-directory: src-tauri
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npx --yes @tauri-apps/cli@2 build
       - name: Collect desktop artifacts
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist-desktop | Out-Null
-          $setupFiles = Get-ChildItem "src-tauri/target/release/bundle/nsis/*-setup.exe"
+          $nsisDir = "src-tauri/target/release/bundle/nsis"
+          $setupFiles = Get-ChildItem "$nsisDir/*-setup.exe"
           if (-not $setupFiles) { throw "NSIS setup executable not found" }
-          foreach ($f in $setupFiles) {
+          foreach ($f in Get-ChildItem "$nsisDir/*" -File | Where-Object { $_.Name -match '(-setup\.exe(\.sig)?|\.nsis\.zip(\.sig)?)$' }) {
             $cleanName = $f.Name -replace ' ', '-'
             Copy-Item $f.FullName "dist-desktop/$cleanName"
           }
           Copy-Item "src-tauri/target/release/kaizerhud.exe" "dist-desktop/kaizerhud-portable.exe"
           Get-ChildItem dist-desktop
+      - name: Generate updater manifest (latest.json)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          DIST_DIR: dist-desktop
+          RELEASE_TAG: ${{ github.ref_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node .github/scripts/gen-updater-json.mjs
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v4
         with:

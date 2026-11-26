@@ -6,6 +6,7 @@ mod javahud;
 mod js;
 mod overrides;
 mod storage;
+mod updater;
 
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -193,6 +194,8 @@ async fn export_project(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updater::UpdaterState::default())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             let storage = Storage::new(data_dir.join("projects")).map_err(|e| Box::<dyn std::error::Error>::from(e))?;
@@ -222,7 +225,11 @@ pub fn run() {
             guistudio::gui_update_project,
             guistudio::gui_delete_project,
             guistudio::gui_open_projects_folder,
-            guistudio::gui_export
+            guistudio::gui_export,
+            updater::get_app_version,
+            updater::check_app_update,
+            updater::download_app_update,
+            updater::install_app_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running KaizerHUD Studio");

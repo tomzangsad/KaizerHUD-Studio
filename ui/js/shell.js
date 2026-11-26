@@ -321,12 +321,13 @@
     }
 
     function showAbout() {
+        const ver = (window.KZUpdater && window.KZUpdater.getVersion && window.KZUpdater.getVersion()) || '1.0.3';
         showWindow('About', `
             <div class="kz-about">
                 <img src="img/favicon.png" alt="" />
                 <div>
                     <h3>KaizerHUD Studio</h3>
-                    <p>Version 1.0.0<br/>Open-source visual HUD &amp; GUI designer for Minecraft Bedrock JSON UI &amp; Java.<br/>Licensed under GPL-3.0 · KaizerMC Community</p>
+                    <p>Version ${ver}<br/>Open-source visual HUD &amp; GUI designer for Minecraft Bedrock JSON UI &amp; Java.<br/>Licensed under GPL-3.0 · KaizerMC Community</p>
                 </div>
             </div>`);
     }
@@ -383,6 +384,7 @@
         'fullscreen': () => { if (appWindow) appWindow.toggleMaximize(); },
         'wiki': openHelp,
         'shortcuts': showShortcuts,
+        'check-updates': () => window.KZUpdater && window.KZUpdater.checkManual(),
         'about': showAbout,
         'live-sync': () => { openDockPane('project'); click('btn-sync-choose'); },
         'view-canvas': () => window.KZCode && KZCode.setView('canvas'),

@@ -400,7 +400,7 @@
     const cell = (n) => `<button class="gsi-cell" data-item="minecraft:${n}" title="minecraft:${n}"><img src="${url(n)}" alt="" loading="lazy"><span>${esc(n)}</span></button>`;
     const customCell = (it) => {
         const u = url(it.id);
-        const badge = it.provider === 'itemsadder' ? 'IA' : it.provider === 'nexo' ? 'Nexo' : it.provider === 'oraxen' ? 'Oraxen' : it.provider === 'bettermodel' ? 'BM' : it.provider === 'modelengine' ? 'MEG' : 'Pack';
+        const badge = it.provider === 'itemsadder' ? 'IA' : it.provider === 'nexo' ? 'Nexo' : it.provider === 'oraxen' ? 'Oraxen' : it.provider === 'craftengine' ? 'CE' : it.provider === 'bettermodel' ? 'BM' : it.provider === 'modelengine' ? 'MEG' : 'Pack';
         return `<button class="gsi-cell custom" data-item="${esc(it.id)}" title="${esc(it.id)} (${badge})">${u ? `<img src="${u}" alt="" loading="lazy">` : `<span class="gsi-ph">${badge}</span>`}<span>${esc(it.name || it.id)}</span></button>`;
     };
 
@@ -416,6 +416,7 @@
         const customAll = GS.CustomAssets ? GS.CustomAssets.list({ q: rawQ }) : [];
         const customIa = customAll.filter(x => x.provider === 'itemsadder');
         const customNexo = customAll.filter(x => x.provider === 'nexo' || x.provider === 'oraxen');
+        const customCe = customAll.filter(x => x.provider === 'craftengine');
         const customModels = customAll.filter(x => x.kind === 'custom_model' || x.provider === 'modelengine' || x.provider === 'bettermodel');
         const customItems = customAll.filter(x => x.kind !== 'custom_model');
         let h = '';
@@ -427,6 +428,11 @@
         if (t === 'nexo') {
             if (customNexo.length) h += `<div class="gsi-head">Nexo / Oraxen <em>${customNexo.length}</em></div>` + customNexo.map(customCell).join('');
             else h += '<div class="gs-hint gsi-empty">No Nexo / Oraxen items imported yet. Click <b>Plugin Packs…</b> above and select your <code>plugins/Nexo</code> (or Oraxen) folder.</div>';
+            return h;
+        }
+        if (t === 'craftengine') {
+            if (customCe.length) h += `<div class="gsi-head">CraftEngine <em>${customCe.length}</em></div>` + customCe.map(customCell).join('');
+            else h += '<div class="gs-hint gsi-empty">No CraftEngine items imported yet. Click <b>Plugin Packs…</b> above and select your <code>plugins/CraftEngine/resources</code> folder.</div>';
             return h;
         }
         if (t === 'models') {
@@ -464,7 +470,7 @@
         return GS.modal((opts && opts.title) || 'Choose an item or custom model', `
             <div class="gsi">
               <div class="gsi-top">
-                <input type="text" class="gsi-search" placeholder="Search (diamond, sword, itemsadder, dragon…)" spellcheck="false">
+                <input type="text" class="gsi-search" placeholder="Search (diamond, sword, itemsadder, craftengine…)" spellcheck="false">
                 <div class="gsi-tabs">
                   <button class="${defaultTab === 'all' ? 'active' : ''}" data-tab="all">All</button>
                   <button class="${defaultTab === 'items' ? 'active' : ''}" data-tab="items">Items</button>
@@ -472,6 +478,7 @@
                   <button class="${defaultTab === 'worn' ? 'active' : ''}" data-tab="worn">Worn</button>
                   <button class="${defaultTab === 'itemsadder' ? 'active' : ''}" data-tab="itemsadder">ItemsAdder</button>
                   <button class="${defaultTab === 'nexo' ? 'active' : ''}" data-tab="nexo">Nexo</button>
+                  <button class="${defaultTab === 'craftengine' ? 'active' : ''}" data-tab="craftengine">CraftEngine</button>
                   <button class="${defaultTab === 'models' ? 'active' : ''}" data-tab="models">3D Models</button>
                 </div>
                 <button class="primary-btn" data-load="mojang">Download Minecraft assets</button>
@@ -481,7 +488,7 @@
               </div>
               <div class="gs-hint gsi-src">${esc(srcText())}</div>
               <div class="gsi-grid">${gridHtml('', defaultTab)}</div>
-              <div class="gs-field wide"><label>Or type an id</label><input type="text" class="gsi-id" value="${esc(current || '')}" placeholder="minecraft:diamond_sword · itemsadder:ns:id · nexo:id · meg:id · bm:id" spellcheck="false"></div>
+              <div class="gs-field wide"><label>Or type an id</label><input type="text" class="gsi-id" value="${esc(current || '')}" placeholder="minecraft:diamond_sword · itemsadder:ns:id · nexo:id · craftengine:ns:id · meg:id" spellcheck="false"></div>
               <input type="file" class="gsi-file" accept=".jar,.zip" hidden><input type="file" class="gsi-dir" webkitdirectory hidden>
             </div>`, [['cancel', 'Cancel'], ['ok', 'Use this id', 'primary']], {
             cls: 'xwide',

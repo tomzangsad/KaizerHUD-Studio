@@ -5,7 +5,7 @@
      • BetterHud  (huds / layouts / images / texts / heads + assets)
      • MythicHUD  (layouts / hud_assets / listeners + textures)
    plus the hotbar texture and see-through vanilla bar sprites for the
-   server's resource-pack plugin (ItemsAdder / Nexo / Oraxen). The Rust command `export_java_hud`
+   server's resource-pack plugin (ItemsAdder / Nexo / Oraxen / CraftEngine). The Rust command `export_java_hud`
    only zips the files and asks where to save them.
 
    Coordinates are the inverse of the importer (src-tauri/src/javahud.rs):
@@ -386,6 +386,11 @@
         return out;
     }
 
+    /** CraftEngine pack.yml descriptor */
+    function cePackYml(ns, desc) {
+        return `author: KaizerHUD Studio\nversion: 1.0.0\ndescription: ${desc}\nnamespace: ${ns}\nenable: true\n`;
+    }
+
     /** Hotbar texture + see-through vanilla bars for the resource-pack plugin */
     async function packFiles(items, project, opts, helper, notes) {
         const files = [];
@@ -395,6 +400,7 @@
             itemsadder: `ItemsAdder/contents/${ns}_hotbar/resourcepack/assets/minecraft/textures/gui/sprites/hud`,
             nexo: `Nexo/pack/external_packs/${ns}_hotbar/assets/minecraft/textures/gui/sprites/hud`,
             oraxen: `Oraxen/pack/assets/minecraft/textures/gui/sprites/hud`,
+            craftengine: `CraftEngine/resources/${ns}_hotbar/resourcepack/assets/minecraft/textures/gui/sprites/hud`,
             none: `resourcepack/assets/minecraft/textures/gui/sprites/hud`,
         }[opts.host];
         if (opts.hotbar && project.widgetsImageData) {
@@ -414,6 +420,9 @@
                     files.push({ path: `${root}/${name}.png`, base64: blanks.get(k) });
                 }
             }
+        }
+        if (opts.host === 'craftengine' && files.length > 0) {
+            files.push({ path: `CraftEngine/resources/${ns}_hotbar/pack.yml`, text: cePackYml(`${ns}_hotbar`, `KaizerHUD hotbar and vanilla bar overrides (${ns})`) });
         }
         return { files, dir: root };
     }
@@ -593,6 +602,7 @@
             itemsadder: { 'build-folder-location': 'ItemsAdder/contents/betterhud/resourcepack', 'pack-type': 'folder' },
             nexo: { 'build-folder-location': 'Nexo/pack/external_packs/BetterHud', 'pack-type': 'zip' },
             oraxen: { 'build-folder-location': 'Oraxen/pack/uploads/BetterHud', 'pack-type': 'folder' },
+            craftengine: { 'build-folder-location': 'CraftEngine/resources/betterhud/resourcepack', 'pack-type': 'folder' },
             none: { 'build-folder-location': 'BetterHud/build', 'pack-type': 'folder' },
         }[host];
         const config = {
@@ -610,6 +620,9 @@
             'merge-with-external-resources': true,
         };
         files.push({ path: 'BetterHud/config.yml', text: head + yaml(config) });
+        if (host === 'craftengine') {
+            files.push({ path: 'CraftEngine/resources/betterhud/pack.yml', text: cePackYml('betterhud', 'BetterHud resource pack built by KaizerHUD Studio') });
+        }
         const pack = await packFiles(items, project, opts, helper, notes);
         files.push(...pack.files);
         if (opts.hideVanilla && items.some((i) => i.kind === 'text' && i.xp)) {
@@ -731,6 +744,7 @@
         const copy = {
             itemsadder: { enabled: true, path: 'ItemsAdder/contents/mythichud/resourcepack' },
             oraxen: { enabled: true, path: 'Oraxen/pack/uploads/MythicHUD' },
+            craftengine: { enabled: true, path: 'CraftEngine/resources/mythichud/resourcepack' },
         }[host];
         if (copy) snippet['copy-pack'] = copy;
         if (host === 'nexo') snippet['nexo-hook'] = true;
@@ -744,6 +758,9 @@
             path: 'MythicHUD/config_kaizerhud_snippet.yml',
             text: '# Copy these keys into plugins/MythicHUD/config.yml (do not replace the whole file)\n' + head + yaml(snippet),
         });
+        if (host === 'craftengine') {
+            files.push({ path: 'CraftEngine/resources/mythichud/pack.yml', text: cePackYml('mythichud', 'MythicHUD resource pack built by KaizerHUD Studio') });
+        }
         const pack = await packFiles(items, project, opts, helper, notes);
         files.push(...pack.files);
         files.push({ path: 'README_KaizerHUD.txt', text: readme('mythichud', host, ns, layoutIds, opts) });
@@ -754,7 +771,7 @@
 
     function readme(plugin, host, ns, ids, opts) {
         const L = [];
-        const hostName = { itemsadder: 'ItemsAdder', nexo: 'Nexo', oraxen: 'Oraxen', none: '(none)' }[host];
+        const hostName = { itemsadder: 'ItemsAdder', nexo: 'Nexo', oraxen: 'Oraxen', craftengine: 'CraftEngine', none: '(none)' }[host];
         L.push(`KaizerHUD Studio — Java HUD export`);
         L.push(`Plugin: ${plugin === 'betterhud' ? 'BetterHud' : 'MythicHUD'} · Resource pack: ${hostName} · Namespace: ${ns}`);
         L.push('');
@@ -773,10 +790,10 @@
         return L.join('\r\n') + '\r\n';
     }
     function oldBuild(host, ns) {
-        return { itemsadder: `ItemsAdder/contents/${ns}_betterhud`, nexo: `Nexo/pack/external_packs/${ns}_betterhud`, oraxen: `Oraxen/pack/uploads/${ns}_betterhud` }[host];
+        return { itemsadder: `ItemsAdder/contents/${ns}_betterhud`, nexo: `Nexo/pack/external_packs/${ns}_betterhud`, oraxen: `Oraxen/pack/uploads/${ns}_betterhud`, craftengine: `CraftEngine/resources/${ns}_betterhud` }[host];
     }
     function reloadCmd(host) {
-        return { itemsadder: '/iazip', oraxen: '/oraxen reload pack', nexo: '/nexo reload all' }[host] || '';
+        return { itemsadder: '/iazip', oraxen: '/oraxen reload pack', nexo: '/nexo reload all', craftengine: '/ce reload all' }[host] || '';
     }
     function hostSteps(L, plugin, host) {
         if (host === 'itemsadder') {
@@ -791,6 +808,8 @@
             L.push('2. Nexo/settings.yml: set Glyphs.generate_gif_shaders: false');
         } else if (host === 'oraxen') {
             L.push('2. Oraxen/settings.yml: set Misc.hide_scoreboard_numbers: false');
+        } else if (host === 'craftengine') {
+            L.push('2. CraftEngine: make sure pack.yml inside CraftEngine/resources/<pack>/ has enable: true (already generated), then run /ce reload all.');
         } else {
             L.push(`2. No pack plugin: merge ${plugin === 'betterhud' ? 'BetterHud/build' : 'MythicHUD/built-pack'} and resourcepack/ into your server resource pack yourself.`);
         }
@@ -919,6 +938,7 @@
                     <option value="itemsadder" ${sel('itemsadder', p.host || 'itemsadder')}>ItemsAdder</option>
                     <option value="nexo" ${sel('nexo', p.host)}>Nexo</option>
                     <option value="oraxen" ${sel('oraxen', p.host)}>Oraxen</option>
+                    <option value="craftengine" ${sel('craftengine', p.host)}>CraftEngine</option>
                     <option value="none" ${sel('none', p.host)}>None (merge the pack myself)</option>
                 </select>
             </div>

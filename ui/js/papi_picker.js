@@ -60,6 +60,20 @@
 
     /* ───────────── applying a choice ───────────── */
 
+    function selectParamInInput(input, fromOffset, len) {
+        if (!input) return;
+        const start = Math.max(0, fromOffset || 0);
+        input.focus();
+        const m = PARAM_RE.exec(input.value.slice(start));
+        if (m) {
+            const s = start + m.index;
+            input.setSelectionRange(s, s + m[0].length);
+            return;
+        }
+        const end = start + (len != null ? len : input.value.length);
+        input.setSelectionRange(end, end);
+    }
+
     function setField(id, value, selectParam) {
         const input = document.getElementById(id);
         if (!input) return;
@@ -69,17 +83,7 @@
         // the panel may re-render: look the field up again before selecting
         setTimeout(() => {
             const el = document.getElementById(id) || input;
-            el.focus();
-            if (selectParam) {
-                const m = PARAM_RE.exec(el.value.slice(selectParam.from));
-                if (m) {
-                    const s = selectParam.from + m.index;
-                    el.setSelectionRange(s, s + m[0].length);
-                    return;
-                }
-            }
-            const end = selectParam ? selectParam.from + selectParam.len : el.value.length;
-            el.setSelectionRange(end, end);
+            selectParamInInput(el, selectParam ? selectParam.from : 0, selectParam ? selectParam.len : null);
         }, 0);
     }
 
@@ -113,18 +117,18 @@
         back = null;
     }
 
-    function open(fieldId) {
+    function openModal({ label = '', extraGroups = null, onSelect }) {
         close();
-        const cat = window.PAPI_CATALOG || [];
-        const cfg = FIELDS[fieldId] || {};
+        const cat = (Array.isArray(extraGroups) ? extraGroups : []).concat(window.PAPI_CATALOG || []);
         let group = Math.min(+(lsGet(LS_GROUP) || 0), Math.max(0, cat.length - 1));
+        const closeIcon = document.getElementById('i-close') ? '#i-close' : '#g-close';
 
         back = document.createElement('div');
         back.className = 'kz-modal';
         back.innerHTML = `
             <div class="kz-window papi-win">
-                <div class="kz-window-head"><span>Placeholders — ${esc(cfg.label || '')}</span>
-                    <button class="icon-btn small" data-close title="Close"><svg><use href="#i-close"/></svg></button></div>
+                <div class="kz-window-head"><span>Placeholders — ${esc(label)}</span>
+                    <button class="icon-btn small" data-close title="Close"><svg><use href="${closeIcon}"/></svg></button></div>
                 <div class="kz-window-body">
                     <input type="text" class="papi-search" placeholder="Search: health, mana, money, level…" spellcheck="false" />
                     <div class="papi-main">
@@ -207,7 +211,7 @@
             if (!b) return;
             const it = shown[+b.dataset.i];
             close();
-            apply(fieldId, it);
+            if (onSelect) onSelect(it);
         });
         search.addEventListener('input', render);
         search.addEventListener('keydown', (e) => {
@@ -215,12 +219,26 @@
                 e.preventDefault();
                 const it = shown[0];
                 close();
-                apply(fieldId, it);
+                if (onSelect) onSelect(it);
             }
         });
         render();
         search.focus();
     }
 
-    window.PapiPicker = { open };
+    function open(fieldId) {
+        const cfg = FIELDS[fieldId] || {};
+        openModal({ label: cfg.label || '', onSelect: (it) => apply(fieldId, it) });
+    }
+
+    function pick(opts) {
+        const o = opts || {};
+        openModal({
+            label: o.label || 'Placeholder',
+            extraGroups: o.extraGroups || null,
+            onSelect: (it) => { if (o.onPick) o.onPick(it); }
+        });
+    }
+
+    window.PapiPicker = { open, pick, selectParamInInput };
 })();

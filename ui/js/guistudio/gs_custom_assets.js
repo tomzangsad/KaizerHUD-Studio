@@ -7,7 +7,7 @@
     'use strict';
 
     const GS = window.GS = window.GS || {};
-    const CUSTOM_PREFIX_RE = /^(itemsadder:|ia:|nexo:|oraxen:|meg:|bm:|modelengine:|bettermodel:|model:|custom:)/i;
+    const CUSTOM_PREFIX_RE = /^(itemsadder:|ia:|nexo:|oraxen:|craftengine:|ce:|meg:|bm:|modelengine:|bettermodel:|model:|custom:)/i;
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
     function tauri() {
@@ -33,6 +33,8 @@
             state.byKey.set(id, it);
             if (id.startsWith('itemsadder:')) state.byKey.set('ia:' + id.slice('itemsadder:'.length), it);
             else if (id.startsWith('ia:')) state.byKey.set('itemsadder:' + id.slice('ia:'.length), it);
+            else if (id.startsWith('craftengine:')) state.byKey.set('ce:' + id.slice('craftengine:'.length), it);
+            else if (id.startsWith('ce:')) state.byKey.set('craftengine:' + id.slice('ce:'.length), it);
             else if (id.startsWith('meg:')) state.byKey.set('modelengine:' + id.slice('meg:'.length), it);
             else if (id.startsWith('bm:')) state.byKey.set('bettermodel:' + id.slice('bm:'.length), it);
         }
@@ -152,6 +154,7 @@
         if (p === 'itemsadder') return 'ItemsAdder';
         if (p === 'nexo') return 'Nexo';
         if (p === 'oraxen') return 'Oraxen';
+        if (p === 'craftengine') return 'CraftEngine';
         if (p === 'bettermodel') return 'BetterModel';
         if (p === 'modelengine') return 'ModelEngine';
         return 'Resource Pack';
@@ -174,7 +177,7 @@
                         <button class="ghost-btn small danger" data-remove="${esc(s.id)}">Remove</button>
                       </div>
                     </div>`).join('')
-                : '<div class="gs-hint">No plugin packs imported yet. Import your <code>plugins/ItemsAdder/contents</code> folder, <code>plugins/Nexo/items</code> + <code>pack</code> folder, <code>plugins/ModelEngine/blueprints</code>, <code>plugins/BetterModel/models</code>, or a <code>.zip</code> / <code>.bbmodel</code> file. Everything stays cached on this computer across projects.</div>';
+                : '<div class="gs-hint">No plugin packs imported yet. Import your <code>plugins/ItemsAdder/contents</code>, <code>plugins/Nexo</code>, <code>plugins/CraftEngine/resources</code>, <code>plugins/ModelEngine/blueprints</code>, <code>plugins/BetterModel/models</code> folder, or a <code>.zip</code> / <code>.bbmodel</code> file. Everything stays cached on this computer across projects.</div>';
             return `<div class="ca-mgr">
                 <div class="ca-actions">
                   <button class="primary-btn" data-import="folder">Import Plugin Folder…</button>
@@ -190,7 +193,7 @@
               </div>`;
         };
 
-        return GS.modal('Plugin Packs & 3D Models (ItemsAdder · Nexo · ModelEngine · BetterModel)', bodyHtml(), [['ok', 'Done', 'primary']], {
+        return GS.modal('Plugin Packs & 3D Models (ItemsAdder · Nexo · CraftEngine · ModelEngine · BetterModel)', bodyHtml(), [['ok', 'Done', 'primary']], {
             cls: 'xwide',
             onOpen: (root) => {
                 const redrawList = () => {

@@ -485,7 +485,9 @@ export function exportPluginYaml(p) {
         L.push(`    scale: ${num(e.scale, 1)}`);
         L.push(`    shadow: ${!!e.shadow}`);
         L.push(`    align: ${q(e.align || 'center')}`);
-        L.push(`    bedrock-slot: ${slot++}`);
+        if (/%|{[^}]+}/.test(String(e.text || ''))) {
+          L.push(`    bedrock-slot: ${slot++}`);
+        }
       }
       if (e.type === 'roulette') {
         L.push(`    slot-size: ${int(e.slotSize, 44)}`);

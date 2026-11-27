@@ -10,7 +10,7 @@ description: Cursor GUI menus made in KaizerHUD Studio — holograms for Java, s
 #  packetevents     locks the camera so the mouse moves a cursor (without it the crosshair is the cursor)
 #  PlaceholderAPI   %placeholders% in texts, labels and actions
 #  floodgate/Geyser Bedrock players get menus as server forms
-softdepend: [Vault, PlaceholderAPI, packetevents, floodgate, Geyser-Spigot, ItemsAdder, Nexo, Oraxen, ModelEngine, BetterModel]
+softdepend: [Vault, PlaceholderAPI, packetevents, floodgate, Geyser-Spigot, ItemsAdder, Nexo, Oraxen, CraftEngine, ModelEngine, BetterModel]
 
 commands:
   kui:

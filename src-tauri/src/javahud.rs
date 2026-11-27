@@ -58,6 +58,7 @@ fn wanted(path: &str) -> bool {
     !dirs.windows(2).any(|w| {
         (w[0] == "itemsadder" && (w[1] == "output" || w[1] == "storage"))
             || (w[0] == "betterhud" && w[1] == "build")
+            || (w[0] == "craftengine" && (w[1] == "cache" || w[1] == "generated"))
     })
 }
 
@@ -2146,7 +2147,7 @@ fn np_walk(ctx: &mut NpCtx, text: &str, mut x: f64, vis: &[Cond], out: &mut Vec<
                     rest = &rest[end + 2..];
                     continue;
                 }
-                let glyph = ["img_", "oraxen_", "nexo_", "itemsadder_"]
+                let glyph = ["img_", "oraxen_", "nexo_", "itemsadder_", "craftengine_", "ce_", "image:"]
                     .iter()
                     .find_map(|p| pl.strip_prefix(p))
                     .filter(|g| ctx.glyphs.contains_key(*g));
@@ -2238,6 +2239,9 @@ fn parse_nameplates(vfs: &Vfs, root: &str, imgs: &mut ImageTable) -> (Vec<Hud>, 
         };
         for (name, g) in entries(get(&y, "font_images")) {
             add(name, st(get(g, "path")), num(get(g, "scale_ratio")), num(get(g, "y_position")));
+        }
+        for (name, g) in entries(get(&y, "images")) {
+            add(name, st(get(g, "file")), num(get(g, "height")), num(get(g, "ascent")));
         }
         if path.to_ascii_lowercase().contains("/glyphs/") {
             for (name, g) in entries(Some(&y)) {

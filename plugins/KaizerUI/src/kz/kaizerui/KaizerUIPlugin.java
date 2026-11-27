@@ -196,7 +196,51 @@ public final class KaizerUIPlugin extends JavaPlugin implements Listener {
             if (e.type == MenuDef.Type.INPUT && e.varName != null && !e.varName.isEmpty()) {
                 vars.putIfAbsent(e.varName, e.defaultValue != null ? e.defaultValue : "1");
             }
+            if (e.type == MenuDef.Type.BUTTON && e.isToggle() && !e.toggleVar.isEmpty()) {
+                boolean on = getToggle(p, e);
+                vars.put(e.toggleVar, on ? "true" : "false");
+                vars.put(e.toggleVar + "_state", on ? "ON" : "OFF");
+            }
         }
+    }
+
+    private NamespacedKey toggleKey(String varName) {
+        String clean = String.valueOf(varName == null ? "" : varName).trim().toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_.-]+", "_");
+        if (clean.isEmpty()) clean = "flag";
+        return new NamespacedKey(this, "tg_" + clean);
+    }
+
+    boolean getToggle(Player p, MenuDef.Element e) {
+        if (e == null) return true;
+        if (!e.togglePapi.isEmpty() && p != null) {
+            String res = resolveText(p, e.togglePapi).trim();
+            if (!res.equals(e.togglePapi)) {
+                return e.toggleOnValue.isEmpty()
+                        ? ConditionEval.matchBoolOrPositive(res)
+                        : ConditionEval.matchValue(res, e.toggleOnValue);
+            }
+        }
+        return getToggle(p, e.toggleVar, e.toggleDefault);
+    }
+
+    boolean getToggle(Player p, String varName, boolean def) {
+        if (p == null || varName == null || varName.isBlank()) return def;
+        Byte stored = p.getPersistentDataContainer().get(toggleKey(varName), PersistentDataType.BYTE);
+        return stored == null ? def : stored != 0;
+    }
+
+    void setToggle(Player p, String varName, boolean on) {
+        if (p == null || varName == null || varName.isBlank()) return;
+        String v = varName.trim();
+        p.getPersistentDataContainer().set(toggleKey(v), PersistentDataType.BYTE, (byte) (on ? 1 : 0));
+        setSessionVar(p.getUniqueId(), v, on ? "true" : "false");
+        setSessionVar(p.getUniqueId(), v + "_state", on ? "ON" : "OFF");
+    }
+
+    boolean flipToggle(Player p, String varName, boolean def) {
+        boolean next = !getToggle(p, varName, def);
+        setToggle(p, varName, next);
+        return next;
     }
 
     void setSessionVar(UUID id, String key, String value) {

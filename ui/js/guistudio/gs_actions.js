@@ -1,7 +1,7 @@
 /* ========================================
-   GUI Studio — Visual Action Builder + Variable Picker
-   Makes configuring Open Menu, Vault Shop Trade, External Commands,
-   Sounds, Spin, Scroll, and Messages point-and-click (with Raw Code toggle).
+   GUI Studio — Visual Action Builder + PAPI / Variable Picker
+   Makes configuring Open Menu, Vault Shop Trade, Multi-Currency, PAPI Requirements,
+   External Commands, Sounds, Spin, Scroll, and Messages point-and-click.
    ======================================== */
 (function () {
     'use strict';
@@ -9,18 +9,60 @@
     const GS = window.GS = window.GS || {};
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-    const VARIABLES = [
-        ['%player_name%', 'Player Name'],
-        ['$%vault_eco_balance_formatted%', 'Player Balance (Vault)'],
-        ['%server_online%/%server_max_players%', 'Online / Max Players'],
-        ['%player_level%', 'XP Level'],
-        ['{qty}', 'Quantity Variable ({qty})'],
-        ['{price}', 'Unit Price ({price})'],
-        ['{qty*price}', 'Total Price ({qty*price})'],
-        ['{item_id}', 'Dynamic Item ID ({item_id})'],
-        ['{item_name}', 'Dynamic Item Name ({item_name})'],
-        ['{mode}', 'Trade Mode (BUY / SELL)'],
-        ['{cmd}', 'Dynamic Command ({cmd})'],
+    const PAPI_GROUPS = [
+        ['Session & Dynamic', [
+            ['{qty}', 'Quantity Variable'],
+            ['{price}', 'Unit Price'],
+            ['{qty*price}', 'Total Price'],
+            ['{item_id}', 'Dynamic Item ID'],
+            ['{item_name}', 'Dynamic Item Name'],
+            ['{mode}', 'Trade Mode (BUY/SELL)'],
+            ['{cmd}', 'Dynamic Command'],
+        ]],
+        ['Player & Server', [
+            ['%player_name%', 'Player Name'],
+            ['%player_level%', 'XP Level'],
+            ['%player_health_rounded%', 'Current Health'],
+            ['%player_max_health_rounded%', 'Max Health'],
+            ['%player_armor%', 'Armor Points'],
+            ['%player_ping%', 'Latency (ms)'],
+            ['%server_online%/%server_max_players%', 'Online / Max'],
+            ['%statistic_player_kills%', 'Player Kills'],
+            ['%statistic_mob_kills%', 'Mob Kills'],
+            ['%statistic_hours_played%', 'Hours Played'],
+        ]],
+        ['Economy & Currencies', [
+            ['$%vault_eco_balance_formatted%', 'Vault Money'],
+            ['%playerpoints_points%', 'PlayerPoints'],
+            ['%coinsengine_balance_gems%', 'CoinsEngine Gems'],
+            ['%coinsengine_balance_tokens%', 'CoinsEngine Tokens'],
+        ]],
+        ['MMOCore & RPG', [
+            ['%mmocore_class%', 'MMOCore Class'],
+            ['%mmocore_level%', 'MMOCore Level'],
+            ['%mmocore_experience%', 'MMOCore EXP'],
+            ['%mmocore_next_level_experience%', 'Next Level EXP'],
+            ['%mmocore_mana%', 'Current Mana'],
+            ['%mmocore_max_mana%', 'Max Mana'],
+            ['%mmocore_stamina%', 'Stamina'],
+            ['%mmocore_skill_points%', 'Skill Points'],
+            ['%mmocore_attribute_points%', 'Attribute Points'],
+            ['%mmocore_stat_attack_damage%', 'Attack Damage'],
+            ['%mmocore_stat_critical_strike_chance%', 'Crit Chance'],
+        ]],
+        ['AuraSkills & EcoSkills', [
+            ['%auraskills_power%', 'AuraSkills Power'],
+            ['%auraskills_mana%', 'AuraSkills Mana'],
+            ['%auraskills_mana_max%', 'AuraSkills Max Mana'],
+            ['%auraskills_fighting%', 'Fighting Level'],
+            ['%auraskills_mining%', 'Mining Level'],
+            ['%ecoskills_average_skill_level%', 'EcoSkills Avg'],
+        ]],
+        ['Permissions & Ranks', [
+            ['%luckperms_prefix%', 'LuckPerms Prefix'],
+            ['%luckperms_primary_group_name%', 'Primary Rank'],
+            ['%luckperms_in_group_vip%', 'In VIP Group'],
+        ]],
     ];
 
     const SOUND_PRESETS = [
@@ -36,15 +78,22 @@
 
     const CMD_PRESETS = [
         ['', '-- Insert Preset Command --'],
+        ['console:mmocore admin give-sp %player_name% 1', 'MMOCore: Give Skill Point'],
+        ['console:mmocore admin reset-skills %player_name%', 'MMOCore: Reset Skill Tree'],
+        ['console:skills xp add %player_name% fighting 100', 'AuraSkills: Add Fighting XP'],
+        ['console:points take %player_name% {price}', 'PlayerPoints: Take Points'],
+        ['console:coinsengine take %player_name% gems {price}', 'CoinsEngine: Take Gems'],
         ['console:give %player_name% {item_id} {qty}', 'Give Item (Vanilla Console)'],
         ['console:iagive %player_name% {item_id} {qty}', 'Give Custom Item (ItemsAdder)'],
         ['console:nexo give %player_name% {item_id} {qty}', 'Give Custom Item (Nexo)'],
+        ['console:ce item give %player_name% {item_id} {qty}', 'Give Custom Item (CraftEngine)'],
         ['console:eco take %player_name% {qty*price}', 'Take Money (Essentials Eco)'],
-        ['console:eco give %player_name% {qty*price}', 'Give Money (Essentials Eco)'],
         ['console:lp user %player_name% parent add vip', 'Add Rank (LuckPerms)'],
         ['player:shop', 'Open External Shop (/shop)'],
         ['player:warp spawn', 'Teleport Warp (/warp spawn)'],
     ];
+
+    const REQ_OPS = ['>=', '<=', '==', '!=', '>', '<', 'contains', '!contains', 'perm'];
 
     function dec(s) {
         try { return decodeURIComponent(String(s || '')); }
@@ -63,6 +112,20 @@
         return [rest.slice(0, i1), rest.slice(i1 + 1, i2), rest.slice(i2 + 1)];
     }
 
+    function parseRequire(rest) {
+        const bar = rest.indexOf('|');
+        const expr = (bar >= 0 ? rest.slice(0, bar) : rest).trim();
+        const failMsg = bar >= 0 ? rest.slice(bar + 1).trim() : '';
+        if (/^perm:/i.test(expr)) {
+            return { kind: 'require', op: 'perm', left: expr.slice(5).trim(), right: '', failMsg };
+        }
+        const m = /^(.*?)\s*(>=|<=|==|!=|!contains|contains|>|<|=)\s*(.*)$/i.exec(expr);
+        if (m) {
+            return { kind: 'require', op: m[2] === '=' ? '==' : m[2].toLowerCase(), left: m[1].trim(), right: m[3].trim(), failMsg };
+        }
+        return { kind: 'require', op: '>=', left: expr, right: '1', failMsg };
+    }
+
     function parseLine(raw) {
         const s = String(raw || '').trim();
         if (!s) return null;
@@ -70,6 +133,20 @@
             return { kind: 'nav', nav: s.toLowerCase() };
         }
         let m;
+        if ((m = /^require:(.*)$/i.exec(s))) {
+            return parseRequire(m[1]);
+        }
+        if ((m = /^points:(take|give):(.*)$/i.exec(s))) {
+            return { kind: 'currency', cMode: 'points_' + m[1].toLowerCase(), currencyId: 'points', amount: m[2].trim() || '1' };
+        }
+        if ((m = /^currency:([^:]+):(take|give):(.*)$/i.exec(s))) {
+            return { kind: 'currency', cMode: 'ce_' + m[2].toLowerCase(), currencyId: m[1].trim(), amount: m[3].trim() || '1' };
+        }
+        if ((m = /^toggle:(.*)$/i.exec(s))) {
+            const spec = m[1].trim();
+            const c = spec.indexOf(':');
+            return { kind: 'toggle', varName: (c >= 0 ? spec.slice(0, c) : spec).trim(), mode: c >= 0 ? spec.slice(c + 1).trim().toLowerCase() : 'flip' };
+        }
         if ((m = /^open:([^?]+)(?:\?(.*))?$/i.exec(s))) {
             const params = [];
             if (m[2]) {
@@ -118,6 +195,24 @@
     function serializeAction(a) {
         if (!a) return '';
         if (a.kind === 'nav') return a.nav || 'back';
+        if (a.kind === 'require') {
+            const expr = a.op === 'perm'
+                ? `perm:${String(a.left || '').trim()}`
+                : `${String(a.left || '%player_level%').trim()} ${a.op || '>='} ${String(a.right || '1').trim()}`;
+            return a.failMsg && String(a.failMsg).trim() ? `require:${expr} | ${String(a.failMsg).trim()}` : `require:${expr}`;
+        }
+        if (a.kind === 'currency') {
+            const amt = String(a.amount || '1').trim();
+            if (a.cMode === 'points_take') return `points:take:${amt}`;
+            if (a.cMode === 'points_give') return `points:give:${amt}`;
+            const cid = String(a.currencyId || 'gems').trim() || 'gems';
+            const op = a.cMode === 'ce_give' ? 'give' : 'take';
+            return `currency:${cid}:${op}:${amt}`;
+        }
+        if (a.kind === 'toggle') {
+            const vn = String(a.varName || 'flag').trim();
+            return a.mode && a.mode !== 'flip' ? `toggle:${vn}:${a.mode}` : `toggle:${vn}`;
+        }
         if (a.kind === 'open') {
             const base = 'open:' + (a.target || 'main').trim();
             const qs = (a.params || [])
@@ -152,15 +247,56 @@
         if (activeVarMenu) { activeVarMenu.remove(); activeVarMenu = null; }
     }
 
-    function openVarMenu(anchor, onPick) {
+    function renderVarList(filterText) {
+        const q = String(filterText || '').trim().toLowerCase();
+        const parts = [];
+        for (const [grp, items] of PAPI_GROUPS) {
+            const matched = items.filter(([code, desc]) => !q || code.toLowerCase().includes(q) || desc.toLowerCase().includes(q) || grp.toLowerCase().includes(q));
+            if (!matched.length) continue;
+            parts.push(`<div class="gs-var-group">${esc(grp)}</div>`);
+            matched.forEach(([code, desc]) => {
+                parts.push(`<button type="button" class="gs-var-item" data-val="${esc(code)}"><code>${esc(code)}</code><span>${esc(desc)}</span></button>`);
+            });
+        }
+        return parts.length ? parts.join('') : `<div class="gs-ab-empty">No matching placeholder</div>`;
+    }
+
+    const GUI_VARS_GROUP = {
+        name: '⚡ GUI Variables',
+        install: 'Built into KaizerUI menus (session & open parameters)',
+        items: [
+            { p: '{qty}', d: 'Quantity variable from Input or URL param' },
+            { p: '{price}', d: 'Unit price parameter' },
+            { p: '{qty*price}', d: 'Calculated total price' },
+            { p: '{item_id}', d: 'Dynamic item id passed to confirm menu' },
+            { p: '{item_name}', d: 'Dynamic item display name' },
+            { p: '{mode}', d: 'Trade mode (Buy / Sell)' },
+            { p: '{cmd}', d: 'Dynamic command string' },
+        ],
+        values: {},
+    };
+
+    function openVarMenu(anchor, onPick, opts) {
+        if (window.PapiPicker && typeof window.PapiPicker.pick === 'function') {
+            window.PapiPicker.pick({
+                label: (opts && opts.label) || 'GUI',
+                extraGroups: [GUI_VARS_GROUP],
+                onPick: (item) => { if (onPick) onPick(item.p, item); },
+            });
+            return;
+        }
         closeVarMenu();
         const r = anchor.getBoundingClientRect();
         const pop = document.createElement('div');
         pop.className = 'gs-var-pop';
-        pop.innerHTML = `<div class="gs-var-head">Insert Variable / Placeholder</div>`
-            + VARIABLES.map(([code, desc]) => `<button type="button" class="gs-var-item" data-val="${esc(code)}"><code>${esc(code)}</code><span>${esc(desc)}</span></button>`).join('');
-        pop.style.left = Math.max(8, Math.min(window.innerWidth - 260, r.left - 180)) + 'px';
-        pop.style.top = Math.min(window.innerHeight - 280, r.bottom + 4) + 'px';
+        pop.innerHTML = `<div class="gs-var-head">Insert Placeholder / Variable</div>`
+            + `<input type="text" class="gs-var-search" placeholder="Search placeholder (e.g. mmocore, points)..." />`
+            + `<div class="gs-var-list">${renderVarList('')}</div>`;
+        pop.style.left = Math.max(8, Math.min(window.innerWidth - 300, r.left - 210)) + 'px';
+        pop.style.top = Math.min(window.innerHeight - 348, r.bottom + 4) + 'px';
+        const search = pop.querySelector('.gs-var-search');
+        const listEl = pop.querySelector('.gs-var-list');
+        search.addEventListener('input', () => { listEl.innerHTML = renderVarList(search.value); });
         pop.addEventListener('click', (ev) => {
             const btn = ev.target.closest('[data-val]');
             if (!btn) return;
@@ -169,6 +305,7 @@
         });
         document.body.appendChild(pop);
         activeVarMenu = pop;
+        setTimeout(() => search.focus(), 0);
         const dismiss = (ev) => {
             if (pop.contains(ev.target) || anchor.contains(ev.target)) return;
             closeVarMenu();
@@ -188,12 +325,22 @@
         let topBar = `<div class="gs-ab-bar">
             <select class="gs-ab-add" id="gs-ab-add">
               <option value="">+ Add Action...</option>
+              <optgroup label="Requirements (PAPI Gate)">
+                <option value="req">Require Placeholder Condition</option>
+                <option value="req:perm">Require Permission Node</option>
+              </optgroup>
               <optgroup label="Navigation &amp; Windows">
                 <option value="open">Open Menu Page</option>
                 <option value="nav:back">Go Back (Previous Menu)</option>
                 <option value="nav:close">Close Menu</option>
                 <option value="nav:next">Next Page</option>
                 <option value="nav:prev">Previous Page</option>
+              </optgroup>
+              <optgroup label="Multi-Currency (PlayerPoints / CoinsEngine)">
+                <option value="cur:points_take">PlayerPoints: Take Points</option>
+                <option value="cur:points_give">PlayerPoints: Give Points</option>
+                <option value="cur:ce_take">CoinsEngine: Take Currency</option>
+                <option value="cur:ce_give">CoinsEngine: Give Currency</option>
               </optgroup>
               <optgroup label="Vault Economy (Optional Built-in)">
                 <option value="eco:buy">Buy Item (Vault)</option>
@@ -209,6 +356,7 @@
               <optgroup label="Interactive &amp; Feedback">
                 <option value="sound">Play Sound</option>
                 <option value="message">Send Chat Message</option>
+                <option value="toggle">Toggle Variable (ON / OFF)</option>
                 <option value="var:add">Add to Variable (+ / -)</option>
                 <option value="var:set">Set Variable (=)</option>
                 <option value="spin">Spin Crate Roulette</option>
@@ -221,7 +369,7 @@
         if (rawMode) {
             return topBar + editor.field('Actions (one per line)', 'actions', (el.actions || []).join('\n'), {
                 type: 'textarea', rows: 6,
-                hint: 'Supported: <code>open:</code> · <code>buy:</code> · <code>sell:</code> · <code>sellhand:</code> · <code>pay:</code> · <code>trade:</code> · <code>player:</code> · <code>console:</code> · <code>sound:</code> · <code>message:</code> · <code>spin:</code> · <code>scroll:</code>'
+                hint: 'Supported: <code>require:</code> · <code>points:</code> · <code>currency:</code> · <code>open:</code> · <code>buy/sell/trade:</code> · <code>player/console:</code> · <code>toggle:</code> · <code>sound:</code> · <code>message:</code>'
             });
         }
 
@@ -235,6 +383,51 @@
                 ${idx < parsed.length - 1 ? `<button type="button" class="icon-btn small" data-ab-move="${idx}:1" title="Move Down">▼</button>` : ''}
                 <button type="button" class="icon-btn small danger" data-ab-del="${idx}" title="Remove">×</button>
             </span>`;
+
+            if (a.kind === 'require') {
+                const opSel = REQ_OPS.map(o => `<option value="${esc(o)}" ${o === a.op ? 'selected' : ''}>${esc(o)}</option>`).join('');
+                return `<div class="gs-ab-card kind-req">
+                    <div class="gs-ab-head"><b>Require Condition (Gate)</b>${headBtns}</div>
+                    <div class="gs-ab-rowitem">
+                        <input type="text" data-ab-set="${idx}:left" value="${esc(a.left)}" placeholder="${a.op === 'perm' ? 'permission.node' : '%mmocore_skill_points%'}" />
+                        <button type="button" class="ghost-btn small" data-ab-var="${idx}:left" title="Insert Variable">{ }</button>
+                    </div>
+                    <div class="gs-grid2">
+                        <select data-ab-set="${idx}:op">${opSel}</select>
+                        ${a.op === 'perm' ? '<div></div>' : `<input type="text" data-ab-set="${idx}:right" value="${esc(a.right)}" placeholder="1" />`}
+                    </div>
+                    <input type="text" data-ab-set="${idx}:failMsg" value="${esc(a.failMsg || '')}" placeholder="Denied msg (e.g. &cNeed 1 Skill Point!)" />
+                </div>`;
+            }
+
+            if (a.kind === 'currency') {
+                const cOpts = [
+                    ['points_take', 'PlayerPoints: Take'],
+                    ['points_give', 'PlayerPoints: Give'],
+                    ['ce_take', 'CoinsEngine: Take'],
+                    ['ce_give', 'CoinsEngine: Give'],
+                ];
+                const isCe = a.cMode && a.cMode.startsWith('ce_');
+                return `<div class="gs-ab-card kind-cur">
+                    <div class="gs-ab-head"><b>Multi-Currency</b>${headBtns}</div>
+                    <select data-ab-set="${idx}:cMode">${cOpts.map(([v, l]) => `<option value="${v}" ${v === a.cMode ? 'selected' : ''}>${l}</option>`).join('')}</select>
+                    <div class="gs-grid2">
+                        ${isCe ? `<input type="text" data-ab-set="${idx}:currencyId" value="${esc(a.currencyId)}" placeholder="gems" />` : '<div></div>'}
+                        <input type="text" data-ab-set="${idx}:amount" value="${esc(a.amount)}" placeholder="100" />
+                    </div>
+                </div>`;
+            }
+
+            if (a.kind === 'toggle') {
+                const tModes = [['flip', 'Flip'], ['on', 'Force ON'], ['off', 'Force OFF']];
+                return `<div class="gs-ab-card">
+                    <div class="gs-ab-head"><b>Toggle Variable</b>${headBtns}</div>
+                    <div class="gs-grid2">
+                        <input type="text" data-ab-set="${idx}:varName" value="${esc(a.varName)}" placeholder="setting_tpa" />
+                        <select data-ab-set="${idx}:mode">${tModes.map(([v, l]) => `<option value="${v}" ${v === a.mode ? 'selected' : ''}>${l}</option>`).join('')}</select>
+                    </div>
+                </div>`;
+            }
 
             if (a.kind === 'open') {
                 const mOpts = menus.map(m => `<option value="${esc(m.id)}" ${m.id === a.target ? 'selected' : ''}>${esc(m.title || m.id)} (${esc(m.id)})</option>`).join('')
@@ -411,7 +604,14 @@
             const v = addSel.value;
             if (!v) return;
             const menus = editor.project.menus || [];
-            if (v === 'open') parsed.push({ kind: 'open', target: (menus.find(m => m !== editor.menu()) || menus[0] || { id: 'main' }).id, params: [] });
+            if (v === 'req') parsed.unshift({ kind: 'require', left: '%mmocore_skill_points%', op: '>=', right: '1', failMsg: '&cNeed 1 Skill Point!' });
+            else if (v === 'req:perm') parsed.unshift({ kind: 'require', left: 'kaizer.vip', op: 'perm', right: '', failMsg: '&cRequires VIP rank!' });
+            else if (v === 'cur:points_take') parsed.push({ kind: 'currency', cMode: 'points_take', currencyId: 'points', amount: '100' });
+            else if (v === 'cur:points_give') parsed.push({ kind: 'currency', cMode: 'points_give', currencyId: 'points', amount: '50' });
+            else if (v === 'cur:ce_take') parsed.push({ kind: 'currency', cMode: 'ce_take', currencyId: 'gems', amount: '10' });
+            else if (v === 'cur:ce_give') parsed.push({ kind: 'currency', cMode: 'ce_give', currencyId: 'gems', amount: '5' });
+            else if (v === 'toggle') parsed.push({ kind: 'toggle', varName: 'setting_tpa', mode: 'flip' });
+            else if (v === 'open') parsed.push({ kind: 'open', target: (menus.find(m => m !== editor.menu()) || menus[0] || { id: 'main' }).id, params: [] });
             else if (v.startsWith('nav:')) parsed.push({ kind: 'nav', nav: v.slice(4) });
             else if (v === 'eco:buy') parsed.push({ kind: 'economy', mode: 'buy', tradeMode: 'BUY', item: 'minecraft:diamond_sword', qty: '1', price: '500' });
             else if (v === 'eco:sell') parsed.push({ kind: 'economy', mode: 'sell', tradeMode: 'SELL', item: 'minecraft:diamond', qty: '1', price: '100' });
@@ -454,7 +654,7 @@
                 const a = parsed[Number(iS)];
                 if (!a) return;
                 a[field] = inp.value;
-                const needsRebuild = (inp.tagName === 'SELECT' && field === 'mode');
+                const needsRebuild = (inp.tagName === 'SELECT' && (field === 'mode' || field === 'op' || field === 'cMode'));
                 commit(needsRebuild);
             });
         });
@@ -526,15 +726,26 @@
             const [iS, field] = btn.dataset.abVar.split(':');
             const inp = root.querySelector(`[data-ab-set="${iS}:${field}"]`);
             if (!inp) return;
+            const kind = parsed[Number(iS)] && parsed[Number(iS)].kind;
+            const label = kind === 'require' ? 'Requirement' : kind === 'command' ? 'Command' : kind === 'message' ? 'Chat Message' : 'Action';
             openVarMenu(btn, (token) => {
                 const start = inp.selectionStart != null ? inp.selectionStart : inp.value.length;
                 const end = inp.selectionEnd != null ? inp.selectionEnd : start;
-                inp.value = inp.value.slice(0, start) + token + inp.value.slice(end);
+                if (kind === 'require' && field === 'left') {
+                    inp.value = token;
+                } else {
+                    inp.value = inp.value.slice(0, start) + token + inp.value.slice(end);
+                }
                 parsed[Number(iS)][field] = inp.value;
                 commit(false);
-            });
+                setTimeout(() => {
+                    if (window.PapiPicker && window.PapiPicker.selectParamInInput) {
+                        window.PapiPicker.selectParamInInput(inp, kind === 'require' ? 0 : start, token.length);
+                    }
+                }, 0);
+            }, { label });
         }));
     }
 
-    GS.ActionBuilder = { renderHtml, bind, openVarMenu };
+    GS.ActionBuilder = { renderHtml, bind, openVarMenu, PAPI_GROUPS, parseLine, serializeAction };
 })();

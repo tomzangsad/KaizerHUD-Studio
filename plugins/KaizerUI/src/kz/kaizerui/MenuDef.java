@@ -19,6 +19,8 @@ public final class MenuDef {
 
     public record Reward(String id, String name, String item, String color, double weight, List<String> actions) {}
 
+    public record Condition(String papi, String op, String value, boolean invert) {}
+
     /**
      * One glyph of a picture. Pictures bigger than 256 px are split into tiles because the
      * client's font atlas is 256×256 (a bigger glyph shows as a "missing" box).
@@ -60,6 +62,14 @@ public final class MenuDef {
         public final boolean closeOnClick;
         public final String hoverSound;
         public final List<String> actions;
+        // optional persistent ON/OFF toggle state + optional PAPI state sync
+        public final String toggleVar, togglePapi, toggleOnValue;
+        public final boolean toggleDefault;
+        public final List<Tile> offTiles;
+        public final List<Tile> offHoverTiles;
+        public final List<String> onActions;
+        public final List<String> offActions;
+        public final List<Condition> visibility;
         // text
         public final String text;
         public final String color;
@@ -90,8 +100,8 @@ public final class MenuDef {
         public final boolean showScrollbar;
         // roulette: CS:GO crate roller
         public final int slotSize, slotGap, reels, cardCount;
-        public final double durationSec;
-        public final String spinStyle, pointerColor, tickSound, winSound;
+        public final double durationSec, winChance;
+        public final String spinStyle, pointerColor, tickSound, winSound, loseSound, loseMessage;
         public final List<Reward> rewards;
         /** Index of this element among the Bedrock form buttons (-1 = not a form button) */
         public final int bedrockSlot;
@@ -136,6 +146,32 @@ public final class MenuDef {
             List<String> acts = new ArrayList<>();
             if (m.get("actions") instanceof List<?> list) for (Object o : list) if (o != null && !o.toString().isBlank()) acts.add(o.toString().trim());
             this.actions = Collections.unmodifiableList(acts);
+            this.toggleVar = str(m.get("toggle-var"), "").trim();
+            this.togglePapi = str(m.get("toggle-papi"), "").trim();
+            this.toggleOnValue = str(m.get("toggle-on-value"), "").trim();
+            this.toggleDefault = bool(m.get("toggle-default"), true);
+            List<Tile> offT = tiles(m, "off-tiles", "off-glyph", w, h);
+            this.offTiles = offT.size() == tiles.size() ? offT : List.of();
+            List<Tile> offHov = tiles(m, "off-hover-tiles", "off-hover-glyph", w, h);
+            this.offHoverTiles = offHov.size() == tiles.size() ? offHov : List.of();
+            List<String> onActs = new ArrayList<>();
+            if (m.get("on-actions") instanceof List<?> list) for (Object o : list) if (o != null && !o.toString().isBlank()) onActs.add(o.toString().trim());
+            this.onActions = Collections.unmodifiableList(onActs);
+            List<String> offActs = new ArrayList<>();
+            if (m.get("off-actions") instanceof List<?> list) for (Object o : list) if (o != null && !o.toString().isBlank()) offActs.add(o.toString().trim());
+            this.offActions = Collections.unmodifiableList(offActs);
+            List<Condition> vis = new ArrayList<>();
+            if (m.get("visibility") instanceof List<?> vList) {
+                for (Object vo : vList) {
+                    if (!(vo instanceof Map<?, ?> vm)) continue;
+                    String vp = str(vm.get("papi"), "").trim();
+                    String vop = str(vm.get("op"), "==").trim();
+                    if (!vp.isEmpty() && !"always".equalsIgnoreCase(vop)) {
+                        vis.add(new Condition(vp, vop, str(vm.get("value"), ""), bool(vm.get("invert"), false)));
+                    }
+                }
+            }
+            this.visibility = Collections.unmodifiableList(vis);
             this.text = str(m.get("text"), "");
             this.color = str(m.get("color"), "#ffffff");
             this.scale = dbl(m.get("scale"), 1.0);
@@ -183,9 +219,13 @@ public final class MenuDef {
             this.spinStyle = str(m.get("spin-style"), "csgo").toLowerCase(java.util.Locale.ROOT);
             this.reels = Math.max(1, Math.min(5, num(m.get("reels"), 3)));
             this.cardCount = Math.max(3, Math.min(9, num(m.get("card-count"), 5)));
+            double defaultWinChance = ("slot_v".equals(this.spinStyle) && this.reels >= 2) ? 65.0 : 100.0;
+            this.winChance = Math.max(1.0, Math.min(100.0, dbl(m.get("win-chance"), defaultWinChance)));
             this.pointerColor = str(m.get("pointer-color"), "#ff4d4f");
             this.tickSound = str(m.get("tick-sound"), "minecraft:block.note_block.hat;0.7;1.4");
             this.winSound = str(m.get("win-sound"), "minecraft:entity.player.levelup;1.0;1.1");
+            this.loseSound = str(m.get("lose-sound"), "minecraft:entity.villager.no;1.0;0.82");
+            this.loseMessage = str(m.get("lose-message"), "&c&lMISS! &7No match this time — try again!");
             List<Reward> rws = new ArrayList<>();
             if (m.get("rewards") instanceof List<?> rList) {
                 int rIdx = 1;
@@ -227,6 +267,12 @@ public final class MenuDef {
         public boolean isPlayer() { return type == Type.PLAYER_HEAD || type == Type.PLAYER_MODEL; }
 
         public boolean hasHover() { return !hoverTiles.isEmpty(); }
+
+        public boolean isToggle() { return !toggleVar.isEmpty() || !togglePapi.isEmpty(); }
+
+        public boolean hasOffTiles() { return !offTiles.isEmpty(); }
+
+        public boolean hasOffHover() { return !offHoverTiles.isEmpty(); }
 
         public boolean animated() { return intro != null || loop != null || press != null || hover != null || !frames.isEmpty(); }
 

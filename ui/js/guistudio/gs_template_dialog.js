@@ -13,6 +13,27 @@
 
     const SETS = [
         {
+            id: 'release_qa_suite',
+            name: 'Kaizer Release QA Suite',
+            pages: 8,
+            badge: 'QA Test · 8 Pages',
+            desc: 'All-in-one pre-release test suite: Items/3D, Persistent & PAPI Toggles, Visibility, Require, Inputs, Economy, Scroll/Pan2D & 4 Roulettes'
+        },
+        {
+            id: 'modern_realm_suite',
+            name: 'Modern Realm Suite',
+            pages: 11,
+            badge: 'Modern Glass · 11 Pages',
+            desc: 'Dark glass Hub, Shop, 2D Skill Tree, Quests, 4 Crate Gachas, 3D Profile, Warps & Confirm'
+        },
+        {
+            id: 'network_rpg_suite',
+            name: 'Network RPG Suite (OreUI)',
+            pages: 7,
+            badge: 'OreUI RPG · 7 Pages',
+            desc: 'Sidebar dashboard, 3D Character + RPG Stat Tables, OreUI Settings Toggles, Node-Graph Skill Tree, Shop & Warps'
+        },
+        {
             id: 'modern_vanilla',
             name: 'Modern Vanilla Suite',
             pages: 6,
@@ -59,7 +80,7 @@
 
     const state = {
         tab: 'sets',
-        setId: 'modern_vanilla',
+        setId: 'modern_realm_suite',
         setPageIndex: 0,
         setMode: 'replace',
         layout: 'hub',

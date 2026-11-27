@@ -19,6 +19,7 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerCa
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerDisplayScoreboard;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityTeleport;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerFacePlayer;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerScoreboardObjective;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSetPassengers;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSetSlot;
@@ -153,6 +154,13 @@ final class CameraHook {
         if (!available() || entityId < 0) return;
         try {
             Impl.teleport(player, entityId, x, y, z, yaw, pitch);
+        } catch (Throwable ignored) {}
+    }
+
+    static void lookLevel(Player player, double eyeX, double eyeY, double eyeZ, float yaw) {
+        if (!available()) return;
+        try {
+            Impl.lookLevel(player, eyeX, eyeY, eyeZ, yaw);
         } catch (Throwable ignored) {}
     }
 
@@ -357,6 +365,14 @@ final class CameraHook {
         static void teleport(Player player, int entityId, double x, double y, double z, float yaw, float pitch) {
             PacketEvents.getAPI().getPlayerManager().sendPacketSilently(
                     player, new WrapperPlayServerEntityTeleport(entityId, new Vector3d(x, y, z), yaw, pitch, false));
+        }
+
+        static void lookLevel(Player player, double eyeX, double eyeY, double eyeZ, float yaw) {
+            double yr = Math.toRadians(yaw);
+            Vector3d target = new Vector3d(eyeX - Math.sin(yr) * 100.0, eyeY, eyeZ + Math.cos(yr) * 100.0);
+            WrapperPlayServerFacePlayer pkt = new WrapperPlayServerFacePlayer(
+                    WrapperPlayServerFacePlayer.EntitySection.EYES, target, null);
+            PacketEvents.getAPI().getPlayerManager().sendPacketSilently(player, pkt);
         }
 
         static void passenger(Player player, int vehicleId) {

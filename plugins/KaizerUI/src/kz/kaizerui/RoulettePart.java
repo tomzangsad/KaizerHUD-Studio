@@ -37,7 +37,11 @@ final class RoulettePart {
     private final List<MenuDef.Reward> idleStrip = new ArrayList<>();
     private List<MenuDef.Reward> activeStrip;
     private MenuDef.Reward pendingWinner;
+    private boolean pendingWin = true;
     private int lastCenterIdx = -1;
+
+    static final MenuDef.Reward MISS_CARD = new MenuDef.Reward(
+            "miss", "&c&lMISS!", "minecraft:barrier", "#ef4444", 1, List.of());
 
     private record SlotView(TextDisplay cardBg, ItemDisplay item, TextDisplay label) {}
 
@@ -137,7 +141,7 @@ final class RoulettePart {
                 x.setBrightness(new Display.Brightness(15, 15));
                 x.setTeleportDuration(1);
             });
-            ItemDisplay itemD = w.spawn(session.facingLoc(bgPos), ItemDisplay.class, x -> {
+            ItemDisplay itemD = w.spawn(session.itemFacingLoc(bgPos), ItemDisplay.class, x -> {
                 x.setVisibleByDefault(false);
                 x.setPersistent(false);
                 x.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.GUI);
@@ -210,7 +214,11 @@ final class RoulettePart {
     boolean startSpin() {
         if (spinning || el.rewards.isEmpty()) return false;
         spinning = true;
+        pendingWin = rollIsWin(el);
         pendingWinner = rollWinner(el.rewards);
+        MenuDef.Reward outcome = pendingWin ? pendingWinner : MISS_CARD;
+        MenuDef.Reward rareBait = rarestReward(el.rewards, outcome);
+        MenuDef.Reward secondBait = rarestReward(el.rewards, rareBait);
         String style = style();
         int totalTicks = Math.max(20, (int) Math.round(el.durationSec * 20.0));
         ThreadLocalRandom rng = ThreadLocalRandom.current();
@@ -219,7 +227,8 @@ final class RoulettePart {
         if ("flash".equals(style)) {
             int count = Math.max(3, Math.min(9, el.cardCount));
             int pickSlot = rng.nextInt(count);
-            int hops = Math.max(18, (int) Math.round(el.durationSec * 7.0));
+            int baitSlot = (pickSlot - 1 + count) % count;
+            int hops = Math.max(20, (int) Math.round(el.durationSec * 8.0));
             final int startOff = ((pickSlot - hops) % count + count) % count;
             List<MenuDef.Reward> board = new ArrayList<>(count);
             for (int i = 0; i < count; i++) board.add(el.rewards.get(rng.nextInt(el.rewards.size())));
@@ -229,15 +238,16 @@ final class RoulettePart {
                 if (session.closed || !spinning) { stopTask(); return; }
                 tick[0]++;
                 double p = Math.min(1.0, (double) tick[0] / totalTicks);
-                int hop = Math.min(hops, (int) Math.floor((1.0 - Math.pow(1.0 - p, 2.5)) * (hops + 0.99)));
+                int hop = Math.min(hops, (int) Math.floor((1.0 - Math.pow(1.0 - p, 3.5)) * (hops + 0.99)));
                 if (hop != lastHop[0] || p >= 1.0) {
                     lastHop[0] = hop;
                     for (int i = 0; i < count; i++) board.set(i, el.rewards.get(rng.nextInt(el.rewards.size())));
+                    board.set(baitSlot, rareBait);
                     boolean atEnd = hop >= hops || p >= 1.0;
                     int active = atEnd ? pickSlot : (startOff + hop) % count;
-                    if (atEnd) board.set(pickSlot, pendingWinner);
+                    if (atEnd) board.set(pickSlot, outcome);
                     lastCenterIdx = active;
-                    if (!atEnd) Actions.playSound(session.player, el.tickSound);
+                    if (!atEnd) Actions.playSoundPitch(session.player, el.tickSound, (float) (0.82 + 0.65 * p));
                 }
                 renderFlash(board, lastCenterIdx, true);
                 if (tick[0] >= totalTicks) finishSpin();
@@ -248,34 +258,49 @@ final class RoulettePart {
         if ("flip".equals(style)) {
             int count = Math.max(3, Math.min(9, el.cardCount));
             int pickSlot = rng.nextInt(count);
-            int hops = Math.max(12, (int) Math.round(el.durationSec * 5.0));
+            int hops = Math.max(14, (int) Math.round(el.durationSec * 6.0));
             final int startOff = ((pickSlot - hops) % count + count) % count;
             List<MenuDef.Reward> finalBoard = new ArrayList<>(count);
+            int rareDecoy = (pickSlot + 1) % count;
             for (int i = 0; i < count; i++) {
-                finalBoard.add(i == pickSlot ? pendingWinner : el.rewards.get(rng.nextInt(el.rewards.size())));
+                if (i == pickSlot) finalBoard.add(outcome);
+                else if (i == rareDecoy) finalBoard.add(rareBait);
+                else finalBoard.add(el.rewards.get(rng.nextInt(el.rewards.size())));
             }
             final int[] tick = {0};
+            final boolean[] cue = {false, false};
             spinTask = Sched.entityRepeat(session.plugin, session.player, 1, () -> {
                 if (session.closed || !spinning) { stopTask(); return; }
                 tick[0]++;
                 double p = Math.min(1.0, (double) tick[0] / totalTicks);
-                if (p < 0.68) {
-                    double sp = p / 0.68;
-                    int hop = Math.min(hops, (int) Math.floor((1.0 - Math.pow(1.0 - sp, 2.4)) * (hops + 0.99)));
+                if (p < 0.50) {
+                    double sp = p / 0.50;
+                    int hop = Math.min(hops, (int) Math.floor((1.0 - Math.pow(1.0 - sp, 2.8)) * (hops + 0.99)));
                     int active = hop >= hops ? pickSlot : (startOff + hop) % count;
                     if (active != lastCenterIdx) {
                         lastCenterIdx = active;
-                        Actions.playSound(session.player, el.tickSound);
+                        Actions.playSoundPitch(session.player, el.tickSound, (float) (0.85 + 0.60 * sp));
                     }
                     renderFlipGrid(finalBoard, active, false, 1.0, false, false);
-                } else if (p < 0.86) {
-                    double fp = (p - 0.68) / 0.18;
+                } else if (p < 0.72) {
+                    if (!cue[0]) {
+                        cue[0] = true;
+                        Actions.playSound(session.player, "minecraft:item.book.page_turn;1.0;1.15");
+                    }
+                    double fp = (p - 0.50) / 0.22;
                     double sx = Math.max(0.1, Math.abs(Math.cos(fp * Math.PI)));
-                    renderFlipGrid(finalBoard, pickSlot, fp >= 0.5, sx, false, false);
+                    renderFlipGrid(finalBoard, pickSlot, false, sx, fp >= 0.5, true);
+                } else if (p < 0.82) {
+                    if (!cue[1]) {
+                        cue[1] = true;
+                        Actions.playSound(session.player, "minecraft:block.note_block.bass;0.9;0.9");
+                    }
+                    double beat = Math.sin((p - 0.72) / 0.10 * Math.PI);
+                    renderFlipGrid(finalBoard, pickSlot, false, 1.0 + 0.08 * beat, true, false);
                 } else {
-                    double fp2 = Math.min(1.0, (p - 0.86) / 0.14);
+                    double fp2 = Math.min(1.0, (p - 0.82) / 0.18);
                     double sx2 = Math.max(0.1, Math.abs(Math.cos(fp2 * Math.PI)));
-                    renderFlipGrid(finalBoard, pickSlot, true, p >= 1.0 ? 1.0 : sx2, fp2 >= 0.5, true);
+                    renderFlipGrid(finalBoard, pickSlot, fp2 >= 0.5, p >= 1.0 ? 1.0 : sx2, true, false);
                 }
                 if (tick[0] >= totalTicks) finishSpin();
             });
@@ -286,11 +311,37 @@ final class RoulettePart {
 
         if ("slot_v".equals(style)) {
             int reels = Math.max(1, Math.min(5, el.reels));
+            MenuDef.Reward[] reelTargets = new MenuDef.Reward[reels];
+            MenuDef.Reward slotBait = rng.nextDouble() < 0.65 ? rarestReward(el.rewards, null) : pendingWinner;
+            if (pendingWin) {
+                for (int r = 0; r < reels; r++) reelTargets[r] = pendingWinner;
+            } else if (reels >= 2) {
+                boolean nearMiss = rng.nextDouble() < 0.75;
+                if (nearMiss) {
+                    for (int r = 0; r < reels - 1; r++) reelTargets[r] = slotBait;
+                    reelTargets[reels - 1] = pickDifferent(el.rewards, slotBait, rng);
+                } else {
+                    for (int r = 0; r < reels; r++) reelTargets[r] = el.rewards.get(rng.nextInt(el.rewards.size()));
+                    boolean allSame = true;
+                    for (int r = 1; r < reels; r++) {
+                        if (!sameRewardItem(reelTargets[r], reelTargets[0])) { allSame = false; break; }
+                    }
+                    if (allSame) reelTargets[reels - 1] = pickDifferent(el.rewards, reelTargets[0], rng);
+                }
+            } else {
+                reelTargets[0] = MISS_CARD;
+            }
+
             List<List<MenuDef.Reward>> strips = new ArrayList<>(reels);
             for (int r = 0; r < reels; r++) {
                 List<MenuDef.Reward> rs = new ArrayList<>(42);
+                MenuDef.Reward target = reelTargets[r];
+                MenuDef.Reward neighbor = (!pendingWin && r == reels - 1 && reels >= 2) ? slotBait : rarestReward(el.rewards, target);
+                int nSlot = rng.nextBoolean() ? WIN_SLOT - 1 : WIN_SLOT + 1;
                 for (int i = 0; i < 42; i++) {
-                    rs.add(i == WIN_SLOT ? pendingWinner : el.rewards.get(rng.nextInt(el.rewards.size())));
+                    if (i == WIN_SLOT) rs.add(target);
+                    else if (i == nSlot) rs.add(neighbor);
+                    else rs.add(el.rewards.get(rng.nextInt(el.rewards.size())));
                 }
                 strips.add(rs);
             }
@@ -299,22 +350,29 @@ final class RoulettePart {
             double startY = (el.h - cardH) / 2.0 - 2 * stepV;
             double targetY = (el.h - cardH) / 2.0 - WIN_SLOT * stepV;
             final int[] tick = {0};
+            final boolean[] reelLocked = new boolean[reels];
             spinTask = Sched.entityRepeat(session.plugin, session.player, 1, () -> {
                 if (session.closed || !spinning) { stopTask(); return; }
                 tick[0]++;
                 double p = Math.min(1.0, (double) tick[0] / totalTicks);
                 double[] offsets = new double[reels];
                 for (int r = 0; r < reels; r++) {
-                    double endP = reels == 1 ? 1.0 : (0.58 + 0.42 * r / (reels - 1));
+                    double endP = reels == 1 ? 1.0 : (0.38 + 0.62 * Math.pow((double) r / (reels - 1), 1.35));
                     double rp = Math.min(1.0, p / endP);
-                    double ease = 1.0 - Math.pow(1.0 - rp, 4.0);
+                    double ease = 1.0 - Math.pow(1.0 - rp, 4.6);
                     offsets[r] = startY + (targetY - startY) * ease;
+                    if (rp >= 1.0 && !reelLocked[r]) {
+                        reelLocked[r] = true;
+                        if (r < reels - 1) {
+                            Actions.playSoundPitch(session.player, "minecraft:block.note_block.pling;0.9;1.0", (float) (1.0 + 0.28 * r));
+                        }
+                    }
                 }
                 renderVerticalReels(strips, offsets);
                 int centerTile = (int) Math.round(((el.h / 2.0) - offsets[reels - 1] - cardH / 2.0) / stepV);
                 if (centerTile != lastCenterIdx) {
                     lastCenterIdx = centerTile;
-                    Actions.playSound(session.player, el.tickSound);
+                    Actions.playSoundPitch(session.player, el.tickSound, (float) (0.82 + 0.55 * p));
                 }
                 if (tick[0] >= totalTicks) finishSpin();
             });
@@ -322,35 +380,58 @@ final class RoulettePart {
         }
 
         // 'csgo' or 'tease'
+        boolean teaseMode = "tease".equals(style);
         activeStrip = new ArrayList<>(42);
+        int edgeDir = rng.nextBoolean() ? 1 : -1;
         for (int i = 0; i < 42; i++) {
-            activeStrip.add(i == WIN_SLOT ? pendingWinner : el.rewards.get(rng.nextInt(el.rewards.size())));
+            if (i == WIN_SLOT) activeStrip.add(outcome);
+            else if (teaseMode && i == WIN_SLOT + 1) activeStrip.add(rareBait);
+            else if (teaseMode && i == WIN_SLOT - 1) activeStrip.add(secondBait);
+            else if (!teaseMode && i == WIN_SLOT + edgeDir) activeStrip.add(rareBait);
+            else if (!teaseMode && i == WIN_SLOT - edgeDir) activeStrip.add(secondBait);
+            else activeStrip.add(el.rewards.get(rng.nextInt(el.rewards.size())));
         }
         int step = Math.max(16, el.slotSize) + Math.max(0, el.slotGap);
         double startX = (el.w - el.slotSize) / 2.0 - 2 * step;
-        double jitter = (rng.nextDouble() - 0.5) * el.slotSize * 0.28;
+        double jitter = teaseMode
+                ? (rng.nextDouble() - 0.5) * el.slotSize * 0.24
+                : edgeDir * (0.28 + rng.nextDouble() * 0.16) * el.slotSize;
         double targetX = (el.w - el.slotSize) / 2.0 - WIN_SLOT * step + jitter;
-        boolean teaseMode = "tease".equals(style);
+        double overshootX = targetX - step * 0.92;
         final int[] tick = {0};
+        final boolean[] teaseCue = {false};
         spinTask = Sched.entityRepeat(session.plugin, session.player, 1, () -> {
             if (session.closed || !spinning) { stopTask(); return; }
             tick[0]++;
             double p = Math.min(1.0, (double) tick[0] / totalTicks);
-            double ease;
+            double offsetPx;
             if (teaseMode) {
-                double pm1 = p - 1.0;
-                double c1 = 1.85;
-                double c3 = c1 + 1.0;
-                ease = 1.0 + c3 * pm1 * pm1 * pm1 + c1 * pm1 * pm1;
+                if (p <= 0.72) {
+                    double q = p / 0.72;
+                    double ease = 1.0 - Math.pow(1.0 - q, 3.6);
+                    offsetPx = startX + (overshootX - startX) * ease;
+                } else if (p <= 0.84) {
+                    double q = (p - 0.72) / 0.12;
+                    offsetPx = overshootX + step * 0.08 * q;
+                    if (!teaseCue[0] && q >= 0.35) {
+                        teaseCue[0] = true;
+                        Actions.playSoundPitch(session.player, el.tickSound, 1.45f);
+                    }
+                } else {
+                    double q = (p - 0.84) / 0.16;
+                    double smooth = q < 0.5 ? 4 * q * q * q : 1 - Math.pow(-2 * q + 2, 3) / 2;
+                    double holdEnd = overshootX + step * 0.08;
+                    offsetPx = holdEnd + (targetX - holdEnd) * smooth;
+                }
             } else {
-                ease = 1.0 - Math.pow(1.0 - p, 4.0);
+                double ease = 1.0 - Math.pow(1.0 - p, 4.5);
+                offsetPx = startX + (targetX - startX) * ease;
             }
-            double offsetPx = startX + (targetX - startX) * ease;
             renderHorizontalStrip(activeStrip, offsetPx);
             int centerTile = (int) Math.round(((el.w / 2.0) - offsetPx - el.slotSize / 2.0) / step);
             if (centerTile != lastCenterIdx) {
                 lastCenterIdx = centerTile;
-                Actions.playSound(session.player, el.tickSound);
+                Actions.playSoundPitch(session.player, el.tickSound, (float) (0.82 + 0.58 * p));
             }
             if (tick[0] >= totalTicks) finishSpin();
         });
@@ -365,12 +446,21 @@ final class RoulettePart {
         stopTask();
         spinning = false;
         MenuDef.Reward win = pendingWinner;
-        if (win != null) {
+        if (pendingWin && win != null) {
             session.plugin.setSessionVar(session.player.getUniqueId(), "reward_id", win.id());
             session.plugin.setSessionVar(session.player.getUniqueId(), "reward_name", win.name());
             session.plugin.setSessionVar(session.player.getUniqueId(), "reward_item", win.item());
             Actions.playSound(session.player, el.winSound);
             Actions.runList(session.plugin, session.player, session.menu, win.actions(), false);
+            session.refreshNow();
+        } else {
+            session.plugin.setSessionVar(session.player.getUniqueId(), "reward_id", "miss");
+            session.plugin.setSessionVar(session.player.getUniqueId(), "reward_name", "MISS");
+            session.plugin.setSessionVar(session.player.getUniqueId(), "reward_item", "");
+            Actions.playSound(session.player, el.loseSound);
+            if (el.loseMessage != null && !el.loseMessage.isBlank()) {
+                session.player.sendMessage(Texts.component(session.plugin.resolveText(session.player, el.loseMessage)));
+            }
             session.refreshNow();
         }
     }
@@ -560,6 +650,10 @@ final class RoulettePart {
         sv.label.setTextOpacity((byte) 8);
     }
 
+    static boolean rollIsWin(MenuDef.Element el) {
+        return el.winChance >= 100.0 || ThreadLocalRandom.current().nextDouble() * 100.0 < el.winChance;
+    }
+
     static MenuDef.Reward rollWinner(List<MenuDef.Reward> rewards) {
         double total = 0;
         for (MenuDef.Reward r : rewards) total += Math.max(0.01, r.weight());
@@ -569,6 +663,28 @@ final class RoulettePart {
             if (roll <= 0) return r;
         }
         return rewards.get(0);
+    }
+
+    static MenuDef.Reward rarestReward(List<MenuDef.Reward> rewards, MenuDef.Reward exclude) {
+        MenuDef.Reward best = null;
+        for (MenuDef.Reward r : rewards) {
+            if (exclude != null && sameRewardItem(r, exclude)) continue;
+            if (best == null || r.weight() < best.weight()) best = r;
+        }
+        return best != null ? best : rewards.get(0);
+    }
+
+    static MenuDef.Reward pickDifferent(List<MenuDef.Reward> rewards, MenuDef.Reward exclude, ThreadLocalRandom rng) {
+        List<MenuDef.Reward> diff = new ArrayList<>();
+        for (MenuDef.Reward r : rewards) {
+            if (!sameRewardItem(r, exclude)) diff.add(r);
+        }
+        return diff.isEmpty() ? MISS_CARD : diff.get(rng.nextInt(diff.size()));
+    }
+
+    private static boolean sameRewardItem(MenuDef.Reward a, MenuDef.Reward b) {
+        if (a == null || b == null) return false;
+        return a.id().equals(b.id()) || a.item().equalsIgnoreCase(b.item());
     }
 
     void destroy() {

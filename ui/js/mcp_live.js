@@ -96,7 +96,8 @@
       bridgeInfo = info;
     } catch (e) { /* offline browser preview */ }
 
-    const serverPath = 'C:/Users/ToMZanG/Desktop/KaizerMC/02-Convert/JsonUIMaker/KaizerStudio-OSS/mcp-server/index.mjs';
+    const serverPath = info.mcpServerPath || '<path-to-kaizer-studio-mcp>/index.mjs';
+    const serverDir = info.mcpServerDir || '';
     const snippet = JSON.stringify({
       mcpServers: {
         'kaizer-studio': {
@@ -133,8 +134,12 @@
           <div>
             <div class="kz-upd-label" style="margin-bottom:6px">Client Configuration (<code>mcp_config.json</code> / Claude Desktop / Cursor):</div>
             <pre class="kz-mcp-pre" id="kz-mcp-snippet">${escHtml(snippet)}</pre>
-            <div style="display:flex;justify-content:flex-end;margin-top:6px">
-              <button class="ghost-btn" id="kz-mcp-copy-btn">Copy Config JSON</button>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap">
+              <span class="kz-upd-msg muted" style="margin:0">Bundled automatically on this PC. Requires Node.js 18+ in PATH.</span>
+              <div style="display:flex;gap:6px">
+                ${serverDir ? '<button class="ghost-btn" id="kz-mcp-folder-btn">Open MCP Folder</button>' : ''}
+                <button class="ghost-btn" id="kz-mcp-copy-btn">Copy Config JSON</button>
+              </div>
             </div>
           </div>
           <div>
@@ -155,6 +160,12 @@
     back.addEventListener('click', (e) => {
       if (e.target === back || e.target.closest('[data-mcp-close]')) close();
     });
+    const folderBtn = back.querySelector('#kz-mcp-folder-btn');
+    if (folderBtn && serverDir) {
+      folderBtn.addEventListener('click', () => {
+        tauriInvoke('open_folder', { path: serverDir }).catch((err) => notify(String(err), 'error'));
+      });
+    }
     back.querySelector('#kz-mcp-copy-btn').addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(snippet);
@@ -598,10 +609,10 @@
     if (window.KZCode && typeof KZCode.schedule === 'function') KZCode.schedule();
   }
 
-  async function persistGuiIfSaved() {
+  async function persistGuiIfSaved(prune = true) {
     const E = GS.Editor;
     if (GS.Doc && GS.Doc.id && GS.Backend) {
-      GS.Model.pruneImages(E.project);
+      if (prune) GS.Model.pruneImages(E.project);
       await GS.Backend.update(GS.Doc.id, GS.Doc.name, E.project);
       GS.Doc.markSaved(GS.Doc.id, GS.Doc.name);
     }
@@ -923,7 +934,7 @@
         E.checkpoint();
         const imageId = M.addImage(E.project, params);
         E.changed();
-        await persistGuiIfSaved();
+        await persistGuiIfSaved(false);
         return { image_id: imageId, w: params.w, h: params.h, res: params.res || 1 };
       }
       if (method === 'gui.add_element') {

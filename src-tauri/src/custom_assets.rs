@@ -689,7 +689,7 @@ fn scan_nexo_or_oraxen(
 fn detect_provider(vfs: &Vfs, path_str: &str, hint: Option<&str>) -> String {
     if let Some(h) = hint {
         let low = h.trim().to_ascii_lowercase();
-        if ["itemsadder", "nexo", "oraxen", "modelengine", "bettermodel", "pack"].contains(&low.as_str()) {
+        if ["itemsadder", "nexo", "oraxen", "craftengine", "modelengine", "bettermodel", "pack"].contains(&low.as_str()) {
             return low;
         }
     }
@@ -700,6 +700,14 @@ fn detect_provider(vfs: &Vfs, path_str: &str, hint: Option<&str>) -> String {
             return "bettermodel".into();
         }
         return "modelengine".into();
+    }
+    if path_low.contains("craftengine")
+        || vfs.files.iter().any(|f| {
+            let l = f.path.to_ascii_lowercase();
+            l == "pack.yml" || l.ends_with("/pack.yml") || l.contains("configuration/items")
+        })
+    {
+        return "craftengine".into();
     }
     if path_low.contains("nexo") || vfs.files.iter().any(|f| f.path.to_ascii_lowercase().contains("pack/external_packs")) {
         return "nexo".into();
@@ -728,6 +736,119 @@ fn detect_provider(vfs: &Vfs, path_str: &str, hint: Option<&str>) -> String {
     "itemsadder".into()
 }
 
+fn scan_craftengine(
+    root: &Path,
+    vfs: &Vfs,
+    source_id: &str,
+    out_items: &mut Vec<CustomAssetItem>,
+) {
+    let mut pack_ns: Option<String> = None;
+    for f in &vfs.files {
+        let low = f.path.to_ascii_lowercase();
+        if low == "pack.yml" || low.ends_with("/pack.yml") {
+            if let Some(txt) = vfs.text(f) {
+                if let Ok(doc) = serde_yaml::from_str::<serde_yaml::Value>(&txt) {
+                    if let Some(ns) = doc.get("namespace").and_then(|v| v.as_str()) {
+                        let clean = ns.trim();
+                        if !clean.is_empty() {
+                            pack_ns = Some(clean.to_string());
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    for f in &vfs.files {
+        let low = f.path.to_ascii_lowercase();
+        if !(low.ends_with(".yml") || low.ends_with(".yaml")) || low == "pack.yml" || low.ends_with("/pack.yml") {
+            continue;
+        }
+        let Some(txt) = vfs.text(f) else { continue };
+        let Ok(doc) = serde_yaml::from_str::<serde_yaml::Value>(&txt) else { continue };
+        if doc.get("info").and_then(|i| i.get("namespace")).is_some() {
+            continue;
+        }
+        let Some(items_map) = doc.get("items").and_then(|m| m.as_mapping()) else {
+            continue;
+        };
+        let fallback_ns = pack_ns.as_deref().unwrap_or("craftengine");
+        for (k, val) in items_map {
+            let Some(raw_key) = k.as_str() else { continue };
+            let raw_key = raw_key.trim();
+            if raw_key.is_empty() {
+                continue;
+            }
+            let (ns, raw_id) = if let Some((a, b)) = raw_key.split_once(':') {
+                (a.trim(), b.trim())
+            } else {
+                (fallback_ns, raw_key)
+            };
+            if raw_id.is_empty() {
+                continue;
+            }
+            let item_id = format!("craftengine:{}:{}", ns, raw_id);
+            let data = val.get("data").unwrap_or(&serde_yaml::Value::Null);
+            let raw_name = yaml_str(data, &["item-name", "custom-name", "display-name", "name"])
+                .or_else(|| yaml_str(val, &["item-name", "custom-name", "display-name", "name"]))
+                .unwrap_or(raw_id);
+            let name = clean_mc_text(raw_name);
+
+            let model_val = val.get("model");
+            let model_str = model_val.and_then(|m| m.as_str()).or_else(|| model_val.and_then(|m| yaml_str(m, &["path"])));
+            let tex_ref = yaml_str(val, &["texture"])
+                .or_else(|| val.get("settings").and_then(|s| yaml_str(s, &["texture"])))
+                .or_else(|| {
+                    model_val
+                        .and_then(|m| m.get("generation"))
+                        .and_then(|g| g.get("textures"))
+                        .and_then(|t| yaml_str(t, &["layer0", "all", "texture"]))
+                })
+                .or_else(|| model_val.and_then(|m| m.get("textures")).and_then(|t| yaml_str(t, &["layer0", "all", "texture"])));
+
+            let mut icon_file = tex_ref
+                .and_then(|r| find_texture_png(vfs, ns, r))
+                .and_then(|b| save_icon_bytes(root, &item_id, b));
+
+            let mut model_file = None;
+            if let Some(mr) = model_str {
+                if let Some(tree) = resolve_json_model_tree(vfs, ns, mr) {
+                    if icon_file.is_none() {
+                        if let Some(b64) = tree.get("flatBytesB64").and_then(|v| v.as_str()) {
+                            if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(b64) {
+                                icon_file = save_icon_bytes(root, &item_id, &bytes);
+                            }
+                        }
+                    }
+                    if tree.get("elements").map(|e| e.is_array()).unwrap_or(false) {
+                        model_file = save_model_json(root, &item_id, &tree);
+                    }
+                }
+            }
+
+            if icon_file.is_none() && model_file.is_none() {
+                if let Some(b) = find_texture_png(vfs, ns, raw_id) {
+                    icon_file = save_icon_bytes(root, &item_id, b);
+                }
+            }
+
+            out_items.push(CustomAssetItem {
+                id: item_id,
+                source_id: source_id.to_string(),
+                provider: "craftengine".into(),
+                kind: "item".into(),
+                name: if name.is_empty() { raw_id.to_string() } else { name },
+                namespace: ns.to_string(),
+                animations: Vec::new(),
+                has_model: model_file.is_some(),
+                icon_file,
+                model_file,
+            });
+        }
+    }
+}
+
 pub fn scan_path(root: &Path, target: &Path, source_hint: Option<&str>) -> Result<Value, String> {
     let (vfs, label) = read_vfs_from_path(target)?;
     let abs = target.to_string_lossy().to_string();
@@ -751,6 +872,10 @@ pub fn scan_path(root: &Path, target: &Path, source_hint: Option<&str>) -> Resul
     let mut found: Vec<CustomAssetItem> = Vec::new();
     match provider.as_str() {
         "modelengine" | "bettermodel" => scan_bbmodels(root, &vfs, &source_id, &provider, &mut found),
+        "craftengine" => {
+            scan_craftengine(root, &vfs, &source_id, &mut found);
+            scan_bbmodels(root, &vfs, &source_id, "modelengine", &mut found);
+        }
         "nexo" | "oraxen" => {
             scan_nexo_or_oraxen(root, &vfs, &source_id, &provider, &mut found);
             // Also pick up any bundled .bbmodel inside folder
@@ -759,6 +884,9 @@ pub fn scan_path(root: &Path, target: &Path, source_hint: Option<&str>) -> Resul
         _ => {
             scan_itemsadder(root, &vfs, &source_id, &mut found);
             // Fallback in case user picked a raw pack or mixed folder
+            if found.is_empty() {
+                scan_craftengine(root, &vfs, &source_id, &mut found);
+            }
             if found.is_empty() {
                 scan_nexo_or_oraxen(root, &vfs, &source_id, "nexo", &mut found);
                 scan_bbmodels(root, &vfs, &source_id, "modelengine", &mut found);
@@ -880,7 +1008,7 @@ pub async fn custom_assets_pick_and_import(
     source_hint: Option<String>,
 ) -> Result<Option<Value>, String> {
     let title = if folder {
-        "Select plugin pack folder (ItemsAdder / Nexo / ModelEngine / BetterModel)"
+        "Select plugin pack folder (ItemsAdder / Nexo / CraftEngine / ModelEngine / BetterModel)"
     } else {
         "Select resource pack .zip or .bbmodel file"
     };
@@ -1009,6 +1137,41 @@ mod tests {
         let meg_item = cat.items.iter().find(|i| i.id == "meg:dragon_pet").unwrap();
         assert_eq!(meg_item.animations, vec!["idle", "fly"]);
         assert!(meg_item.has_model);
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn scans_craftengine_pack() {
+        let tmp = std::env::temp_dir().join(format!("kz_craftengine_test_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        let cache = tmp.join("cache");
+        let ce_dir = tmp.join("CraftEngine/resources/my_pack");
+        fs::create_dir_all(ce_dir.join("configuration/items")).unwrap();
+        fs::create_dir_all(ce_dir.join("resourcepack/assets/my_pack/textures/item")).unwrap();
+        fs::write(
+            ce_dir.join("pack.yml"),
+            "author: Tester\nversion: 1.0.0\nnamespace: my_pack\nenable: true\n",
+        )
+        .unwrap();
+        fs::write(
+            ce_dir.join("configuration/items/weapons.yml"),
+            "items:\n  my_pack:frost_blade:\n    material: DIAMOND_SWORD\n    data:\n      item-name: '<aqua>Frost Blade'\n    model:\n      type: minecraft:model\n      generation:\n        parent: minecraft:item/handheld\n        textures:\n          layer0: my_pack:item/frost_blade\n",
+        )
+        .unwrap();
+        fs::write(
+            ce_dir.join("resourcepack/assets/my_pack/textures/item/frost_blade.png"),
+            tiny_png(),
+        )
+        .unwrap();
+
+        let res = scan_path(&cache, &ce_dir, None).unwrap();
+        assert_eq!(res["provider"], "craftengine");
+        assert_eq!(res["count"], 1);
+        let cat = read_catalog(&cache);
+        let ce_item = cat.items.iter().find(|i| i.id == "craftengine:my_pack:frost_blade").unwrap();
+        assert_eq!(ce_item.name, "Frost Blade");
+        assert!(ce_item.icon_file.is_some());
 
         let _ = fs::remove_dir_all(&tmp);
     }

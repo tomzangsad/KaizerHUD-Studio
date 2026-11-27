@@ -83,9 +83,17 @@ final class BedrockMenus {
         for (int i = 0; i < slots.length; i++) slots[i] = String.format("kzs%02d|", i);
         for (MenuDef.Element e : menu.elements) {
             if (e.bedrockSlot < 0 || e.bedrockSlot >= slots.length) continue;
+            if (!ConditionEval.all(plugin, p, e.visibility)) {
+                slots[e.bedrockSlot] = String.format("kzh%02d|", e.bedrockSlot);
+                continue;
+            }
             if (e.type == MenuDef.Type.ITEM) {
                 slots[e.bedrockSlot] = String.format("kzs%02d|", e.bedrockSlot);
                 slotImages[e.bedrockSlot] = Items.bedrockTextureOf(plugin, p, e.item);
+                continue;
+            }
+            if (e.type != MenuDef.Type.BUTTON && e.type != MenuDef.Type.TEXT && e.type != MenuDef.Type.INPUT) {
+                slots[e.bedrockSlot] = String.format("kzs%02d|", e.bedrockSlot);
                 continue;
             }
             String dyn = plugin.dynamicText(p, e.id);
@@ -100,7 +108,12 @@ final class BedrockMenus {
             String elCol = e.type == MenuDef.Type.BUTTON ? e.labelColor
                     : (e.type == MenuDef.Type.INPUT ? e.textColor : e.color);
             String resolved = safeBedrockText(Texts.section(plugin.resolveText(p, raw)), elCol);
-            slots[e.bedrockSlot] = String.format("kzs%02d|", e.bedrockSlot) + resolved;
+            if (e.type == MenuDef.Type.BUTTON && e.isToggle()) {
+                boolean isOn = plugin.getToggle(p, e);
+                slots[e.bedrockSlot] = String.format("kzs%02d:%d|", e.bedrockSlot, isOn ? 1 : 0) + resolved;
+            } else {
+                slots[e.bedrockSlot] = String.format("kzs%02d|", e.bedrockSlot) + resolved;
+            }
         }
         for (int i = 0; i < slots.length; i++) {
             if (slotImages[i] != null && !slotImages[i].isBlank()) {
@@ -111,7 +124,7 @@ final class BedrockMenus {
         }
     }
 
-    /** Prevents Bedrock JSON UI strtod() expression parsing from swallowing labels starting with digits or symbols. */
+    /** Prevents Bedrock JSON UI strtod() / #property expression parsing from swallowing labels starting with #, $, symbols, or digits. */
     private static String safeBedrockText(String text, String hexColor) {
         if (text == null || text.isEmpty()) return "";
         if (text.charAt(0) == '§') return text;
@@ -119,7 +132,7 @@ final class BedrockMenus {
         while (idx < text.length() && Character.isWhitespace(text.charAt(idx))) idx++;
         if (idx >= text.length()) return text;
         char c = text.charAt(idx);
-        if ((c >= '0' && c <= '9') || c == '<' || c == '>' || c == '-' || c == '+' || c == '=' || c == '/' || c == '!' || c == '(' || c == '[' || c == '.') {
+        if (c == '#' || c == '$' || c == '@' || c == '%' || !Character.isLetter(c)) {
             return "§" + nearestBedrockColor(hexColor) + text;
         }
         return text;
@@ -156,7 +169,7 @@ final class BedrockMenus {
             openInputForm(p, menu, e);
             return;
         }
-        if (e == null || e.type != MenuDef.Type.BUTTON) {
+        if (e == null || e.type != MenuDef.Type.BUTTON || !ConditionEval.all(plugin, p, e.visibility)) {
             // a text slot (not clickable in our pack) or an unknown button: show the menu again
             Sched.entityLater(plugin, p, 1, () -> open(p, menu));
             return;
@@ -167,7 +180,7 @@ final class BedrockMenus {
             plugin.clearBedrockSession(p.getUniqueId());
         } else if (after == Actions.After.STAY) {
             // a form closes on every click: show the same page again unless the button closes it or opens another
-            Sched.entityLater(plugin, p, 2, () -> open(p, menu));
+            Sched.entityLater(plugin, p, 1, () -> open(p, menu));
         }
     }
 
@@ -231,31 +244,53 @@ final class BedrockMenus {
         }
     }
 
-    /** Opens an in-place animated crate spin on the same Bedrock menu page and awards the server-rolled prize. */
+    /** Opens an in-place animated crate spin on the same Bedrock menu page and awards the server-rolled outcome. */
     void openSpinForm(Player p, MenuDef menu, MenuDef.Element rouletteEl) {
         if (!p.isOnline() || bridge == null || rouletteEl.rewards.isEmpty()) return;
+        boolean isWin = RoulettePart.rollIsWin(rouletteEl);
         MenuDef.Reward winner = RoulettePart.rollWinner(rouletteEl.rewards);
-        String winnerTex = Items.bedrockTextureOf(plugin, p, winner.item());
+        MenuDef.Reward shown = isWin ? winner : RoulettePart.MISS_CARD;
+        String winnerTex = Items.bedrockTextureOf(plugin, p, shown.item());
         String ns = plugin.studio() != null ? plugin.studio().font.split(":")[0] : "kaizerui";
-        String title = "kz:" + ns + ":spin:" + menu.id + ":" + rouletteEl.id + "|";
+        String title = "kz:" + ns + ":spin:" + menu.id + ":" + rouletteEl.id + (isWin ? "|" : "|MISS");
 
         java.util.concurrent.atomic.AtomicBoolean granted = new java.util.concurrent.atomic.AtomicBoolean(false);
         Runnable grant = () -> {
             if (!granted.compareAndSet(false, true)) return;
-            plugin.setSessionVar(p.getUniqueId(), "reward_id", winner.id());
-            plugin.setSessionVar(p.getUniqueId(), "reward_name", winner.name());
-            plugin.setSessionVar(p.getUniqueId(), "reward_item", winner.item());
-            Actions.playSound(p, rouletteEl.winSound);
-            Actions.runList(plugin, p, menu, winner.actions(), true);
+            if (isWin) {
+                plugin.setSessionVar(p.getUniqueId(), "reward_id", winner.id());
+                plugin.setSessionVar(p.getUniqueId(), "reward_name", winner.name());
+                plugin.setSessionVar(p.getUniqueId(), "reward_item", winner.item());
+                Actions.playSound(p, rouletteEl.winSound);
+                Actions.runList(plugin, p, menu, winner.actions(), true);
+            } else {
+                plugin.setSessionVar(p.getUniqueId(), "reward_id", "miss");
+                plugin.setSessionVar(p.getUniqueId(), "reward_name", "MISS");
+                plugin.setSessionVar(p.getUniqueId(), "reward_item", "");
+                Actions.playSound(p, rouletteEl.loseSound);
+                if (rouletteEl.loseMessage != null && !rouletteEl.loseMessage.isBlank()) {
+                    p.sendMessage(Texts.component(plugin.resolveText(p, rouletteEl.loseMessage)));
+                }
+            }
         };
 
         long ticks = Math.max(20L, Math.round(rouletteEl.durationSec * 20.0));
+        double[] tickFracs = {0.10, 0.22, 0.36, 0.52, 0.70, 0.86};
+        for (int i = 0; i < tickFracs.length; i++) {
+            final float mul = 0.85f + i * 0.11f;
+            long dt = Math.max(2L, Math.round(ticks * tickFracs[i]));
+            Sched.entityLater(plugin, p, dt, () -> {
+                if (p.isOnline() && !granted.get()) Actions.playSoundPitch(p, rouletteEl.tickSound, mul);
+            });
+        }
         Sched.entityLater(plugin, p, ticks, () -> { if (p.isOnline()) grant.run(); });
 
         SimpleForm.Builder b = SimpleForm.builder().title(title).content("");
         addMenuSlotButtons(b, p, menu);
         int winSlot = Math.max(0, menu.bedrockSlots);
-        String btnText = String.format("kzs%02d|", winSlot) + safeBedrockText(Texts.section("&a&l" + winner.name()), "#55ff55");
+        String rawResult = isWin ? ("&a&l" + winner.name()) : "&c&lMISS! Try Again";
+        String resHex = isWin ? "#55ff55" : "#ff5555";
+        String btnText = String.format("kzs%02d|", winSlot) + safeBedrockText(Texts.section(rawResult), resHex);
         if (winnerTex != null && !winnerTex.isBlank()) b.button(btnText, FormImage.of(FormImage.Type.PATH, winnerTex));
         else b.button(btnText);
 

@@ -54,8 +54,8 @@
     }
 
     function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
-    function int(v, def) { const n = Math.round(Number(v)); return Number.isFinite(n) ? n : def; }
-    function num(v, def) { const n = Number(v); return Number.isFinite(n) ? n : def; }
+    function int(v, def) { if (v === null || v === undefined || v === '') return def; const n = Math.round(Number(v)); return Number.isFinite(n) ? n : def; }
+    function num(v, def) { if (v === null || v === undefined || v === '') return def; const n = Number(v); return Number.isFinite(n) ? n : def; }
 
     /** a-z 0-9 _ only, from any text */
     function slug(s, fallback) {
@@ -101,7 +101,7 @@
                 clickSound: 'minecraft:ui.button.click',
                 hoverSound: 'minecraft:block.note_block.hat',
                 exitOnSneak: true,
-                // where the Java resource pack goes: itemsadder | nexo | oraxen | zip
+                // where the Java resource pack goes: itemsadder | nexo | oraxen | craftengine | zip
                 packHost: 'itemsadder'
             },
             packUuids: null,
@@ -110,7 +110,7 @@
     }
 
     function newElement(type, menu) {
-        const base = { id: uid(type[0]), type, name: '', x: 0, y: 0, w: 32, h: 16, hidden: false, locked: false, scrollGroup: '', motion: GS.Motion.elementDefaults(type) };
+        const base = { id: uid(type[0]), type, name: '', x: 0, y: 0, w: 32, h: 16, hidden: false, locked: false, scrollGroup: '', visibility: [], motion: GS.Motion.elementDefaults(type) };
         if (type === 'image') {
             // frames: more pictures after `image` that play as an animation, fps frames a second
             Object.assign(base, { w: 64, h: 64, image: null, frames: [], fps: 8 });
@@ -119,7 +119,9 @@
                 w: 80, h: 20, image: null, hoverImage: null, frames: [], fps: 8,
                 label: 'Button', labelColor: '#ffffff', labelScale: 1, labelShadow: true,
                 actions: ['message:&aYou clicked a button!'],
-                closeOnClick: false, hoverSound: '', tooltip: ''
+                closeOnClick: false, hoverSound: '', tooltip: '',
+                toggleVar: '', togglePapi: '', toggleOnValue: '', toggleDefault: true,
+                offImage: null, offHoverImage: null, onActions: [], offActions: []
             });
         } else if (type === 'text') {
             Object.assign(base, { w: 120, h: 12, text: 'Hello %player_name%', color: '#ffffff', scale: 1, shadow: true, align: 'center' });
@@ -154,10 +156,12 @@
             // CS:GO crate roller with weighted rewards and selectable spin animations
             Object.assign(base, {
                 w: 260, h: 56, slotSize: 44, slotGap: 6, durationSec: 4.2, spinStyle: 'csgo',
-                reels: 3, cardCount: 5,
+                reels: 3, cardCount: 5, winChance: 100,
                 bgColor: '#0d111a', borderColor: '#e5a43a', pointerColor: '#ff4d4f',
                 tickSound: 'minecraft:block.note_block.hat;0.7;1.4',
                 winSound: 'minecraft:entity.player.levelup;1.0;1.1',
+                loseSound: 'minecraft:entity.villager.no;1.0;0.82',
+                loseMessage: '&c&lMISS! &7No match this time — try again!',
                 tooltip: '',
                 rewards: [
                     { id: 'r1', name: 'Iron Ingot', item: 'minecraft:iron_ingot', color: '#9ca3af', weight: 45, actions: ['console:give %player_name% iron_ingot 16', 'message:&7You won &fIron Ingot x16&7!'] },
@@ -213,7 +217,25 @@
                 .map(e => {
                     const ee = Object.assign(newElement(e.type), e);
                     ee.id = ee.id || uid(e.type[0]);
-                    if (ee.type === 'button' && !Array.isArray(ee.actions)) ee.actions = [];
+                    if (ee.type === 'button') {
+                        if (!Array.isArray(ee.actions)) ee.actions = [];
+                        ee.toggleVar = String(ee.toggleVar || '').trim();
+                        ee.togglePapi = String(ee.togglePapi || '').trim();
+                        ee.toggleOnValue = String(ee.toggleOnValue || '').trim();
+                        ee.toggleDefault = ee.toggleDefault !== false;
+                        ee.offImage = ee.offImage || null;
+                        ee.offHoverImage = ee.offHoverImage || null;
+                        if (!Array.isArray(ee.onActions)) ee.onActions = [];
+                        if (!Array.isArray(ee.offActions)) ee.offActions = [];
+                    }
+                    ee.visibility = (Array.isArray(ee.visibility) ? ee.visibility : [])
+                        .filter(c => c && typeof c === 'object')
+                        .map(c => ({
+                            papi: String(c.papi || ''),
+                            op: String(c.op || '=='),
+                            value: String(c.value == null ? '' : c.value),
+                            invert: !!c.invert
+                        }));
                     if (['button', 'item', 'player_head', 'player_model', 'custom_model', 'input', 'roulette', 'scroll_area'].includes(ee.type)) {
                         ee.tooltip = String(ee.tooltip || '');
                     }
@@ -275,11 +297,15 @@
                         ee.spinStyle = ['csgo', 'tease', 'slot_v', 'flash', 'flip'].includes(ee.spinStyle) ? ee.spinStyle : 'csgo';
                         ee.reels = clamp(int(ee.reels, 3), 1, 5);
                         ee.cardCount = clamp(int(ee.cardCount, 5), 3, 9);
+                        const defWinChance = (ee.spinStyle === 'slot_v' && ee.reels >= 2) ? 65 : 100;
+                        ee.winChance = clamp(num(e && e.winChance != null ? e.winChance : defWinChance, defWinChance), 1, 100);
                         ee.bgColor = String(ee.bgColor || '#0d111a');
                         ee.borderColor = String(ee.borderColor || '#e5a43a');
                         ee.pointerColor = String(ee.pointerColor || '#ff4d4f');
                         ee.tickSound = String(ee.tickSound || 'minecraft:block.note_block.hat;0.7;1.4');
                         ee.winSound = String(ee.winSound || 'minecraft:entity.player.levelup;1.0;1.1');
+                        ee.loseSound = String(ee.loseSound || 'minecraft:entity.villager.no;1.0;0.82');
+                        ee.loseMessage = String(ee.loseMessage != null ? ee.loseMessage : '&c&lMISS! &7No match this time — try again!');
                         const defRewards = newElement('roulette').rewards;
                         const srcR = Array.isArray(ee.rewards) && ee.rewards.length ? ee.rewards : defRewards;
                         ee.rewards = srcR.map((r, idx) => ({
@@ -401,6 +427,8 @@
         p.menus.forEach(m => m.elements.forEach(e => {
             if (e.image) used.add(e.image);
             if (e.hoverImage) used.add(e.hoverImage);
+            if (e.offImage) used.add(e.offImage);
+            if (e.offHoverImage) used.add(e.offHoverImage);
             (e.frames || []).forEach(f => used.add(f));
         }));
         Object.keys(p.images).forEach(id => { if (!used.has(id)) delete p.images[id]; });

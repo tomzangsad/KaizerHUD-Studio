@@ -44,9 +44,16 @@
 
     function samplePapi(t) {
         return String(t || '').replace(/%player_name%/g, 'Steve').replace(/%vault_eco_balance(_formatted)?%/g, '1,250')
-            .replace(/%player_level%/g, '12').replace(/%player_health%/g, '20').replace(/%server_online%/g, '42')
-            .replace(/%player_health_rounded%/g, '20').replace(/%player_food_level%/g, '18').replace(/%statistic_player_kills%/g, '37').replace(/%statistic_deaths%/g, '5')
-            .replace(/%vault_rank%/g, 'VIP').replace(/%player_ping%/g, '32').replace(/%statistic_hours_played%/g, '48').replace(/%bungee_[a-z]+%/g, '24')
+            .replace(/%player_level%/g, '12').replace(/%player_health(_rounded)?%/g, '20').replace(/%player_max_health_rounded%/g, '120')
+            .replace(/%player_armor%/g, '18').replace(/%server_online%/g, '42').replace(/%server_max_players%/g, '100')
+            .replace(/%player_food_level%/g, '18').replace(/%statistic_player_kills%/g, '37').replace(/%statistic_mob_kills%/g, '1,017')
+            .replace(/%statistic_deaths%/g, '5').replace(/%statistic_hours_played%/g, '48')
+            .replace(/%vault_rank%/g, 'VIP').replace(/%player_ping%/g, '32').replace(/%bungee_[a-z]+%/g, '24')
+            .replace(/%playerpoints_points%/g, '2,450').replace(/%gems%/g, '180').replace(/%coinsengine_balance_[a-z0-9_]+%/g, '180')
+            .replace(/%mmocore_class%/g, 'Blade Master').replace(/%mmocore_level%/g, '60')
+            .replace(/%mmocore_skill_points%/g, '4').replace(/%mmocore_attribute_points%/g, '12')
+            .replace(/%mmocore_mana%/g, '120').replace(/%mmocore_max_mana%/g, '120')
+            .replace(/%auraskills_power%/g, '145').replace(/%luckperms_primary_group_name%/g, 'VIP').replace(/%luckperms_prefix%/g, '[VIP]')
             // leaderboards (ajLeaderboards): sample names / values so the layout reads like in game
             .replace(/%ajlb_lb_[a-z_]+?_(\d+)_[a-z]+_name%/g, (m, n) => ['Notch', 'Alex', 'Kaizer', 'Mochi', 'Boba', 'Taro', 'Kiwi'][(n - 1) % 7])
             .replace(/%ajlb_lb_[a-z_]+?_(\d+)_[a-z]+_value%/g, (m, n) => String(Math.max(40, 980 - n * 115))).replace(/%ajlb_position_[a-z_]+%/g, '24');
@@ -127,6 +134,22 @@
             this.zoomFit();
         },
 
+        isToggleOn(e) {
+            if (!e || !(e.toggleVar || e.togglePapi)) return true;
+            if (this.previewMode && e.toggleVar && this.previewVars && (e.toggleVar in this.previewVars)) {
+                const v = String(this.previewVars[e.toggleVar]).trim().toLowerCase();
+                return v !== 'false' && v !== '0' && v !== 'off';
+            }
+            if (this.previewMode && e.togglePapi) {
+                const res = this.resolvePreviewVars(e.togglePapi).trim();
+                if (res && res !== e.togglePapi) {
+                    if (e.toggleOnValue) return res.toLowerCase() === String(e.toggleOnValue).trim().toLowerCase();
+                    return /^(true|yes|on|enabled|1)$/i.test(res) || (Number.isFinite(Number(res)) && Number(res) > 0);
+                }
+            }
+            return e.toggleDefault !== false;
+        },
+
         resolvePreviewVars(text, varsOverride) {
             let s = samplePapi(text);
             if (!s.includes('{')) return s;
@@ -135,6 +158,11 @@
                 (mm.elements || []).forEach(el => {
                     if (el.type === 'input' && el.varName && !(el.varName in vars)) {
                         vars[el.varName] = el.defaultValue == null ? '1' : String(el.defaultValue);
+                    }
+                    if (el.type === 'button' && el.toggleVar && !(el.toggleVar in vars)) {
+                        const on = el.toggleDefault !== false;
+                        vars[el.toggleVar] = on ? 'true' : 'false';
+                        vars[el.toggleVar + '_state'] = on ? 'ON' : 'OFF';
                     }
                 });
             });
@@ -464,6 +492,11 @@
                 return;
             }
             const style = ['csgo', 'tease', 'slot_v', 'flash', 'flip'].includes(rEl.spinStyle) ? rEl.spinStyle : 'csgo';
+            const reels = M.clamp(M.int(rEl.reels, 3), 1, 5);
+            const cardCount = M.clamp(M.int(rEl.cardCount, 5), 3, 9);
+            const winChance = M.clamp(M.num(rEl.winChance != null ? rEl.winChance : ((style === 'slot_v' && reels >= 2) ? 65 : 100), 100), 1, 100);
+            const isWin = winChance >= 100 || (Math.random() * 100 < winChance);
+
             const totalW = rEl.rewards.reduce((s, r) => s + Math.max(0.01, Number(r.weight) || 1), 0);
             let roll = Math.random() * totalW, winIdx = 0;
             for (let i = 0; i < rEl.rewards.length; i++) {
@@ -471,40 +504,92 @@
                 if (roll <= 0) { winIdx = i; break; }
             }
             const winner = rEl.rewards[winIdx];
+            const missCard = { id: 'miss', name: 'MISS!', item: 'minecraft:barrier', color: '#ef4444', weight: 1, actions: [] };
+            const outcome = isWin ? winner : missCard;
+            const sameRw = (a, b) => !!a && !!b && (a.id === b.id || String(a.item).toLowerCase() === String(b.item).toLowerCase());
+            const rarestOf = (excl) => {
+                let best = null;
+                for (const r of rEl.rewards) {
+                    if (excl && sameRw(r, excl)) continue;
+                    if (!best || (Number(r.weight) || 10) < (Number(best.weight) || 10)) best = r;
+                }
+                return best || rEl.rewards[0];
+            };
+            const pickDiff = (excl) => {
+                const list = rEl.rewards.filter(r => !sameRw(r, excl));
+                return list.length ? list[Math.floor(Math.random() * list.length)] : missCard;
+            };
+            const rareBait = rarestOf(outcome);
+            const secondBait = rarestOf(rareBait);
             const randRw = () => rEl.rewards[Math.floor(Math.random() * rEl.rewards.length)];
             const WIN_SLOT = 34;
+
+            const edgeDir = Math.random() < 0.5 ? 1 : -1;
             const strip = [];
-            for (let i = 0; i < 42; i++) strip.push(i === WIN_SLOT ? winner : randRw());
+            for (let i = 0; i < 42; i++) {
+                if (i === WIN_SLOT) strip.push(outcome);
+                else if (style === 'tease' && i === WIN_SLOT + 1) strip.push(rareBait);
+                else if (style === 'tease' && i === WIN_SLOT - 1) strip.push(secondBait);
+                else if (style !== 'tease' && i === WIN_SLOT + edgeDir) strip.push(rareBait);
+                else if (style !== 'tease' && i === WIN_SLOT - edgeDir) strip.push(secondBait);
+                else strip.push(randRw());
+            }
 
             const slotW = Math.max(16, M.int(rEl.slotSize, 44));
             const gap = Math.max(0, M.int(rEl.slotGap, 6));
             const step = slotW + gap;
-            const reels = M.clamp(M.int(rEl.reels, 3), 1, 5);
-            const cardCount = M.clamp(M.int(rEl.cardCount, 5), 3, 9);
             const slotCardH = Math.max(14, Math.min(slotW, Math.floor((rEl.h - 8) * 0.52)));
             const stepV = slotCardH + gap;
             const startX = (rEl.w - slotW) * 0.5 - 2 * step;
-            const targetX = (rEl.w - slotW) * 0.5 - WIN_SLOT * step + (Math.random() - 0.5) * slotW * 0.28;
+            const jitter = style === 'tease'
+                ? (Math.random() - 0.5) * slotW * 0.24
+                : edgeDir * (0.28 + Math.random() * 0.16) * slotW;
+            const targetX = (rEl.w - slotW) * 0.5 - WIN_SLOT * step + jitter;
+            const overshootX = targetX - step * 0.92;
             const startY = (rEl.h - slotCardH) * 0.5 - 2 * stepV;
             const targetY = (rEl.h - slotCardH) * 0.5 - WIN_SLOT * stepV;
             const durMs = Math.max(800, M.num(rEl.durationSec, 4.2) * 1000);
             const t0 = performance.now();
 
-            const reelStrips = Array.from({ length: reels }, () =>
-                Array.from({ length: 42 }, (_, i) => (i === WIN_SLOT ? winner : randRw()))
-            );
+            const reelTargets = Array(reels).fill(winner);
+            const slotBait = Math.random() < 0.65 ? rarestOf(null) : winner;
+            if (!isWin) {
+                if (reels >= 2) {
+                    if (Math.random() < 0.75) {
+                        for (let r = 0; r < reels - 1; r++) reelTargets[r] = slotBait;
+                        reelTargets[reels - 1] = pickDiff(slotBait);
+                    } else {
+                        for (let r = 0; r < reels; r++) reelTargets[r] = randRw();
+                        if (reelTargets.every(x => sameRw(x, reelTargets[0]))) {
+                            reelTargets[reels - 1] = pickDiff(reelTargets[0]);
+                        }
+                    }
+                } else {
+                    reelTargets[0] = missCard;
+                }
+            }
+            const reelStrips = Array.from({ length: reels }, (_, r) => {
+                const target = reelTargets[r];
+                const neighbor = (!isWin && r === reels - 1 && reels >= 2) ? slotBait : rarestOf(target);
+                const nSlot = Math.random() < 0.5 ? WIN_SLOT - 1 : WIN_SLOT + 1;
+                return Array.from({ length: 42 }, (_, i) => (i === WIN_SLOT ? target : (i === nSlot ? neighbor : randRw())));
+            });
             const reelEndPs = Array.from({ length: reels }, (_, r) =>
-                reels === 1 ? 1 : (0.58 + 0.42 * (r / (reels - 1)))
+                reels === 1 ? 1 : (0.38 + 0.62 * Math.pow(r / (reels - 1), 1.35))
             );
 
             const pickSlot = Math.floor(Math.random() * cardCount);
-            const flashHops = Math.max(18, Math.round((durMs / 1000) * 7));
+            const baitSlot = (pickSlot - 1 + cardCount) % cardCount;
+            const flashHops = Math.max(20, Math.round((durMs / 1000) * 8));
             const flashStart = ((pickSlot - flashHops) % cardCount + cardCount) % cardCount;
             let lastFlashHop = -1;
 
-            const flipHops = Math.max(12, Math.round((durMs / 1000) * 5));
+            const flipHops = Math.max(14, Math.round((durMs / 1000) * 6));
             const flipStart = ((pickSlot - flipHops) % cardCount + cardCount) % cardCount;
-            const flipFinalBoard = Array.from({ length: cardCount }, (_, i) => (i === pickSlot ? winner : randRw()));
+            const rareDecoy = (pickSlot + 1) % cardCount;
+            const flipFinalBoard = Array.from({ length: cardCount }, (_, i) =>
+                i === pickSlot ? outcome : (i === rareDecoy ? rareBait : randRw())
+            );
 
             const spinObj = this.previewSpins[rEl.id] = {
                 strip,
@@ -513,7 +598,7 @@
                 reelOffsets: Array(reels).fill(startY),
                 board: Array.from({ length: cardCount }, (_, i) => rEl.rewards[i % rEl.rewards.length]),
                 litIdx: 0,
-                cards: Array.from({ length: cardCount }, () => ({ rw: winner, revealed: false, scaleX: 1, lit: false, dim: false })),
+                cards: Array.from({ length: cardCount }, () => ({ rw: outcome, revealed: false, scaleX: 1, lit: false, dim: false })),
                 done: false,
                 running: true
             };
@@ -522,18 +607,19 @@
                 if (!this.previewMode || this.previewSpins[rEl.id] !== spinObj) return;
                 const p = Math.min(1, (now - t0) / durMs);
                 if (style === 'flash') {
-                    const hop = Math.min(flashHops, Math.floor((1 - Math.pow(1 - p, 2.5)) * (flashHops + 0.99)));
+                    const hop = Math.min(flashHops, Math.floor((1 - Math.pow(1 - p, 3.5)) * (flashHops + 0.99)));
                     if (hop !== lastFlashHop || p >= 1) {
                         lastFlashHop = hop;
                         spinObj.board = Array.from({ length: cardCount }, () => randRw());
+                        spinObj.board[baitSlot] = rareBait;
                         const active = (hop >= flashHops || p >= 1) ? pickSlot : (flashStart + hop) % cardCount;
-                        if (hop >= flashHops || p >= 1) spinObj.board[pickSlot] = winner;
+                        if (hop >= flashHops || p >= 1) spinObj.board[pickSlot] = outcome;
                         spinObj.litIdx = active;
                     }
                 } else if (style === 'flip') {
-                    if (p < 0.68) {
-                        const sp = p / 0.68;
-                        const hop = Math.min(flipHops, Math.floor((1 - Math.pow(1 - sp, 2.4)) * (flipHops + 0.99)));
+                    if (p < 0.50) {
+                        const sp = p / 0.50;
+                        const hop = Math.min(flipHops, Math.floor((1 - Math.pow(1 - sp, 2.8)) * (flipHops + 0.99)));
                         const active = hop >= flipHops ? pickSlot : (flipStart + hop) % cardCount;
                         spinObj.cards = spinObj.cards.map((_, i) => ({
                             rw: flipFinalBoard[i],
@@ -542,35 +628,49 @@
                             lit: i === active,
                             dim: i !== active
                         }));
-                    } else if (p < 0.86) {
-                        const fp = (p - 0.68) / 0.18;
+                    } else if (p < 0.72) {
+                        const fp = (p - 0.50) / 0.22;
                         const sx = Math.max(0.06, Math.abs(Math.cos(fp * Math.PI)));
                         spinObj.cards = spinObj.cards.map((_, i) => i === pickSlot
-                            ? { rw: winner, revealed: fp >= 0.5, scaleX: sx, lit: true, dim: false }
-                            : { rw: flipFinalBoard[i], revealed: false, scaleX: 1, lit: false, dim: true }
+                            ? { rw: outcome, revealed: false, scaleX: 1, lit: true, dim: false }
+                            : { rw: flipFinalBoard[i], revealed: fp >= 0.5, scaleX: sx, lit: false, dim: true }
+                        );
+                    } else if (p < 0.82) {
+                        const beat = Math.sin((p - 0.72) / 0.10 * Math.PI);
+                        spinObj.cards = spinObj.cards.map((_, i) => i === pickSlot
+                            ? { rw: outcome, revealed: false, scaleX: 1 + 0.08 * beat, lit: true, dim: false }
+                            : { rw: flipFinalBoard[i], revealed: true, scaleX: 1, lit: false, dim: true }
                         );
                     } else {
-                        const fp2 = Math.min(1, (p - 0.86) / 0.14);
+                        const fp2 = Math.min(1, (p - 0.82) / 0.18);
                         const sx2 = Math.max(0.06, Math.abs(Math.cos(fp2 * Math.PI)));
                         spinObj.cards = spinObj.cards.map((_, i) => i === pickSlot
-                            ? { rw: winner, revealed: true, scaleX: 1, lit: true, dim: false }
-                            : { rw: flipFinalBoard[i], revealed: fp2 >= 0.5, scaleX: p >= 1 ? 1 : sx2, lit: false, dim: true }
+                            ? { rw: outcome, revealed: fp2 >= 0.5, scaleX: p >= 1 ? 1 : sx2, lit: true, dim: false }
+                            : { rw: flipFinalBoard[i], revealed: true, scaleX: 1, lit: false, dim: true }
                         );
                     }
                 } else if (style === 'slot_v') {
                     for (let r = 0; r < reels; r++) {
                         const rp = Math.min(1, p / reelEndPs[r]);
-                        const ease = 1 - Math.pow(1 - rp, 4);
+                        const ease = 1 - Math.pow(1 - rp, 4.6);
                         spinObj.reelOffsets[r] = startY + (targetY - startY) * ease;
                     }
-                } else {
-                    let ease;
-                    if (style === 'tease') {
-                        const pm1 = p - 1, c1 = 1.85, c3 = c1 + 1;
-                        ease = 1 + c3 * pm1 * pm1 * pm1 + c1 * pm1 * pm1;
+                } else if (style === 'tease') {
+                    if (p <= 0.72) {
+                        const q = p / 0.72;
+                        const ease = 1 - Math.pow(1 - q, 3.6);
+                        spinObj.offsetPx = startX + (overshootX - startX) * ease;
+                    } else if (p <= 0.84) {
+                        const q = (p - 0.72) / 0.12;
+                        spinObj.offsetPx = overshootX + step * 0.08 * q;
                     } else {
-                        ease = 1 - Math.pow(1 - p, 4);
+                        const q = (p - 0.84) / 0.16;
+                        const smooth = q < 0.5 ? 4 * q * q * q : 1 - Math.pow(-2 * q + 2, 3) / 2;
+                        const holdEnd = overshootX + step * 0.08;
+                        spinObj.offsetPx = holdEnd + (targetX - holdEnd) * smooth;
                     }
+                } else {
+                    const ease = 1 - Math.pow(1 - p, 4.5);
                     spinObj.offsetPx = startX + (targetX - startX) * ease;
                 }
                 const dom = document.querySelector(`#gs-elements .gs-el[data-id="${rEl.id}"]`);
@@ -580,10 +680,17 @@
                 } else {
                     spinObj.running = false;
                     spinObj.done = true;
-                    this.previewVars.reward_name = winner.name;
-                    this.previewVars.reward_item = winner.item;
-                    this.previewVars.reward_id = winner.id;
-                    GS.toast(`Won: ${winner.name}!`, 'ok');
+                    if (isWin) {
+                        this.previewVars.reward_name = winner.name;
+                        this.previewVars.reward_item = winner.item;
+                        this.previewVars.reward_id = winner.id;
+                        GS.toast(`Won: ${winner.name}!`, 'ok');
+                    } else {
+                        this.previewVars.reward_name = 'MISS';
+                        this.previewVars.reward_item = '';
+                        this.previewVars.reward_id = 'miss';
+                        GS.toast('MISS! Better luck next time!', 'warn');
+                    }
                     this.renderCanvas();
                 }
             };
@@ -651,10 +758,13 @@
                 }
                 if (e.type === 'image' || e.type === 'button') {
                     if ((e.detail || 1) > 1) d.classList.add('smooth');
-                    const url = this.liveArt(e) || this.imageUrl(e.image);
+                    const tgOn = e.type === 'button' ? this.isToggleOn(e) : true;
+                    const normId = tgOn ? e.image : (e.offImage || e.image);
+                    const hovId = tgOn ? e.hoverImage : (e.offHoverImage || e.offImage || e.hoverImage);
+                    const url = (tgOn ? this.liveArt(e) : null) || this.imageUrl(normId);
                     if (url) d.style.backgroundImage = `url("${url}")`;
                     else d.classList.add('no-image');
-                    const hov = this.imageUrl(e.hoverImage);
+                    const hov = this.imageUrl(hovId);
                     if (hov) d.style.setProperty('--hover', `url("${hov}")`);
                     else d.classList.add('no-hover');
                 }
@@ -991,6 +1101,16 @@
                           ${this.imagePicker('Picture', 'image', e.image)}
                           ${this.imagePicker('Hover picture', 'hoverImage', e.hoverImage)}
                           <button class="ghost-btn block" data-action="fit-image">Size to picture</button></div>`;
+                    h += `<div class="gs-section"><div class="gs-sec-head">Toggle Switch (ON / OFF)</div>
+                          ${this.field('Toggle variable (blank = disabled)', 'toggleVar', e.toggleVar || '', { wide: true, placeholder: 'e.g. setting_tpa' })}
+                          ${this.field('Sync state from PAPI (optional)', 'togglePapi', e.togglePapi || '', { wide: true, varBtn: true, placeholder: 'e.g. %essentials_tptoggle%' })}
+                          ${(e.toggleVar || e.togglePapi) ? `
+                          ${e.togglePapi ? this.field('ON match value (blank = true/yes/on/1)', 'toggleOnValue', e.toggleOnValue || '', { wide: true, placeholder: 'true' }) : ''}
+                          ${this.field('Default ON', 'toggleDefault', e.toggleDefault !== false, { type: 'checkbox' })}
+                          ${this.imagePicker('OFF picture', 'offImage', e.offImage)}
+                          ${this.imagePicker('OFF hover picture', 'offHoverImage', e.offHoverImage)}
+                          ${this.field('Actions when turned ON (one per line)', 'onActions', (e.onActions || []).join('\n'), { type: 'textarea', rows: 2 })}
+                          ${this.field('Actions when turned OFF (one per line)', 'offActions', (e.offActions || []).join('\n'), { type: 'textarea', rows: 2 })}` : ''}</div>`;
                     h += `<div class="gs-section"><div class="gs-sec-head">Label</div>
                           ${this.field('Text', 'label', e.label, { wide: true, varBtn: true, hint: '&amp; colour codes and {variables} work' })}
                           <div class="gs-grid2">${this.field('Colour', 'labelColor', e.labelColor || '#ffffff', { type: 'color' })}${this.field('Size', 'labelScale', e.labelScale, { type: 'number', step: 0.25, min: 0.25 })}</div>
@@ -1065,8 +1185,10 @@
                               ['3', '3 Cards'], ['4', '4 Cards'], ['5', '5 Cards'], ['6', '6 Cards (2 rows)'], ['7', '7 Cards (2 rows)'], ['8', '8 Cards (2 rows)'], ['9', '9 Cards (2 rows)']
                           ] }) : ''}
                           <div class="gs-grid3">${this.field('Slot Size', 'slotSize', e.slotSize || 44, { type: 'number', min: 16, max: 128 })}${this.field('Gap (px)', 'slotGap', e.slotGap ?? 6, { type: 'number', min: 0, max: 32 })}${this.field('Duration (s)', 'durationSec', e.durationSec || 4.2, { type: 'number', step: 0.2, min: 1, max: 15 })}</div>
-                          <div class="gs-grid3">${this.field('Background', 'bgColor', e.bgColor || '#0d111a', { type: 'color' })}${this.field('Border', 'borderColor', e.borderColor || '#e5a43a', { type: 'color' })}${this.field('Needle', 'pointerColor', e.pointerColor || '#ff4d4f', { type: 'color' })}</div>
+                          <div class="gs-grid2">${this.field('Win Chance (%)', 'winChance', e.winChance != null ? e.winChance : (st === 'slot_v' && M.int(e.reels, 3) >= 2 ? 65 : 100), { type: 'number', step: 5, min: 1, max: 100 })}${this.field('Needle', 'pointerColor', e.pointerColor || '#ff4d4f', { type: 'color' })}</div>
+                          <div class="gs-grid2">${this.field('Background', 'bgColor', e.bgColor || '#0d111a', { type: 'color' })}${this.field('Border', 'borderColor', e.borderColor || '#e5a43a', { type: 'color' })}</div>
                           <div class="gs-grid2">${this.field('Tick Sound', 'tickSound', e.tickSound || '')}${this.field('Win Sound', 'winSound', e.winSound || '')}</div>
+                          <div class="gs-grid2">${this.field('Lose Sound', 'loseSound', e.loseSound || 'minecraft:entity.villager.no;1.0;0.82')}${this.field('Lose Message', 'loseMessage', e.loseMessage != null ? e.loseMessage : '&c&lMISS! &7No match this time — try again!')}</div>
                           <div class="gs-row-actions">
                             <button class="primary-btn small" data-action="test-spin"><svg><use href="#g-play"/></svg><span>Test Spin</span></button>
                             <button class="ghost-btn small" data-action="fit-roulette" title="Resize frame to match selected spin style"><span>Fit Frame</span></button>
@@ -1150,6 +1272,19 @@
                 if (['button', 'item', 'player_head', 'player_model', 'custom_model', 'input', 'roulette', 'scroll_area'].includes(e.type)) {
                     h += `<div class="gs-section">${this.field('Tooltip (hover popup, Java)', 'tooltip', e.tooltip || '', { type: 'textarea', rows: 2 })}</div>`;
                 }
+                const vis = Array.isArray(e.visibility) ? e.visibility : [];
+                const visOps = [['==', 'Equals (==)'], ['!=', 'Not Equals (!=)'], ['>=', '>='], ['<=', '<='], ['>', '>'], ['<', '<'], ['contains', 'Contains'], ['!contains', 'Not Contains'], ['empty', 'Is Empty'], ['!empty', 'Not Empty'], ['perm', 'Has Permission']];
+                h += `<div class="gs-section"><div class="gs-sec-head gs-head-row"><span>PAPI Visibility (${vis.length})</span><button class="ghost-btn small" data-action="add-vis"><span>+ Add Condition</span></button></div>`;
+                vis.forEach((vc, idx) => {
+                    h += `<div class="gs-vis-row">
+                        <div class="gs-vis-head"><span>AND Condition #${idx + 1}</span><button type="button" class="icon-btn small danger" data-del-vis="${idx}" title="Remove">×</button></div>
+                        ${this.field(vc.op === 'perm' ? 'Permission Node' : 'PAPI Placeholder', `vis.${idx}.papi`, vc.papi || '', { wide: true, varBtn: vc.op !== 'perm', placeholder: vc.op === 'perm' ? 'kaizer.vip' : '%mmocore_level%' })}
+                        <div class="gs-grid2">${this.field('Operator', `vis.${idx}.op`, vc.op || '==', { type: 'select', options: visOps })}${['empty', '!empty', 'perm'].includes(vc.op) ? '<div></div>' : this.field('Compare Value', `vis.${idx}.value`, vc.value || '', { placeholder: '10' })}</div>
+                        ${this.field('Invert result (NOT)', `vis.${idx}.invert`, !!vc.invert, { type: 'checkbox' })}
+                    </div>`;
+                });
+                if (!vis.length) h += `<div class="gs-hint">Always visible. Add PAPI conditions to show/hide dynamically in game (Java &amp; Bedrock).</div>`;
+                h += `</div>`;
                 h += this.motionHtml(e);
             }
 
@@ -1357,6 +1492,16 @@
             const e = this.element();
             if (!e) return;
             this.checkpoint();
+            if (key.startsWith('vis.')) {
+                const [, idxS, field] = key.split('.');
+                const idx = Number(idxS);
+                if (Array.isArray(e.visibility) && e.visibility[idx]) {
+                    e.visibility[idx][field] = field === 'invert' ? !!val : String(val == null ? '' : val);
+                    this.changed();
+                    if (field === 'op') this.renderProps();
+                }
+                return;
+            }
             if (key.startsWith('reward.')) {
                 const [, idxS, field] = key.split('.');
                 const idx = Number(idxS);
@@ -1413,12 +1558,19 @@
             if (key === 'varName') { e.varName = String(val || 'qty').trim(); return this.changed(); }
             if (key === 'spinStyle') {
                 e.spinStyle = val;
+                if (val === 'slot_v' && M.int(e.reels, 3) >= 2 && (e.winChance == null || e.winChance >= 100)) {
+                    e.winChance = 65;
+                }
                 if (this.previewSpins) delete this.previewSpins[e.id];
                 this.fitRouletteFrame(e);
                 return this.changed();
             }
             if (key === 'reels') {
+                const prev = M.int(e.reels, 3);
                 e.reels = M.clamp(M.int(val, 3), 1, 5);
+                if (e.spinStyle === 'slot_v' && prev < 2 && e.reels >= 2 && (e.winChance == null || e.winChance >= 100)) {
+                    e.winChance = 65;
+                }
                 if (this.previewSpins) delete this.previewSpins[e.id];
                 this.fitRouletteFrame(e);
                 return this.changed();
@@ -1429,6 +1581,7 @@
                 this.fitRouletteFrame(e);
                 return this.changed();
             }
+            if (key === 'winChance') { e.winChance = M.clamp(M.num(val, 100), 1, 100); return this.changed(); }
             if (key === 'slotSize') { e.slotSize = M.clamp(M.int(val, 44), 16, 128); return this.changed(); }
             if (key === 'slotGap') { e.slotGap = M.clamp(M.int(val, 6), 0, 32); return this.changed(); }
             if (key === 'durationSec') { e.durationSec = M.clamp(M.num(val, 4.2), 1, 15); return this.changed(); }
@@ -1439,7 +1592,10 @@
             if (['x', 'y'].includes(key)) e[key] = M.int(val, e[key]);
             else if (['w', 'h'].includes(key)) e[key] = Math.max(1, M.int(val, e[key]));
             else if (['labelScale', 'scale'].includes(key)) e[key] = Math.max(0.25, M.num(val, 1));
-            else if (key === 'actions') e.actions = String(val).split('\n').map(s => s.trim()).filter(Boolean);
+            else if (key === 'toggleVar' || key === 'togglePapi') { e[key] = String(val || '').trim(); this.changed(); this.renderProps(); return; }
+            else if (key === 'toggleOnValue') { e.toggleOnValue = String(val || '').trim(); }
+            else if (key === 'toggleDefault') { e.toggleDefault = !!val; }
+            else if (key === 'actions' || key === 'onActions' || key === 'offActions') e[key] = String(val).split('\n').map(s => s.trim()).filter(Boolean);
             else e[key] = val;
             this.changed();
         },
@@ -2279,12 +2435,22 @@
                     const id = 'gsf-' + fk.replace(/[^a-z0-9]/gi, '_');
                     const inp = document.getElementById(id);
                     if (inp) {
+                        const isReplace = fk === 'togglePapi' || fk.startsWith('vis.');
+                        const label = fk === 'label' ? 'Label' : fk === 'togglePapi' ? 'Toggle PAPI' : fk.startsWith('vis.') ? 'Condition' : 'Text';
                         GS.ActionBuilder.openVarMenu(vbtn, (token) => {
                             const st = inp.selectionStart != null ? inp.selectionStart : inp.value.length;
                             const en = inp.selectionEnd != null ? inp.selectionEnd : st;
-                            inp.value = inp.value.slice(0, st) + token + inp.value.slice(en);
-                            this.applyField(fk, inp.value, false);
-                        });
+                            const nextVal = isReplace ? token : (inp.value.slice(0, st) + token + inp.value.slice(en));
+                            const from = isReplace ? 0 : st;
+                            inp.value = nextVal;
+                            this.applyField(fk, nextVal, false);
+                            setTimeout(() => {
+                                const liveInp = document.getElementById(id) || inp;
+                                if (window.PapiPicker && window.PapiPicker.selectParamInInput) {
+                                    window.PapiPicker.selectParamInInput(liveInp, from, token.length);
+                                }
+                            }, 0);
+                        }, { label });
                     }
                     return;
                 }
@@ -2306,6 +2472,16 @@
                     }
                     return;
                 }
+                const vdel = ev.target.closest('[data-del-vis]');
+                if (vdel) {
+                    const el = this.element();
+                    if (el && Array.isArray(el.visibility)) {
+                        this.checkpoint();
+                        el.visibility.splice(Number(vdel.dataset.delVis), 1);
+                        this.changed();
+                    }
+                    return;
+                }
                 const rpick = ev.target.closest('[data-pick-reward]');
                 if (rpick && GS.Items) {
                     const el = this.element(), idx = Number(rpick.dataset.pickReward);
@@ -2322,7 +2498,16 @@
                 const act = ev.target.closest('[data-action]');
                 if (!act) return;
                 const a = act.dataset.action;
-                if (a === 'add-reward') {
+                if (a === 'add-vis') {
+                    const el = this.element();
+                    if (el) {
+                        this.checkpoint();
+                        el.visibility = el.visibility || [];
+                        el.visibility.push({ papi: '%mmocore_level%', op: '>=', value: '1', invert: false });
+                        this.changed();
+                    }
+                }
+                else if (a === 'add-reward') {
                     const el = this.element();
                     if (el && el.type === 'roulette') {
                         this.checkpoint();
@@ -2592,9 +2777,57 @@
                 this.renderCanvas();
                 if (!(hit.actions && hit.actions.length)) return;
             }
-            const acts = (hit.actions || []).map(a => String(a).trim()).filter(Boolean);
+            let rawActs = (hit.actions || []).slice();
+            const preCheck = rawActs.map(a => String(a).trim()).filter(Boolean);
+            for (const ra of preCheck) {
+                if (!/^require:/i.test(ra)) continue;
+                const rest = ra.slice(8).trim();
+                const bar = rest.indexOf('|');
+                const expr = (bar >= 0 ? rest.slice(0, bar) : rest).trim();
+                const failMsg = (bar >= 0 ? rest.slice(bar + 1) : '&cRequirement not met!').trim().replace(/&[0-9a-fk-or]/gi, '');
+                if (!/^perm:/i.test(expr)) {
+                    const rm = /^(.*?)\s*(>=|<=|==|!=|!contains|contains|>|<|=)\s*(.*)$/i.exec(expr);
+                    if (rm) {
+                        const l = this.resolvePreviewVars(rm[1].trim()), r = this.resolvePreviewVars(rm[3].trim());
+                        const ln = Number(String(l).replace(/[,$]/g, '')), rn = Number(String(r).replace(/[,$]/g, ''));
+                        const bothNum = l !== '' && r !== '' && Number.isFinite(ln) && Number.isFinite(rn);
+                        const op = rm[2].toLowerCase();
+                        const ok = op === '>=' ? (bothNum && ln >= rn) : op === '<=' ? (bothNum && ln <= rn)
+                            : op === '>' ? (bothNum && ln > rn) : op === '<' ? (bothNum && ln < rn)
+                            : (op === '==' || op === '=') ? (bothNum ? ln === rn : l.toLowerCase() === r.toLowerCase())
+                            : op === '!=' ? (bothNum ? ln !== rn : l.toLowerCase() !== r.toLowerCase())
+                            : op === 'contains' ? l.toLowerCase().includes(r.toLowerCase())
+                            : op === '!contains' ? !l.toLowerCase().includes(r.toLowerCase()) : true;
+                        if (!ok) { GS.toast(failMsg || 'Requirement not met', 'error'); return; }
+                    }
+                }
+            }
+            if (hit.type === 'button' && (hit.toggleVar || hit.togglePapi)) {
+                const nextOn = !this.isToggleOn(hit);
+                if (hit.toggleVar) {
+                    this.previewVars[hit.toggleVar] = nextOn ? 'true' : 'false';
+                    this.previewVars[hit.toggleVar + '_state'] = nextOn ? 'ON' : 'OFF';
+                }
+                rawActs = rawActs.concat(nextOn ? (hit.onActions || []) : (hit.offActions || []));
+                this.renderCanvas();
+            }
+            const acts = rawActs.map(a => String(a).trim()).filter(Boolean);
+            let toggledInAct = false;
             acts.forEach(a => {
-                if (/^set:/i.test(a)) {
+                if (/^require:/i.test(a)) return;
+                if (/^toggle:/i.test(a)) {
+                    const spec = a.slice(7).trim();
+                    const ci = spec.indexOf(':');
+                    const tv = (ci >= 0 ? spec.slice(0, ci) : spec).trim();
+                    if (tv) {
+                        const mode = ci >= 0 ? spec.slice(ci + 1).trim().toLowerCase() : '';
+                        const curState = this.isToggleOn({ toggleVar: tv, toggleDefault: true });
+                        const nxt = mode === 'on' || mode === 'true' ? true : (mode === 'off' || mode === 'false' ? false : !curState);
+                        this.previewVars[tv] = nxt ? 'true' : 'false';
+                        this.previewVars[tv + '_state'] = nxt ? 'ON' : 'OFF';
+                        toggledInAct = true;
+                    }
+                } else if (/^set:/i.test(a)) {
                     const kv = a.slice(4), eq = kv.indexOf('=');
                     if (eq > 0) this.previewVars[kv.slice(0, eq).trim()] = this.resolvePreviewVars(kv.slice(eq + 1).trim());
                 } else if (/^add:/i.test(a)) {
@@ -2615,13 +2848,14 @@
                     }
                 }
             });
+            if (toggledInAct) this.renderCanvas();
             const open = acts.map(a => /^open:([^?]+)(?:\?(.*))?$/.exec(a)).find(Boolean);
             const spinAct = acts.map(a => /^spin(?::(.*))?$/i.exec(a)).find(Boolean);
             const scrollAct = acts.map(a => /^scroll:([^:]+):(.+)$/i.exec(a)).find(Boolean);
             const hasBack = acts.some(a => a.toLowerCase() === 'back');
             const hasNext = acts.some(a => a.toLowerCase() === 'next');
             const hasPrev = acts.some(a => a.toLowerCase() === 'prev');
-            const others = acts.filter(a => !/^(open:|spin(?::|$)|scroll:|back$|next$|prev$|set:|add:|mul:)/i.test(a));
+            const others = acts.filter(a => !/^(open:|spin(?::|$)|scroll:|back$|next$|prev$|set:|add:|mul:|toggle:|require:)/i.test(a));
             if (others.length) {
                 const msgList = others.map(o => {
                     const res = this.resolvePreviewVars(o);

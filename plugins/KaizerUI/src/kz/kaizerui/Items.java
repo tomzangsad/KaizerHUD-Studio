@@ -15,7 +15,7 @@ import java.util.Map;
  * Item elements: an item id from GUI Studio → an ItemStack.
  * <ul>
  *   <li>{@code minecraft:diamond_sword} / {@code diamond_sword} — vanilla</li>
- *   <li>{@code itemsadder:namespace:id} (or {@code ia:}), {@code nexo:id}, {@code oraxen:id} — plugin items (found by reflection, no hard dependency)</li>
+ *   <li>{@code itemsadder:namespace:id} (or {@code ia:}), {@code nexo:id}, {@code oraxen:id}, {@code craftengine:namespace:id} (or {@code ce:}) — plugin items (found by reflection, no hard dependency)</li>
  *   <li>{@code slot:head|chest|legs|feet|hand|offhand} — what the player wears / holds</li>
  * </ul>
  * Placeholders in the id are filled in first.
@@ -40,6 +40,7 @@ final class Items {
             else if (low.startsWith("itemsadder:") || low.startsWith("ia:")) out = itemsAdder(id.substring(id.indexOf(':') + 1));
             else if (low.startsWith("nexo:")) out = nexo(id.substring(5));
             else if (low.startsWith("oraxen:")) out = oraxen(id.substring(7));
+            else if (low.startsWith("craftengine:") || low.startsWith("ce:")) out = craftEngine(id.substring(id.indexOf(':') + 1));
             else if (low.startsWith("custom:")) out = customData(id.substring(7));
             else if (low.startsWith("model:")) out = customItemModel(id.substring(6));
             else {
@@ -133,6 +134,41 @@ final class Items {
         return b == null ? null : build(b);
     }
 
+    /** net.momirealms.craftengine.bukkit.api.CraftEngineItems.byId(Key) */
+    private static ItemStack craftEngine(String id) throws Exception {
+        Class<?> keyCls = Class.forName("net.momirealms.craftengine.core.util.Key");
+        Class<?> ceItems = Class.forName("net.momirealms.craftengine.bukkit.api.CraftEngineItems");
+        int col = id.indexOf(':');
+        String ns = col > 0 ? id.substring(0, col).trim() : "craftengine";
+        String val = col > 0 ? id.substring(col + 1).trim() : id.trim();
+        Object key = null;
+        try {
+            key = keyCls.getMethod("of", String.class, String.class).invoke(null, ns, val);
+        } catch (NoSuchMethodException ignored) {}
+        if (key == null) {
+            try { key = keyCls.getMethod("from", String.class).invoke(null, ns + ":" + val); } catch (NoSuchMethodException ignored) {}
+        }
+        if (key == null) {
+            try { key = keyCls.getMethod("of", String.class).invoke(null, ns + ":" + val); } catch (NoSuchMethodException ignored) {}
+        }
+        if (key == null) return null;
+        Object customItem = ceItems.getMethod("byId", keyCls).invoke(null, key);
+        if (customItem == null) return null;
+        for (String mName : new String[]{"buildItemStack", "buildBukkitItem"}) {
+            try {
+                Object res = customItem.getClass().getMethod(mName).invoke(customItem);
+                if (res instanceof ItemStack st) return st;
+            } catch (NoSuchMethodException ignored) {}
+        }
+        for (Method m : customItem.getClass().getMethods()) {
+            if ("buildItemStack".equals(m.getName()) && m.getParameterCount() == 1) {
+                Object res = m.invoke(customItem, new Object[]{null});
+                if (res instanceof ItemStack st) return st;
+            }
+        }
+        return null;
+    }
+
     private static ItemStack build(Object builder) throws Exception {
         Method m = builder.getClass().getMethod("build");
         Object o = m.invoke(builder);
@@ -208,8 +244,10 @@ final class Items {
             return "textures/items/" + key;
         }
         String low = resolvedId.toLowerCase(Locale.ROOT);
-        if (low.startsWith("itemsadder:") || low.startsWith("ia:") || low.startsWith("nexo:") || low.startsWith("oraxen:")) {
-            String canonical = low.startsWith("ia:") ? "itemsadder:" + low.substring(3) : low;
+        if (low.startsWith("itemsadder:") || low.startsWith("ia:") || low.startsWith("nexo:") || low.startsWith("oraxen:")
+                || low.startsWith("craftengine:") || low.startsWith("ce:")) {
+            String canonical = low.startsWith("ia:") ? "itemsadder:" + low.substring(3)
+                    : (low.startsWith("ce:") ? "craftengine:" + low.substring(3) : low);
             return "textures/kaizerui/custom/" + slugify(canonical);
         }
         return null;
@@ -233,6 +271,20 @@ final class Items {
             Class<?> c = Class.forName("io.th0rgal.oraxen.api.OraxenItems");
             Object id = c.getMethod("getIdByItem", ItemStack.class).invoke(null, stack);
             if (id != null && !id.toString().isBlank()) return slugify("oraxen:" + id.toString());
+        } catch (Throwable ignored) {}
+        try {
+            Class<?> c = Class.forName("net.momirealms.craftengine.bukkit.api.CraftEngineItems");
+            try {
+                Object id = c.getMethod("getCustomItemId", ItemStack.class).invoke(null, stack);
+                if (id != null && !id.toString().isBlank()) return slugify("craftengine:" + id.toString());
+            } catch (NoSuchMethodException ignored) {}
+            try {
+                Object ci = c.getMethod("byItemStack", ItemStack.class).invoke(null, stack);
+                if (ci != null) {
+                    Object id = ci.getClass().getMethod("id").invoke(ci);
+                    if (id != null && !id.toString().isBlank()) return slugify("craftengine:" + id.toString());
+                }
+            } catch (NoSuchMethodException ignored) {}
         } catch (Throwable ignored) {}
         return null;
     }

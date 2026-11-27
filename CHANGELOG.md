@@ -2,6 +2,28 @@
 
 > เริ่มไฟล์นี้ 2026-11-23 (ก่อนหน้านี้บันทึกอยู่ใน `HANDOFF.md` และ `docs/*.md`)
 
+## v1.0.6 (2026-11-27)
+
+### English
+- Update `KaizerUI-1.2.1.jar` to match `KaizerHUD Studio 1.0.6` (`KaizerMultiBar` remains `2.2.0`)
+- Added full **CraftEngine** support across HUD Studio (BetterHud, MythicHUD & hotbar export with automatic `pack.yml` generation + Java HUD bitmap font importer), GUI Studio (pack host export, Custom Assets scanner, Item Picker CraftEngine tab, and action command preset), and `KaizerUI 1.2.1` (`craftengine:` / `ce:` item reflection & Bedrock custom texture mapping)
+- Added unified HUD-style **Placeholders (`PAPI`) Modal** in GUI Studio, live **PAPI Visibility Conditions** across Java & Bedrock (including items/images/models), click **Requirements (`require:`)**, and native **PlayerPoints** (`points:`) & **CoinsEngine** (`currency:`) actions
+- Added **Real Persistent Toggle Switches** (`toggleVar` PDC storage + live `togglePapi` sync, separate ON/OFF sprites & actions) across Java, Bedrock, and Studio Preview
+- **Silky-smooth Java mouse control**: automatic horizontal pitch recentering via `WrapperPlayServerFacePlayer` so the cursor never gets vertically stuck at `±90°`, plus fixed default Java `ItemDisplay` front-facing orientation (`item-flip: false`)
+- **High-suspense Crate Gacha & Multi-Reel Slot Miss**: added configurable `winChance` (`1–100%`), `loseSound`, `loseMessage`, near-miss mismatching reels on 2+ reel slots, Legendary bait neighbors/overshoot/decoy-first flips across Java, Bedrock, and Studio Preview
+- Added **Modular Bedrock JSON UI export**, self-contained bundled MCP server, and 3 new suites: **Network RPG Suite** (Pixel OreUI + 3-Path Skill Tree), **Modern Realm Suite**, and **Kaizer Release QA Suite (`/qatest`)**
+- Fixed Bedrock missing button/label text starting with `#`, `$`, `@`, or symbols (e.g. `#1 Iron Blade` in scroll lists) and fixed `GS.Model.num(null)` coercion resetting default roulette win chance
+
+### ภาษาไทย
+- อัปเดตปลั๊กอิน **`KaizerUI-1.2.1.jar`** ให้เข้าคู่กับ **KaizerHUD Studio 1.0.6** (ส่วน `KaizerMultiBar` ยังเป็น `2.2.0`)
+- เพิ่มการรองรับ **CraftEngine** เต็มรูปแบบทั้งฝั่ง HUD Studio (Export ไป `CraftEngine/resources/` สำหรับ BetterHud, MythicHUD และ Hotbar พร้อมสร้าง `pack.yml` อัตโนมัติ + ตัวอ่าน bitmap font `images:`), ฝั่ง GUI Studio (Pack Host Export, สแกนแพ็ก CraftEngine, แท็บเลือกไอเท็ม CraftEngine และ Action Preset) และฝั่งปลั๊กอิน `KaizerUI 1.2.1` (`craftengine:` / `ce:`)
+- เพิ่มหน้าต่าง **Placeholders (`PAPI`) Modal** รูปแบบเดียวกับ HUD Studio เข้าใน GUI Studio พร้อม **เงื่อนไขแสดง/ซ่อนด้วย PAPI (`visibility`)** ทั้ง Java และ Bedrock, เงื่อนไขก่อนคลิก **`require:`**, และคำสั่งตัด/ให้เงินในตัวสำหรับ **PlayerPoints** (`points:`) และ **CoinsEngine** (`currency:`)
+- เพิ่ม **สวิตช์ Toggle ที่จำค่าจริง (`toggleVar` PDC + ซิงก์ `togglePapi`)** พร้อมรูป/Action แยกสถานะ ON/OFF ทั้งใน Java, Bedrock และ Studio Preview
+- **ปรับปรุงเม้าส์ฝั่ง Java ให้ลื่นไหล**: รีเซ็ตมุมก้ม-เงย (`pitch`) อัตโนมัติผ่าน `WrapperPlayServerFacePlayer` ไม่ให้เคอร์เซอร์ค้างกลางจอเวลาชนขอบ `±90°` พร้อมแก้ไอเท็ม `ItemDisplay` ในเกม Java หันหน้าผิดด้านให้หันหน้าถูกต้องแล้ว
+- **อัปเกรดมินิเกม Gacha & Slot Machine ให้ลุ้นกว่าเดิม + มีโอกาสพลาดไม่ได้ของ**: ปรับ `Win Chance (%)` (`1–100%`), `Lose Sound`, `Lose Message` ได้ใน Inspector; ตู้ Slot 2 แถวขึ้นไปมีจังหวะแถวท้ายหมุนช้าลุ้นและออกไม่ตรงกันพร้อมหลอกใกล้เคียง; และเพิ่มความลุ้นใน CS:GO / Tease / Flip / Flash ทั้ง Java, Bedrock และ Studio Preview
+- ปรับการ **Export Bedrock JSON UI แบบแยกโมดูล**, รวม MCP Server ไว้ในตัวโปรแกรม, และเพิ่มเทมเพลต **Network RPG Suite (Pixel OreUI + 3-Path Skill Tree)**, **Modern Realm Suite**, และชุดทดสอบครบระบบ **Kaizer Release QA Suite (`/qatest`)**
+- แก้ปัญหาข้อความปุ่มบน Bedrock หายเมื่อขึ้นต้นด้วย `#` / `$` / สัญลักษณ์ (เช่น `#1 Iron Blade`) และแก้บั๊ก `GS.Model.num(null)` ที่ทำให้ค่าสุ่มเริ่มต้นเพี้ยนเป็น `1%`
+
 ## v1.0.5 (2026-11-27)
 
 ### English

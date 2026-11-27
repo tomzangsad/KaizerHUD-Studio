@@ -26,6 +26,16 @@
             apply: 'Reload Nexo (or restart) so it rebuilds its pack with the menu pictures.' },
         oraxen: { label: 'Oraxen', dir: () => 'plugins/Oraxen/pack/', mcmeta: false,
             apply: 'Reload Oraxen (or restart) so it rebuilds its pack with the menu pictures.' },
+        craftengine: {
+            label: 'CraftEngine',
+            dir: (ns) => `plugins/CraftEngine/resources/${ns}_gui/resourcepack/`,
+            mcmeta: false,
+            extraFiles: (ns, ver) => [{
+                path: `plugins/CraftEngine/resources/${ns}_gui/pack.yml`,
+                text: `author: KaizerHUD Studio\nversion: 1.0.${ver || 1}\ndescription: KaizerUI cursor GUI menus (${ns})\nnamespace: ${ns}_gui\nenable: true\n`
+            }],
+            apply: 'Run /ce reload all — CraftEngine rebuilds its pack with the menu pictures and sends it to players.'
+        },
         zip: { label: 'Separate .zip', dir: null, mcmeta: true,
             apply: 'Send the zip as the server resource pack: upload it and set resource-pack.url in plugins/KaizerUI/config.yml (or server.properties).' }
     };
@@ -53,6 +63,48 @@
         const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
         const v = m ? parseInt(m[1], 16) : 0xffffff;
         return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255].map(x => Math.round(x * 1000) / 1000);
+    }
+
+    function nearestBedrockColor(hex) {
+        const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+        if (!m) return 'f';
+        const v = parseInt(m[1], 16);
+        const r = (v >> 16) & 255, g = (v >> 8) & 255, b = v & 255;
+        const codes = ['0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f'];
+        const pal = [
+            [0,0,0],[0,0,170],[0,170,0],[0,170,170],[170,0,0],[170,0,170],[255,170,0],[170,170,170],
+            [85,85,85],[85,85,255],[85,255,85],[85,255,255],[255,85,85],[255,85,255],[255,255,85],[255,255,255]
+        ];
+        let best = 'f', bestD = Infinity;
+        for (let i = 0; i < pal.length; i++) {
+            const dr = r - pal[i][0], dg = g - pal[i][1], db = b - pal[i][2];
+            const d = dr * dr + dg * dg + db * db;
+            if (d < bestD) { bestD = d; best = codes[i]; }
+        }
+        return best;
+    }
+
+    /** Formats Bedrock JSON compactly: keeps small primitive arrays and flat objects on one line. */
+    function formatBedrockJson(val, indent) {
+        const sp = ' '.repeat(indent || 0);
+        const childSp = ' '.repeat((indent || 0) + 2);
+        const isPrim = (v) => v === null || v === undefined || typeof v !== 'object';
+        if (isPrim(val)) return JSON.stringify(val === undefined ? null : val);
+        if (Array.isArray(val)) {
+            if (!val.length) return '[]';
+            if (val.every(isPrim)) {
+                const one = '[' + val.map(v => JSON.stringify(v === undefined ? null : v)).join(', ') + ']';
+                if (one.length <= 110) return one;
+            }
+            return '[\n' + val.map(v => childSp + formatBedrockJson(v, (indent || 0) + 2)).join(',\n') + '\n' + sp + ']';
+        }
+        const entries = Object.entries(val).filter(([, v]) => v !== undefined);
+        if (!entries.length) return '{}';
+        if (entries.length <= 4 && entries.every(([, v]) => isPrim(v))) {
+            const one = '{ ' + entries.map(([k, v]) => JSON.stringify(k) + ': ' + JSON.stringify(v)).join(', ') + ' }';
+            if (one.length <= 110) return one;
+        }
+        return '{\n' + entries.map(([k, v]) => childSp + JSON.stringify(k) + ': ' + formatBedrockJson(v, (indent || 0) + 2)).join(',\n') + '\n' + sp + '}';
     }
 
     function uuid4() {
@@ -241,9 +293,28 @@
      */
     function slotMarker(slot) { return 'kzs' + String(slot).padStart(2, '0') + '|'; }
 
-    const COLLECTION_TEXT = { binding_type: 'collection', binding_collection_name: 'form_buttons', binding_name: '#form_button_text' };
-    const showIfSlot = (slot) => ({ binding_type: 'view', source_property_name: `(not ((#form_button_text - '${slotMarker(slot)}') = #form_button_text))`, target_property_name: '#visible' });
-    const textOfSlot = (slot) => ({ binding_type: 'view', source_property_name: `(#form_button_text - '${slotMarker(slot)}')`, target_property_name: '#kz_text' });
+    const COLLECTION_TEXT = { binding_type: 'collection', binding_collection_name: 'form_buttons', binding_name: '#form_button_text', binding_condition: 'once' };
+    const COLLECTION_LEN_VIS = { binding_name: '#form_button_length', binding_name_override: '#collection_length', binding_condition: 'always_when_visible' };
+    const showIfSlot = (slot) => ({ binding_type: 'view', source_property_name: `(not ((#form_button_text - '${slotMarker(slot)}') = #form_button_text))`, target_property_name: '#visible', binding_condition: 'once' });
+    const textOfSlot = (slot) => ({ binding_type: 'view', source_property_name: `(#form_button_text - '${slotMarker(slot)}')`, target_property_name: '#kz_text', binding_condition: 'once' });
+
+    function sameAnimVal(a, b) {
+        if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b) < 1e-6;
+        if (Array.isArray(a) && Array.isArray(b) && a.length === b.length) {
+            return a.every((v, i) => Math.abs(Number(v) - Number(b[i])) < 1e-6);
+        }
+        return false;
+    }
+
+    function ctrlEntry(key, def) {
+        if (def && def._inherit) {
+            const clean = Object.assign({}, def);
+            const inh = clean._inherit;
+            delete clean._inherit;
+            return { [`${key}@${inh}`]: clean };
+        }
+        return { [key]: def };
+    }
 
     function rouletteGridBoxes(el, count, slotW, gap) {
         const rows = count >= 6 ? 2 : 1;
@@ -271,9 +342,18 @@
         return boxes;
     }
 
-    function makeAnimChain(root, prefix, prop, segs) {
+    function makeAnimChain(targetObj, targetNs, prefix, prop, segs) {
         if (!segs || !segs.length) return null;
-        const clean = segs.filter(s => s && s.dur > 0.005);
+        const clean = [];
+        for (const s of segs) {
+            if (!s || s.dur <= 0.005) continue;
+            const prev = clean[clean.length - 1];
+            if (prev && sameAnimVal(prev.from, prev.to) && sameAnimVal(s.from, s.to) && sameAnimVal(prev.from, s.from)) {
+                prev.dur += s.dur;
+            } else {
+                clean.push({ from: s.from, to: s.to, dur: s.dur, ease: s.ease });
+            }
+        }
         if (!clean.length) return null;
         const name = (i) => `${prefix}_${prop}_${i}`;
         clean.forEach((s, i) => {
@@ -284,28 +364,29 @@
                 to: s.to,
                 duration: Math.max(0.01, r3(s.dur))
             };
-            if (i < clean.length - 1) def.next = `@server_form.${name(i + 1)}`;
-            root[name(i)] = def;
+            if (i < clean.length - 1) def.next = `@${targetNs}.${name(i + 1)}`;
+            targetObj[name(i)] = def;
         });
-        return `@server_form.${name(0)}`;
+        return `@${targetNs}.${name(0)}`;
     }
 
-    function rouletteStaticCard(rw, opts) {
+    function rouletteStaticCard(rw, opts, commonNs) {
         const o = opts || {};
+        const bgKey = commonNs ? `bg@${commonNs}.solid` : 'bg';
+        const barKey = commonNs ? `bar@${commonNs}.solid` : 'bar';
+        const solidBase = commonNs ? {} : { type: 'image', texture: 'textures/ui/white_background', size: ['100%', '100%'], keep_ratio: false };
         const controls = [
             {
-                bg: {
-                    type: 'image', texture: 'textures/ui/white_background',
-                    size: ['100%', '100%'], keep_ratio: false,
+                [bgKey]: Object.assign({}, solidBase, {
                     color: o.mystery ? [0.12, 0.16, 0.25] : [0.1, 0.12, 0.18],
                     alpha: o.alpha != null ? o.alpha : 0.92, layer: 1
-                }
+                })
             },
             {
-                bar: {
-                    type: 'image', texture: 'textures/ui/white_background',
+                [barKey]: {
+                    ...(commonNs ? {} : { type: 'image', texture: 'textures/ui/white_background', keep_ratio: false }),
                     anchor_from: 'top_left', anchor_to: 'top_left',
-                    size: ['100%', 2], keep_ratio: false,
+                    size: ['100%', 2],
                     color: hexToRgb(o.accent || (rw && rw.color) || '#3b82f6'),
                     alpha: o.alpha != null ? Math.min(1, o.alpha + 0.08) : 1.0, layer: 2
                 }
@@ -328,11 +409,13 @@
         return controls;
     }
 
-    function bedrockElement(el, slot, layer, texOf, stripOf) {
+    function bedrockElement(el, slot, layer, texOf, stripOf, commonNs) {
         const pos = { anchor_from: 'top_left', anchor_to: 'top_left', offset: [el.x, el.y], size: [el.w, el.h], layer };
         // animated picture: every frame stacked in one texture, played with a flip_book anim
         const strip = stripOf ? stripOf(el) : null;
         const pic = (tex) => strip ? { texture: strip.texture, uv_size: strip.uvSize, uv: strip.uv } : { texture: tex };
+        const solidTag = (k) => commonNs ? `${k}@${commonNs}.solid` : k;
+        const solidBase = commonNs ? {} : { type: 'image', texture: 'textures/ui/white_background', size: ['100%', '100%'], keep_ratio: false };
         if (el.type === 'image') {
             return { type: 'image', ...pic(texOf(el.image)), keep_ratio: false, ...pos };
         }
@@ -358,7 +441,7 @@
                         ['rc_' + idx]: {
                             type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
                             offset: [b.x, b.y], size: [b.size, b.size], layer: 1,
-                            controls: rouletteStaticCard(rw, { mystery: style === 'flip', accent: style === 'flip' ? (el.borderColor || '#e5a43a') : rw.color })
+                            controls: rouletteStaticCard(rw, { mystery: style === 'flip', accent: style === 'flip' ? (el.borderColor || '#e5a43a') : rw.color }, commonNs)
                         }
                     });
                 });
@@ -374,11 +457,11 @@
                     const lx = Math.round(startX + r * (cardW + gap));
                     if (r > 0) {
                         cards.push({
-                            ['sep_' + r]: {
-                                type: 'image', texture: 'textures/ui/white_background',
+                            [solidTag('sep_' + r)]: {
+                                ...(commonNs ? {} : { type: 'image', texture: 'textures/ui/white_background', keep_ratio: false }),
                                 anchor_from: 'top_left', anchor_to: 'top_left',
                                 offset: [Math.round(lx - gap * 0.5), 4], size: [1, Math.max(4, el.h - 8)],
-                                color: [1, 1, 1], alpha: 0.14, keep_ratio: false, layer: 2
+                                color: [1, 1, 1], alpha: 0.14, layer: 2
                             }
                         });
                     }
@@ -389,7 +472,7 @@
                             [`rc_${r}_${row}`]: {
                                 type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
                                 offset: [lx, cy], size: [cardW, cardH], layer: 1,
-                                controls: rouletteStaticCard(rw)
+                                controls: rouletteStaticCard(rw, null, commonNs)
                             }
                         });
                     }
@@ -405,20 +488,20 @@
                         ['rc_' + idx]: {
                             type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
                             offset: [cx, cy], size: [slotW, cardH], layer: 1,
-                            controls: rouletteStaticCard(rw)
+                            controls: rouletteStaticCard(rw, null, commonNs)
                         }
                     });
                 }
             }
             const rc = [
-                { bg: { type: 'image', texture: 'textures/ui/white_background', size: ['100%', '100%'], keep_ratio: false, color: hexToRgb(el.bgColor || '#0d111a'), alpha: 0.92, layer: 0 } },
+                { [solidTag('bg')]: Object.assign({}, solidBase, { color: hexToRgb(el.bgColor || '#0d111a'), alpha: 0.92, layer: 0 }) },
                 ...cards
             ];
             if (showVertNeedle) {
-                rc.push({ needle: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_middle', anchor_to: 'top_middle', size: [2, '100%'], keep_ratio: false, color: needleCol, layer: 6 } });
+                rc.push({ [solidTag('needle')]: { ...(commonNs ? {} : { type: 'image', texture: 'textures/ui/white_background', keep_ratio: false }), anchor_from: 'top_middle', anchor_to: 'top_middle', size: [2, '100%'], color: needleCol, layer: 6 } });
             }
             if (showHorizNeedle) {
-                rc.push({ needle: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'left_middle', anchor_to: 'left_middle', size: ['100%', 2], keep_ratio: false, color: needleCol, layer: 6 } });
+                rc.push({ [solidTag('needle')]: { ...(commonNs ? {} : { type: 'image', texture: 'textures/ui/white_background', keep_ratio: false }), anchor_from: 'left_middle', anchor_to: 'left_middle', size: ['100%', 2], color: needleCol, layer: 6 } });
             }
             return { type: 'panel', ...pos, clips_children: true, controls: rc };
         }
@@ -434,10 +517,10 @@
                             layer: 1,
                             bilinear: false,
                             bindings: [
-                                { binding_type: 'collection', binding_collection_name: 'form_buttons', binding_name: '#form_button_texture', binding_name_override: '#texture' },
-                                { binding_type: 'collection', binding_collection_name: 'form_buttons', binding_name: '#form_button_texture_file_system', binding_name_override: '#texture_file_system' },
-                                { binding_type: 'collection', binding_collection_name: 'form_buttons', binding_name: '#form_button_texture' },
-                                { binding_type: 'view', source_property_name: "(not (#form_button_texture = ''))", target_property_name: '#visible' }
+                                { binding_type: 'collection', binding_collection_name: 'form_buttons', binding_name: '#form_button_texture', binding_name_override: '#texture', binding_condition: 'once' },
+                                { binding_type: 'collection', binding_collection_name: 'form_buttons', binding_name: '#form_button_texture_file_system', binding_name_override: '#texture_file_system', binding_condition: 'once' },
+                                { binding_type: 'collection', binding_collection_name: 'form_buttons', binding_name: '#form_button_texture', binding_condition: 'once' },
+                                { binding_type: 'view', source_property_name: "(not (#form_button_texture = ''))", target_property_name: '#visible', binding_condition: 'once' }
                             ]
                         }
                     }]
@@ -457,19 +540,23 @@
             const face = (bgTint, brAlpha) => ({
                 type: 'panel', size: ['100%', '100%'],
                 controls: [
-                    { bg: { type: 'image', texture: 'textures/ui/white_background', size: ['100%', '100%'], color: bgTint, alpha: 0.88 } },
-                    { border_t: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_left', anchor_to: 'top_left', size: ['100%', 1], color: brHex, alpha: brAlpha } },
-                    { border_b: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'bottom_left', anchor_to: 'bottom_left', size: ['100%', 1], color: brHex, alpha: brAlpha } }
+                    { [solidTag('bg')]: Object.assign({}, solidBase, { color: bgTint, alpha: 0.88 }) },
+                    { [solidTag('border_t')]: { ...(commonNs ? {} : { type: 'image', texture: 'textures/ui/white_background' }), anchor_from: 'top_left', anchor_to: 'top_left', size: ['100%', 1], color: brHex, alpha: brAlpha } },
+                    { [solidTag('border_b')]: { ...(commonNs ? {} : { type: 'image', texture: 'textures/ui/white_background' }), anchor_from: 'bottom_left', anchor_to: 'bottom_left', size: ['100%', 1], color: brHex, alpha: brAlpha } }
                 ]
             });
+            const btnBase = commonNs
+                ? { _inherit: `${commonNs}.form_btn_base` }
+                : {
+                    type: 'button', default_control: 'default', hover_control: 'hover', pressed_control: 'pressed',
+                    sound_name: 'random.click', sound_volume: 1.0,
+                    button_mappings: [
+                        { from_button_id: 'button.menu_select', to_button_id: 'button.form_button_click', mapping_type: 'pressed' },
+                        { from_button_id: 'button.menu_ok', to_button_id: 'button.form_button_click', mapping_type: 'focused' }
+                    ]
+                };
             return {
-                type: 'button', ...pos,
-                default_control: 'default', hover_control: 'hover', pressed_control: 'pressed',
-                sound_name: 'random.click', sound_volume: 1.0,
-                button_mappings: [
-                    { from_button_id: 'button.menu_select', to_button_id: 'button.form_button_click', mapping_type: 'pressed' },
-                    { from_button_id: 'button.menu_ok', to_button_id: 'button.form_button_click', mapping_type: 'focused' }
-                ],
+                ...btnBase, ...pos,
                 bindings: [{ binding_type: 'collection_details', binding_collection_name: 'form_buttons' }, COLLECTION_TEXT, showIfSlot(slot)],
                 controls: [
                     { default: face(bgHex, 0.9) },
@@ -491,11 +578,22 @@
             };
         }
         if (el.type === 'text') {
+            if (slot != null) {
+                return {
+                    type: 'label', ...pos,
+                    text: '#kz_text',
+                    localize: false,
+                    bindings: [COLLECTION_TEXT, textOfSlot(slot), showIfSlot(slot)],
+                    color: hexToRgb(el.color),
+                    shadow: !!el.shadow,
+                    font_scale_factor: Math.max(0.25, M().num(el.scale, 1)),
+                    text_alignment: el.align === 'left' ? 'left' : el.align === 'right' ? 'right' : 'center'
+                };
+            }
             return {
                 type: 'label', ...pos,
-                text: '#kz_text',
+                text: toBedrockStaticText(el.text || '', el.color),
                 localize: false,
-                bindings: [COLLECTION_TEXT, textOfSlot(slot), showIfSlot(slot)],
                 color: hexToRgb(el.color),
                 shadow: !!el.shadow,
                 font_scale_factor: Math.max(0.25, M().num(el.scale, 1)),
@@ -505,25 +603,76 @@
         // button
         const img = el.image ? texOf(el.image) : null;
         const hov = el.hoverImage ? texOf(el.hoverImage) : img;
-        const face = (tex, tint) => tex
-            ? { type: 'image', ...(tex === img ? pic(tex) : { texture: tex }), size: ['100%', '100%'], keep_ratio: false, ...(tint ? { color: tint } : {}) }
-            : { type: 'image', texture: 'textures/ui/white_background', size: ['100%', '100%'], alpha: tint ? 0.18 : 0.0 };
+        const btnBase = commonNs
+            ? { _inherit: `${commonNs}.form_btn_base` }
+            : {
+                type: 'button', default_control: 'default', hover_control: 'hover', pressed_control: 'pressed',
+                sound_name: 'random.click', sound_volume: 1.0,
+                button_mappings: [
+                    { from_button_id: 'button.menu_select', to_button_id: 'button.form_button_click', mapping_type: 'pressed' },
+                    { from_button_id: 'button.menu_ok', to_button_id: 'button.form_button_click', mapping_type: 'focused' }
+                ]
+            };
+        if (isToggleBtn(el)) {
+            const offImg = el.offImage ? texOf(el.offImage) : img;
+            const offHov = el.offHoverImage ? texOf(el.offHoverImage) : (el.offImage ? offImg : hov);
+            const sp = 'kzs' + String(slot).padStart(2, '0');
+            const onMark = sp + ':1|';
+            const offMark = sp + ':0|';
+            const visOn = { binding_type: 'view', source_property_name: `(not ((#form_button_text - '${onMark}') = #form_button_text))`, target_property_name: '#visible', binding_condition: 'once' };
+            const visOff = { binding_type: 'view', source_property_name: `(not ((#form_button_text - '${offMark}') = #form_button_text))`, target_property_name: '#visible', binding_condition: 'once' };
+            const toggleFace = (name, onTex, offTex, tintOn, tintOff) => ({
+                [name]: {
+                    type: 'panel', size: ['100%', '100%'],
+                    controls: [
+                        onTex
+                            ? { on_pic: { type: 'image', texture: onTex, size: ['100%', '100%'], keep_ratio: false, ...(tintOn ? { color: tintOn } : {}), bindings: [COLLECTION_TEXT, visOn] } }
+                            : { [solidTag(name + '_on')]: Object.assign({}, solidBase, { alpha: tintOn ? 0.18 : 0.0, bindings: [COLLECTION_TEXT, visOn] }) },
+                        offTex
+                            ? { off_pic: { type: 'image', texture: offTex, size: ['100%', '100%'], keep_ratio: false, ...(tintOff ? { color: tintOff } : {}), bindings: [COLLECTION_TEXT, visOff] } }
+                            : { [solidTag(name + '_off')]: Object.assign({}, solidBase, { alpha: tintOff ? 0.18 : 0.0, bindings: [COLLECTION_TEXT, visOff] }) }
+                    ]
+                }
+            });
+            return {
+                ...btnBase, ...pos,
+                bindings: [
+                    { binding_type: 'collection_details', binding_collection_name: 'form_buttons' },
+                    COLLECTION_TEXT,
+                    { binding_type: 'view', source_property_name: `(not ((#form_button_text - '${sp}:') = #form_button_text))`, target_property_name: '#visible', binding_condition: 'once' }
+                ],
+                controls: [
+                    toggleFace('default', img, offImg, null, null),
+                    toggleFace('hover', hov, offHov, el.hoverImage ? null : [0.82, 0.82, 0.82], el.offHoverImage ? null : [0.82, 0.82, 0.82]),
+                    toggleFace('pressed', hov, offHov, [0.7, 0.7, 0.7], [0.7, 0.7, 0.7]),
+                    {
+                        label: {
+                            type: 'label', layer: 2,
+                            text: '#kz_text',
+                            localize: false,
+                            bindings: [
+                                COLLECTION_TEXT,
+                                { binding_type: 'view', source_property_name: `((#form_button_text - '${onMark}') - '${offMark}')`, target_property_name: '#kz_text', binding_condition: 'once' }
+                            ],
+                            color: hexToRgb(el.labelColor),
+                            shadow: el.labelShadow !== false,
+                            font_scale_factor: Math.max(0.25, M().num(el.labelScale, 1)),
+                            text_alignment: 'center'
+                        }
+                    }
+                ]
+            };
+        }
+        const faceCtrl = (name, tex, tint) => tex
+            ? { [name]: { type: 'image', ...(tex === img ? pic(tex) : { texture: tex }), size: ['100%', '100%'], keep_ratio: false, ...(tint ? { color: tint } : {}) } }
+            : { [solidTag(name)]: Object.assign({}, solidBase, { alpha: tint ? 0.18 : 0.0 }) };
         return {
-            type: 'button', ...pos,
-            default_control: 'default',
-            hover_control: 'hover',
-            pressed_control: 'pressed',
-            sound_name: 'random.click',
-            sound_volume: 1.0,
-            button_mappings: [
-                { from_button_id: 'button.menu_select', to_button_id: 'button.form_button_click', mapping_type: 'pressed' },
-                { from_button_id: 'button.menu_ok', to_button_id: 'button.form_button_click', mapping_type: 'focused' }
-            ],
+            ...btnBase, ...pos,
             bindings: [{ binding_type: 'collection_details', binding_collection_name: 'form_buttons' }, COLLECTION_TEXT, showIfSlot(slot)],
             controls: [
-                { default: face(img, null) },
-                { hover: face(hov, el.hoverImage ? null : [0.82, 0.82, 0.82]) },
-                { pressed: face(hov, [0.7, 0.7, 0.7]) },
+                faceCtrl('default', img, null),
+                faceCtrl('hover', hov, el.hoverImage ? null : [0.82, 0.82, 0.82]),
+                faceCtrl('pressed', hov, [0.7, 0.7, 0.7]),
                 {
                     label: {
                         type: 'label', layer: 2,
@@ -623,19 +772,45 @@
         };
     }
 
+    function isToggleBtn(e) {
+        return !!e && e.type === 'button' && !!(String(e.toggleVar || '').trim() || String(e.togglePapi || '').trim());
+    }
+
+    function hasVisibility(e) {
+        return !!e && Array.isArray(e.visibility) && e.visibility.some(c => c && String(c.papi || '').trim() && c.op !== 'always');
+    }
+
+    function showIfToggleSlot(slot) {
+        const sp = 'kzs' + String(slot).padStart(2, '0') + ':';
+        return { binding_type: 'view', source_property_name: `(not ((#form_button_text - '${sp}') = #form_button_text))`, target_property_name: '#visible', binding_condition: 'once' };
+    }
+
     function isDynamicBedrockItem(e) {
         return !!e && e.type === 'item' && !String(e.bedrockTexture || '').trim() && GS.Items && GS.Items.isDynamic(e.item);
     }
 
-    /** Which elements become form buttons (slots) on Bedrock: buttons, texts, inputs, dynamic items */
+    function isDynamicBedrockText(e) {
+        return !!e && e.type === 'text' && /%|{[^}]+}/.test(String(e.text || ''));
+    }
+
+    function toBedrockStaticText(s, hexColor) {
+        const out = String(s == null ? '' : s).replace(/&([0-9a-fk-orA-FK-OR])/g, '§$1');
+        if (!out || out[0] === '§') return out;
+        const first = out.trimStart()[0];
+        if (first === '#' || first === '$') return '§' + nearestBedrockColor(hexColor) + out;
+        return out;
+    }
+
+    /** Which elements become form buttons (slots) on Bedrock: buttons, dynamic texts, inputs, dynamic items, visibility-gated */
     function bedrockSlots(menu) {
         const els = menu.elements.filter(e => !e.hidden);
         const slots = new Map();
         let n = 0;
         els.filter(e => e.type === 'button').forEach(e => slots.set(e.id, n++));
-        els.filter(e => e.type === 'text').forEach(e => slots.set(e.id, n++));
+        els.filter(e => isDynamicBedrockText(e)).forEach(e => slots.set(e.id, n++));
         els.filter(e => e.type === 'input').forEach(e => slots.set(e.id, n++));
         els.filter(e => isDynamicBedrockItem(e)).forEach(e => slots.set(e.id, n++));
+        els.filter(e => !slots.has(e.id) && hasVisibility(e)).forEach(e => slots.set(e.id, n++));
         return slots;
     }
 
@@ -667,8 +842,9 @@
      * box = {x, y, w, h} — the control's own offset / size at rest.
      * steps = [{ clip, start }] played one after another (intro, then loop).
      */
-    function bedrockMotion(prefix, box, steps) {
+    function bedrockMotion(prefix, box, steps, targetNs) {
         const Mo = GS.Motion;
+        const tNs = targetNs || 'server_form';
         const defs = {}, props = {};
         const POS = ['x', 'y', 'scale', 'sx', 'sy'];
         const geo = (st) => {
@@ -713,11 +889,11 @@
             const name = (i) => `${prefix}_${prop}_${i}`;
             segs.forEach((g, i) => {
                 const a = { anim_type: prop, easing: g.easing, from: g.from, to: g.to, duration: Math.max(0.01, g.duration) };
-                if (i < segs.length - 1) a.next = `@server_form.${name(i + 1)}`;
-                else if (loopStart >= 0) a.next = `@server_form.${name(loopStart)}`;
+                if (i < segs.length - 1) a.next = `@${tNs}.${name(i + 1)}`;
+                else if (loopStart >= 0) a.next = `@${tNs}.${name(loopStart)}`;
                 defs[name(i)] = a;
             });
-            props[prop] = `@server_form.${name(0)}`;
+            props[prop] = `@${tNs}.${name(0)}`;
         }
         return { props, defs };
     }
@@ -761,17 +937,73 @@
         return out;
     }
 
-    function serverFormJson(p, texOf, stripOf) {
+    function buildCommonDoc(commonNs, flipBooks) {
+        const gCol = [1.0, 0.82, 0.29];
+        const doc = {
+            namespace: commonNs,
+            solid: { type: 'image', texture: 'textures/ui/white_background', size: ['100%', '100%'], keep_ratio: false },
+            form_btn_base: {
+                type: 'button',
+                default_control: 'default', hover_control: 'hover', pressed_control: 'pressed',
+                sound_name: 'random.click', sound_volume: 1.0,
+                button_mappings: [
+                    { from_button_id: 'button.menu_select', to_button_id: 'button.form_button_click', mapping_type: 'pressed' },
+                    { from_button_id: 'button.menu_ok', to_button_id: 'button.form_button_click', mapping_type: 'focused' }
+                ]
+            },
+            pan_tab_base: {
+                type: 'toggle',
+                radio_toggle_group: true,
+                checked_control: 'checked', unchecked_control: 'unchecked',
+                checked_hover_control: 'checked_hover', unchecked_hover_control: 'unchecked_hover',
+                checked_locked_control: 'checked', checked_locked_hover_control: 'checked',
+                unchecked_locked_control: 'unchecked', unchecked_locked_hover_control: 'unchecked',
+                sound_name: 'random.click', sound_volume: 1.0,
+                button_mappings: [
+                    { from_button_id: 'button.menu_select', to_button_id: 'button.menu_select', mapping_type: 'pressed' },
+                    { from_button_id: 'button.menu_ok', to_button_id: 'button.menu_select', mapping_type: 'focused' }
+                ]
+            },
+            card_glow: {
+                type: 'panel', size: ['100%', '100%'], propagate_alpha: true,
+                controls: [
+                    { [`gt@${commonNs}.solid`]: { anchor_from: 'top_left', anchor_to: 'top_left', size: ['100%', 2], color: gCol } },
+                    { [`gb@${commonNs}.solid`]: { anchor_from: 'bottom_left', anchor_to: 'bottom_left', size: ['100%', 2], color: gCol } },
+                    { [`gl@${commonNs}.solid`]: { anchor_from: 'top_left', anchor_to: 'top_left', size: [2, '100%'], color: gCol } },
+                    { [`gr@${commonNs}.solid`]: { anchor_from: 'top_right', anchor_to: 'top_right', size: [2, '100%'], color: gCol } }
+                ]
+            },
+            box_border: {
+                type: 'panel', size: ['100%', '100%'], '$b_col|default': [0.9, 0.64, 0.23],
+                controls: [
+                    { [`b_t@${commonNs}.solid`]: { anchor_from: 'top_left', anchor_to: 'top_left', size: ['100%', 1], color: '$b_col', alpha: 0.85 } },
+                    { [`b_b@${commonNs}.solid`]: { anchor_from: 'bottom_left', anchor_to: 'bottom_left', size: ['100%', 1], color: '$b_col', alpha: 0.85 } },
+                    { [`b_l@${commonNs}.solid`]: { anchor_from: 'top_left', anchor_to: 'top_left', size: [1, '100%'], color: '$b_col', alpha: 0.85 } },
+                    { [`b_r@${commonNs}.solid`]: { anchor_from: 'top_right', anchor_to: 'top_right', size: [1, '100%'], color: '$b_col', alpha: 0.85 } }
+                ]
+            }
+        };
+        if (flipBooks && Object.keys(flipBooks).length) Object.assign(doc, flipBooks);
+        return doc;
+    }
+
+    function bedrockUiFiles(p, texOf, stripOf, flipBooks) {
         const ns = p.namespace;
+        const commonNs = `kz_${ns}_common`;
         const root = { namespace: 'server_form' };
+        const uiDefs = [`ui/${ns}/common.json`];
+        const files = [];
         const wrapperControls = [];
 
         // Every form that is not ours still uses the game's own layout
         const notOurs = `((#title_text - '${`kz:${ns}:`}') = #title_text)`;
         wrapperControls.push({
             [`${ns}_vanilla`]: {
-                type: 'panel', size: ['100%', '100%'],
-                bindings: [{ binding_name: '#title_text' }, { binding_type: 'view', source_property_name: notOurs, target_property_name: '#visible' }],
+                type: 'panel', size: ['100%', '100%'], visible: false,
+                bindings: [
+                    { binding_name: '#title_text', binding_condition: 'once' },
+                    { binding_type: 'view', source_property_name: notOurs, target_property_name: '#visible', binding_condition: 'once' }
+                ],
                 controls: [{ 'long_form@server_form.long_form': {} }]
             }
         });
@@ -782,6 +1014,8 @@
             const menu = kB < 1 ? scaledMenu(menu0, kB) : menu0;
             const slots = bedrockSlots(menu);
             const marker = bedrockMarker(ns, menu.id);
+            const mNs = `kz_${ns}_m_${menu.id}`;
+            const mDoc = { namespace: mNs };
             const shown = menu.elements.filter(e => !e.hidden && !(e.type === 'image' && !p.images[e.image]) && !(e.type === 'item' && !String(e.item || '').trim()) && !(e.type === 'custom_model' && !String(e.modelId || '').trim()));
             // pictures: placed straight in the menu panel
             const controls = [];
@@ -795,91 +1029,222 @@
                 const scEntry = e.scrollGroup ? scrollAreas.get(e.scrollGroup) : null;
                 const relEl = scEntry ? Object.assign({}, e, { x: e.x - scEntry.area.x, y: e.y - scEntry.area.y }) : e;
                 const key = `${e.type}_${M().slug(e.id, 'el')}`;
-                const def = bedrockElement(relEl, slots.get(e.id), i + 1, texOf, stripOf);
+                let def = bedrockElement(relEl, slots.get(e.id), i + 1, texOf, stripOf, commonNs);
+                const needsVisBind = slots.has(e.id) && e.type !== 'button' && e.type !== 'input' && !(e.type === 'text' && isDynamicBedrockText(e)) && !(e.type === 'item' && isDynamicBedrockItem(e));
+                const visBind = isToggleBtn(e) ? showIfToggleSlot(slots.get(e.id)) : showIfSlot(slots.get(e.id));
                 const cl = clips.elements[e.id] || {};
                 const steps = [];
                 if (cl.intro) steps.push({ clip: cl.intro, start: 0 });
                 if (cl.loop) steps.push({ clip: cl.loop, start: cl.loop.delay || 0 });
-                const mo = steps.length ? bedrockMotion(`${ns}_mo_${menu.id}_${M().slug(e.id, 'el')}`, { x: relEl.x, y: relEl.y, w: relEl.w, h: relEl.h }, steps) : null;
+                const mo = steps.length ? bedrockMotion(`mo_${M().slug(e.id, 'el')}`, { x: relEl.x, y: relEl.y, w: relEl.w, h: relEl.h }, steps, mNs) : null;
                 let c;
                 if (mo && Object.keys(mo.props).length) {
-                    Object.assign(root, mo.defs);
+                    Object.assign(mDoc, mo.defs);
                     // the anims move / fade a panel around the element; the element fills it
                     const inner = Object.assign({}, def, { offset: [0, 0], size: ['100%', '100%'], layer: 1 });
                     const wrap = {
                         type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
                         offset: mo.props.offset || [relEl.x, relEl.y], size: mo.props.size || [relEl.w, relEl.h], layer: i + 1,
-                        controls: [{ [key]: inner }]
+                        controls: [ctrlEntry(key, inner)]
                     };
                     if (mo.props.alpha) { wrap.propagate_alpha = true; wrap.alpha = mo.props.alpha; }
-                    if (slots.has(e.id)) wrap.bindings = [COLLECTION_TEXT, showIfSlot(slots.get(e.id))];
+                    if (slots.has(e.id)) wrap.bindings = [COLLECTION_TEXT, visBind];
                     c = { [`mo_${key}`]: wrap };
-                } else c = { [key]: def };
+                } else {
+                    if (needsVisBind) {
+                        if (!def.bindings) def = Object.assign({}, def, { bindings: [COLLECTION_TEXT, visBind] });
+                        else {
+                            def = {
+                                type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
+                                offset: def.offset || [relEl.x, relEl.y], size: def.size || [relEl.w, relEl.h], layer: def.layer || (i + 1),
+                                bindings: [COLLECTION_TEXT, visBind],
+                                controls: [ctrlEntry('inner', Object.assign({}, def, { offset: [0, 0], size: ['100%', '100%'], layer: 1 }))]
+                            };
+                        }
+                    }
+                    c = ctrlEntry(key, def);
+                }
                 if (e.type === 'roulette') rouletteControlMap.set(e.id, { c, layer: i + 1, scEntry, relEl });
-                if (scEntry) (slots.has(e.id) ? scEntry.slotControls : scEntry.controls).push(c);
-                else (slots.has(e.id) ? slotControls : controls).push(c);
+                if (scEntry) {
+                    const meta = { c, relX: relEl.x, w: relEl.w };
+                    (slots.has(e.id) ? scEntry.slotControls : scEntry.controls).push(meta);
+                } else {
+                    (slots.has(e.id) ? slotControls : controls).push(c);
+                }
             });
-            // Emit scrollable / 2D map viewports using Bedrock common.scrolling_panel + scoped form_buttons factory
+            const shiftScrollCtrl = (entryObj, dx) => {
+                const clone = JSON.parse(JSON.stringify(entryObj));
+                if (!dx) return clone;
+                const k = Object.keys(clone)[0];
+                const node = clone[k];
+                if (node && Array.isArray(node.offset)) {
+                    node.offset = [Math.round(node.offset[0] - dx), node.offset[1]];
+                    return clone;
+                }
+                const cleanK = k.split('@')[0];
+                return {
+                    [`sh_${cleanK}`]: {
+                        type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
+                        offset: [-dx, 0], size: ['100%', '100%'], controls: [clone]
+                    }
+                };
+            };
+            // Emit scrollable / 2D map viewports; when contentW > w, add 0ms client-side horizontal sector toggles
             for (const [aid, entry] of scrollAreas.entries()) {
                 const a = entry.area;
                 const aslug = M().slug(aid, 's');
-                const slotDefName = `${ns}_scslot_${menu.id}_${aslug}`;
-                const contentDefName = `${ns}_sc_${menu.id}_${aslug}`;
-                root[slotDefName] = {
-                    type: 'panel', size: [0, 0], anchor_from: 'top_left', anchor_to: 'top_left',
-                    controls: entry.slotControls
-                };
-                const scKids = entry.controls.slice();
-                scKids.push({
-                    slots: {
-                        type: 'stack_panel', orientation: 'vertical',
-                        size: ['100%', '100%'], anchor_from: 'top_left', anchor_to: 'top_left',
-                        factory: { name: 'buttons', control_name: `server_form.${slotDefName}` },
-                        collection_name: 'form_buttons',
-                        bindings: [{ binding_name: '#form_button_length', binding_name_override: '#collection_length' }]
-                    }
-                });
-                root[contentDefName] = {
-                    type: 'panel',
-                    size: [Math.max(a.w, a.contentW || a.w), Math.max(a.h, a.contentH || a.h)],
-                    anchor_from: 'top_left', anchor_to: 'top_left',
-                    controls: scKids
-                };
+                const contentW = Math.max(a.w, M().int(a.contentW, a.w));
+                const contentH = Math.max(a.h, M().int(a.contentH, a.h));
                 const aLayer = shown.indexOf(a) + 1;
-                controls.push({
-                    [`scroll_${aslug}`]: {
-                        type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
-                        offset: [a.x, a.y], size: [a.w, a.h], layer: aLayer, clips_children: true,
+                const isWide = contentW > a.w + 4 && (a.scrollMode === 'pan2d' || a.scrollMode === 'horizontal' || a.scrollMode === 'both');
+
+                if (!isWide) {
+                    const slotDefName = `scslot_${aslug}`;
+                    const contentDefName = `sc_${aslug}`;
+                    mDoc[slotDefName] = {
+                        type: 'panel', size: [0, 0], anchor_from: 'top_left', anchor_to: 'top_left',
+                        controls: entry.slotControls.map(it => it.c)
+                    };
+                    const scKids = entry.controls.map(it => it.c);
+                    scKids.push({
+                        slots: {
+                            type: 'stack_panel', orientation: 'vertical',
+                            size: ['100%', '100%'], anchor_from: 'top_left', anchor_to: 'top_left',
+                            factory: { name: 'buttons', control_name: `${mNs}.${slotDefName}` },
+                            collection_name: 'form_buttons',
+                            bindings: [COLLECTION_LEN_VIS]
+                        }
+                    });
+                    mDoc[contentDefName] = {
+                        type: 'panel',
+                        size: [contentW, contentH],
+                        anchor_from: 'top_left', anchor_to: 'top_left',
+                        controls: scKids
+                    };
+                    controls.push({
+                        [`scroll_${aslug}`]: {
+                            type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
+                            offset: [a.x, a.y], size: [a.w, a.h], layer: aLayer, clips_children: true,
+                            controls: [
+                                { [`bg@${commonNs}.solid`]: { color: hexToRgb(a.bgColor || '#0e131f'), alpha: 0.85, layer: 0 } },
+                                {
+                                    [`sv@common.scrolling_panel`]: {
+                                        size: ['100%', '100%'], layer: 1,
+                                        '$scrolling_pane_size': ['100%', '100%'],
+                                        '$scroll_size': a.showScrollbar !== false ? [4, '100%'] : [0, 0],
+                                        '$show_background': false,
+                                        '$scrolling_content': `${mNs}.${contentDefName}`
+                                    }
+                                }
+                            ]
+                        }
+                    });
+                } else {
+                    const sectorCount = Math.min(4, Math.max(2, Math.ceil(contentW / Math.max(1, a.w))));
+                    const maxShiftX = Math.max(0, contentW - a.w);
+                    const barH = 16;
+                    const viewH = Math.max(20, a.h - barH);
+                    const scrollControls = [
+                        { [`bg@${commonNs}.solid`]: { color: hexToRgb(a.bgColor || '#0e131f'), alpha: 0.85, layer: 0 } }
+                    ];
+                    const tabGap = 2;
+                    const totalTabsW = Math.max(20, a.w - 4);
+                    const tabW = Math.max(16, Math.floor((totalTabsW - (sectorCount - 1) * tabGap) / sectorCount));
+                    const tabFace = (bgCol, alpha, txtCol, txt) => ({
+                        type: 'panel', size: ['100%', '100%'],
                         controls: [
-                            { bg: { type: 'image', texture: 'textures/ui/white_background', size: ['100%', '100%'], color: hexToRgb(a.bgColor || '#0e131f'), alpha: 0.85, layer: 0 } },
-                            {
-                                [`sv@common.scrolling_panel`]: {
+                            { [`tbg@${commonNs}.solid`]: { color: bgCol, alpha, layer: 0 } },
+                            { tlbl: { type: 'label', text: txt, localize: false, color: txtCol, shadow: true, font_scale_factor: 0.85, text_alignment: 'center', layer: 1 } }
+                        ]
+                    });
+
+                    for (let k = 0; k < sectorCount; k++) {
+                        const dx = Math.round(maxShiftX * k / (sectorCount - 1));
+                        const minX = dx - 8, maxX = dx + a.w + 8;
+                        const sSlotDef = `scslot_${aslug}_s${k}`;
+                        const sContentDef = `sc_${aslug}_s${k}`;
+                        const visSlots = entry.slotControls.filter(it => (it.relX + it.w) >= minX && it.relX <= maxX).map(it => shiftScrollCtrl(it.c, dx));
+                        const visCtrls = entry.controls.filter(it => (it.relX + it.w) >= minX && it.relX <= maxX).map(it => shiftScrollCtrl(it.c, dx));
+
+                        mDoc[sSlotDef] = {
+                            type: 'panel', size: [0, 0], anchor_from: 'top_left', anchor_to: 'top_left',
+                            controls: visSlots
+                        };
+                        visCtrls.push({
+                            slots: {
+                                type: 'stack_panel', orientation: 'vertical',
+                                size: ['100%', '100%'], anchor_from: 'top_left', anchor_to: 'top_left',
+                                factory: { name: 'buttons', control_name: `${mNs}.${sSlotDef}` },
+                                collection_name: 'form_buttons',
+                                bindings: [COLLECTION_LEN_VIS]
+                            }
+                        });
+                        mDoc[sContentDef] = {
+                            type: 'panel',
+                            size: [a.w, Math.max(viewH, contentH)],
+                            anchor_from: 'top_left', anchor_to: 'top_left',
+                            controls: visCtrls
+                        };
+
+                        const tabName = `pan_tab_${k}`;
+                        const tabText = k === 0 ? `< 1/${sectorCount}` : (k === sectorCount - 1 ? `${k + 1}/${sectorCount} >` : `${k + 1}/${sectorCount}`);
+                        const tabX = Math.round(2 + k * (tabW + tabGap));
+                        const viewCtrl = {
+                            type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
+                            offset: [0, 0], size: ['100%', viewH], layer: 1, clips_children: true,
+                            bindings: [{ binding_type: 'view', source_control_name: tabName, source_property_name: '#toggle_state', target_property_name: '#visible' }],
+                            controls: [{
+                                [`sv_${k}@common.scrolling_panel`]: {
                                     size: ['100%', '100%'], layer: 1,
                                     '$scrolling_pane_size': ['100%', '100%'],
                                     '$scroll_size': a.showScrollbar !== false ? [4, '100%'] : [0, 0],
                                     '$show_background': false,
-                                    '$scrolling_content': `server_form.${contentDefName}`
+                                    '$scrolling_content': `${mNs}.${sContentDef}`
                                 }
+                            }]
+                        };
+                        if (k > 0) viewCtrl.visible = false;
+                        scrollControls.push({ [`pan_view_${k}`]: viewCtrl });
+                        scrollControls.push({
+                            [`${tabName}@${commonNs}.pan_tab_base`]: {
+                                anchor_from: 'bottom_left', anchor_to: 'bottom_left',
+                                offset: [tabX, -1], size: [tabW, barH - 2], layer: 6,
+                                toggle_name: `${ns}_pt_${menu.id}_${aslug}`,
+                                toggle_group_forced_index: k,
+                                toggle_group_default_selected: 0,
+                                toggle_default_state: k === 0,
+                                controls: [
+                                    { checked: tabFace([0.22, 0.48, 0.78], 0.96, [1, 1, 1], tabText) },
+                                    { unchecked: tabFace([0.12, 0.16, 0.24], 0.90, [0.72, 0.80, 0.90], tabText) },
+                                    { checked_hover: tabFace([0.28, 0.56, 0.88], 1.0, [1, 1, 1], tabText) },
+                                    { unchecked_hover: tabFace([0.18, 0.25, 0.36], 0.95, [0.95, 0.98, 1], tabText) }
+                                ]
                             }
-                        ]
+                        });
                     }
-                });
+
+                    controls.push({
+                        [`scroll_${aslug}`]: {
+                            type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
+                            offset: [a.x, a.y], size: [a.w, a.h], layer: aLayer, clips_children: true,
+                            controls: scrollControls
+                        }
+                    });
+                }
             }
-            root[`${ns}_slot_${menu.id}`] = {
+            mDoc.slot = {
                 type: 'panel', size: [0, 0], anchor_from: 'top_left', anchor_to: 'top_left',
                 controls: slotControls
             };
-            const slotsFactoryCtrl = {
+            controls.push({
                 slots: {
                     type: 'stack_panel', orientation: 'vertical',
                     size: ['100%', '100%'], anchor_from: 'top_left', anchor_to: 'top_left',
-                    factory: { name: 'buttons', control_name: `server_form.${ns}_slot_${menu.id}` },
+                    factory: { name: 'buttons', control_name: `${mNs}.slot` },
                     collection_name: 'form_buttons',
-                    bindings: [{ binding_name: '#form_button_length', binding_name_override: '#collection_length' }]
+                    bindings: [COLLECTION_LEN_VIS]
                 }
-            };
-            const baseControls = controls.slice();
-            controls.push(slotsFactoryCtrl);
+            });
 
             // In-place Bedrock Animated Spin overlays on the same menu page (supports csgo, tease, slot_v, flash, flip)
             const winSlotIdx = slots.size;
@@ -893,11 +1258,11 @@
                 const reels = M().clamp(M().int(el.reels, 3), 1, 5);
                 const cardCount = M().clamp(M().int(el.cardCount, 5), 3, 9);
                 const dur = M().clamp(M().num(el.durationSec, 4.2), 1, 15);
-                const animPrefix = `${ns}_sp_${menu.id}_${rslug}`;
+                const animPrefix = `sp_${rslug}`;
 
                 const makeWinSlotFactory = (iconW, iconH) => {
-                    const winSlotDef = `${ns}_winicon_${menu.id}_${rslug}`;
-                    root[winSlotDef] = {
+                    const winSlotDef = `winicon_${rslug}`;
+                    mDoc[winSlotDef] = {
                         type: 'panel', size: [0, 0], anchor_from: 'top_left', anchor_to: 'top_left',
                         controls: [{
                             icon: {
@@ -907,8 +1272,8 @@
                                 bindings: [
                                     COLLECTION_TEXT,
                                     showIfSlot(winSlotIdx),
-                                    { binding_type: 'collection', binding_collection_name: 'form_buttons', binding_name: '#form_button_texture', binding_name_override: '#texture' },
-                                    { binding_type: 'collection', binding_collection_name: 'form_buttons', binding_name: '#form_button_texture_file_system', binding_name_override: '#texture_file_system' }
+                                    { binding_type: 'collection', binding_collection_name: 'form_buttons', binding_name: '#form_button_texture', binding_name_override: '#texture', binding_condition: 'once' },
+                                    { binding_type: 'collection', binding_collection_name: 'form_buttons', binding_name: '#form_button_texture_file_system', binding_name_override: '#texture_file_system', binding_condition: 'once' }
                                 ]
                             }
                         }]
@@ -916,22 +1281,29 @@
                     return {
                         type: 'stack_panel', orientation: 'vertical', size: [0, 0],
                         anchor_from: 'center', anchor_to: 'center', layer: 4,
-                        factory: { name: 'buttons', control_name: `server_form.${winSlotDef}` },
+                        factory: { name: 'buttons', control_name: `${mNs}.${winSlotDef}` },
                         collection_name: 'form_buttons',
-                        bindings: [{ binding_name: '#form_button_length', binding_name_override: '#collection_length' }]
+                        bindings: [COLLECTION_LEN_VIS]
                     };
                 };
 
-                const vpControls = [
-                    { bg: { type: 'image', texture: 'textures/ui/white_background', size: ['100%', '100%'], keep_ratio: false, color: hexToRgb(el.bgColor || '#0d111a'), alpha: 0.96, layer: 0 } }
-                ];
                 const brCol = hexToRgb(el.borderColor || '#e5a43a');
-                vpControls.push(
-                    { b_t: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_left', anchor_to: 'top_left', size: ['100%', 1], keep_ratio: false, color: brCol, alpha: 0.85, layer: 8 } },
-                    { b_b: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'bottom_left', anchor_to: 'bottom_left', size: ['100%', 1], keep_ratio: false, color: brCol, alpha: 0.85, layer: 8 } },
-                    { b_l: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_left', anchor_to: 'top_left', size: [1, '100%'], keep_ratio: false, color: brCol, alpha: 0.85, layer: 8 } },
-                    { b_r: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_right', anchor_to: 'top_right', size: [1, '100%'], keep_ratio: false, color: brCol, alpha: 0.85, layer: 8 } }
-                );
+                const spinMarker = `kz:${ns}:spin:${menu.id}:${el.id}|`;
+                const spinMissMarker = `kz:${ns}:spin:${menu.id}:${el.id}|MISS`;
+                const showIfWinSpin = [
+                    { binding_name: '#title_text', binding_condition: 'once' },
+                    { binding_type: 'view', source_property_name: `((#title_text - '${spinMissMarker}') = #title_text)`, target_property_name: '#visible', binding_condition: 'once' }
+                ];
+                const showIfMissSpin = [
+                    { binding_name: '#title_text', binding_condition: 'once' },
+                    { binding_type: 'view', source_property_name: `(not ((#title_text - '${spinMissMarker}') = #title_text))`, target_property_name: '#visible', binding_condition: 'once' }
+                ];
+                const rareBait = rewards.reduce((a, b) => ((Number(b.weight) || 10) < (Number(a.weight) || 10) ? b : a), rewards[0]);
+                const mismatchRw = rewards.find(x => String(x.item || '') !== String(rareBait.item || '')) || { name: 'MISS', item: 'minecraft:barrier', color: '#ef4444' };
+                const vpControls = [
+                    { [`bg@${commonNs}.solid`]: { color: hexToRgb(el.bgColor || '#0d111a'), alpha: 0.96, layer: 0 } },
+                    { [`border@${commonNs}.box_border`]: { layer: 8, '$b_col': brCol } }
+                ];
 
                 if (style === 'slot_v') {
                     const availW = Math.max(20, el.w - 12 - (reels - 1) * gap);
@@ -940,7 +1312,7 @@
                     const stepV = cardH + gap;
                     const totalW = reels * cardW + (reels - 1) * gap;
                     const startColX = Math.round((el.w - totalW) * 0.5);
-                    const CARD_COUNT = 24, WIN_IDX = 18;
+                    const CARD_COUNT = 16, WIN_IDX = 12;
                     const startY = Math.round((el.h - cardH) * 0.5 - 2 * stepV);
                     const endY = Math.round((el.h - cardH) * 0.5 - WIN_IDX * stepV);
                     const iconSz = Math.max(8, Math.round(Math.min(cardW, cardH) * 0.68));
@@ -950,17 +1322,16 @@
                         const lx = Math.round(startColX + r * (cardW + gap));
                         if (r > 0) {
                             vpControls.push({
-                                ['sep_' + r]: {
-                                    type: 'image', texture: 'textures/ui/white_background',
+                                [`sep_${r}@${commonNs}.solid`]: {
                                     anchor_from: 'top_left', anchor_to: 'top_left',
                                     offset: [Math.round(lx - gap * 0.5), 4], size: [1, Math.max(4, el.h - 8)],
-                                    keep_ratio: false, color: [1, 1, 1], alpha: 0.14, layer: 3
+                                    color: [1, 1, 1], alpha: 0.14, layer: 3
                                 }
                             });
                         }
-                        const reelDur = r3(dur * (reels === 1 ? 1 : (0.58 + 0.42 * r / (reels - 1))));
+                        const reelDur = r3(dur * (reels === 1 ? 1 : (0.38 + 0.62 * Math.pow(r / (reels - 1), 1.35))));
                         const animName = `${animPrefix}_reel_${r}`;
-                        root[animName] = {
+                        mDoc[animName] = {
                             anim_type: 'offset',
                             easing: 'out_cubic',
                             from: [0, startY],
@@ -971,16 +1342,38 @@
                         for (let idx = 0; idx < CARD_COUNT; idx++) {
                             const rw = rewards[(idx + r * 2) % rewards.length];
                             const cy = idx * stepV;
-                            rCards.push({
-                                ['sc_' + idx]: {
-                                    type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
-                                    offset: [0, cy], size: [cardW, cardH], layer: 1,
-                                    controls: rouletteStaticCard(rw, {
-                                        accent: idx === WIN_IDX ? '#ffd24c' : rw.color,
-                                        winnerSlotControl: idx === WIN_IDX ? winnerSlotFactory : null
-                                    })
-                                }
-                            });
+                            if (idx === WIN_IDX) {
+                                const missRw = (reels >= 2 && r < reels - 1) ? rareBait : mismatchRw;
+                                const missAccent = (reels >= 2 && r < reels - 1) ? (rareBait.color || '#f59e0b') : '#ef4444';
+                                rCards.push({
+                                    ['sc_' + idx]: {
+                                        type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
+                                        offset: [0, cy], size: [cardW, cardH], layer: 2,
+                                        controls: [
+                                            {
+                                                win_cell: {
+                                                    type: 'panel', size: ['100%', '100%'], bindings: showIfWinSpin,
+                                                    controls: rouletteStaticCard(rw, { accent: '#ffd24c', winnerSlotControl: winnerSlotFactory }, commonNs)
+                                                }
+                                            },
+                                            {
+                                                miss_cell: {
+                                                    type: 'panel', size: ['100%', '100%'], visible: false, bindings: showIfMissSpin,
+                                                    controls: rouletteStaticCard(missRw, { accent: missAccent }, commonNs)
+                                                }
+                                            }
+                                        ]
+                                    }
+                                });
+                            } else {
+                                rCards.push({
+                                    ['sc_' + idx]: {
+                                        type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
+                                        offset: [0, cy], size: [cardW, cardH], layer: 1,
+                                        controls: rouletteStaticCard(idx === WIN_IDX - 1 ? rareBait : rw, null, commonNs)
+                                    }
+                                });
+                            }
                         }
                         vpControls.push({
                             ['reel_col_' + r]: {
@@ -989,14 +1382,14 @@
                                 controls: [{
                                     track: {
                                         type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
-                                        offset: `@server_form.${animName}`, size: [cardW, CARD_COUNT * stepV], layer: 1,
+                                        offset: `@${mNs}.${animName}`, size: [cardW, CARD_COUNT * stepV], layer: 1,
                                         controls: rCards
                                     }
                                 }]
                             }
                         });
                     }
-                    vpControls.push({ needle: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'left_middle', anchor_to: 'left_middle', size: ['100%', 2], keep_ratio: false, color: hexToRgb(el.pointerColor || '#ff4d4f'), layer: 7 } });
+                    vpControls.push({ [`needle@${commonNs}.solid`]: { anchor_from: 'left_middle', anchor_to: 'left_middle', size: ['100%', 2], color: hexToRgb(el.pointerColor || '#ff4d4f'), layer: 7 } });
                 } else if (style === 'flash') {
                     const boxes = rouletteGridBoxes(el, cardCount, slotW, gap);
                     const winSlot = Math.floor(cardCount / 2);
@@ -1022,7 +1415,7 @@
                             if (segT0 > 0.01) aSegs.push({ from: 0, to: 0, dur: segT0 });
                             aSegs.push({ from: 1, to: 1, dur: Math.max(0.05, (activeLast ? dur : segT1) - segT0) });
                             if (!activeLast) aSegs.push({ from: 1, to: 0, dur: 0.02 });
-                            const iconAlpha = makeAnimChain(root, `${animPrefix}_fi_${idx}_${st}`, 'alpha', aSegs);
+                            const iconAlpha = makeAnimChain(mDoc, mNs, `${animPrefix}_fi_${idx}_${st}`, 'alpha', aSegs);
                             const rw = rewards[(idx * 3 + st * 2) % rewards.length];
                             if (isWinnerFinal) {
                                 iconControls.push({
@@ -1054,28 +1447,17 @@
                             glowSegs.push({ from: on, to: on, dur: stepDur });
                             curT = tNext;
                         }
-                        const glowAlpha = makeAnimChain(root, `${animPrefix}_fg_${idx}`, 'alpha', glowSegs);
+                        const glowAlpha = makeAnimChain(mDoc, mNs, `${animPrefix}_fg_${idx}`, 'alpha', glowSegs);
                         const rwBase = rewards[idx % rewards.length];
-                        const gCol = [1.0, 0.82, 0.29];
                         vpControls.push({
                             ['fl_' + idx]: {
                                 type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
                                 offset: [b.x, b.y], size: [b.size, b.size], layer: 2,
                                 controls: [
-                                    { bg: { type: 'image', texture: 'textures/ui/white_background', size: ['100%', '100%'], keep_ratio: false, color: [0.1, 0.12, 0.18], alpha: 0.9, layer: 1 } },
-                                    { bar: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_left', anchor_to: 'top_left', size: ['100%', 2], keep_ratio: false, color: hexToRgb(idx === winSlot ? '#ffd24c' : (rwBase.color || '#3b82f6')), layer: 2 } },
+                                    { [`bg@${commonNs}.solid`]: { color: [0.1, 0.12, 0.18], alpha: 0.9, layer: 1 } },
+                                    { [`bar@${commonNs}.solid`]: { anchor_from: 'top_left', anchor_to: 'top_left', size: ['100%', 2], color: hexToRgb(idx === winSlot ? '#ffd24c' : (rwBase.color || '#3b82f6')), layer: 2 } },
                                     ...iconControls,
-                                    {
-                                        glow: {
-                                            type: 'panel', size: ['100%', '100%'], propagate_alpha: true, alpha: glowAlpha, layer: 6,
-                                            controls: [
-                                                { gt: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_left', anchor_to: 'top_left', size: ['100%', 2], keep_ratio: false, color: gCol } },
-                                                { gb: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'bottom_left', anchor_to: 'bottom_left', size: ['100%', 2], keep_ratio: false, color: gCol } },
-                                                { gl: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_left', anchor_to: 'top_left', size: [2, '100%'], keep_ratio: false, color: gCol } },
-                                                { gr: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_right', anchor_to: 'top_right', size: [2, '100%'], keep_ratio: false, color: gCol } }
-                                            ]
-                                        }
-                                    }
+                                    { [`glow@${commonNs}.card_glow`]: { alpha: glowAlpha, layer: 6 } }
                                 ]
                             }
                         });
@@ -1085,41 +1467,40 @@
                     const winSlot = Math.floor(cardCount / 2);
                     const iconSz = Math.max(8, Math.round((boxes[winSlot] ? boxes[winSlot].size : slotW) * 0.72));
                     const winnerSlotFactory = makeWinSlotFactory(iconSz, iconSz);
-                    const tPhase1 = r3(dur * 0.64);
-                    const tPhase2 = r3(dur * 0.84);
-                    const tWinMid = r3((tPhase1 + tPhase2) * 0.5);
-                    const tOtherMid = r3((tPhase2 + dur) * 0.5);
+                    const tPhase1 = r3(dur * 0.52);
+                    const tPhase2 = r3(dur * 0.78);
+                    const tOtherMid = r3((tPhase1 + tPhase2) * 0.5);
+                    const tWinMid = r3((tPhase2 + dur) * 0.5);
                     const HOPS = 10;
                     const hopTimes = [];
                     for (let k = 0; k <= HOPS; k++) hopTimes.push(r3(tPhase1 * (1 - Math.pow(1 - k / HOPS, 1 / 2.2))));
                     const hopStart = ((winSlot - HOPS) % cardCount + cardCount) % cardCount;
                     const activeAt = hopTimes.map((_, k) => k === HOPS ? winSlot : (hopStart + k) % cardCount);
-                    const gCol = [1.0, 0.82, 0.29];
 
                     boxes.forEach((b, idx) => {
                         const isWin = idx === winSlot;
                         const rw = rewards[idx % rewards.length];
                         const sz = b.size;
                         const winSz = Math.round(sz * 1.12);
-                        const flipStart = isWin ? tPhase1 : tPhase2;
+                        const flipStart = isWin ? tPhase2 : tPhase1;
                         const flipMid = isWin ? tWinMid : tOtherMid;
-                        const flipEnd = isWin ? tPhase2 : dur;
+                        const flipEnd = isWin ? dur : tPhase2;
                         const halfFlip = Math.max(0.05, r3(flipMid - flipStart));
 
-                        const backSize = makeAnimChain(root, `${animPrefix}_fbs_${idx}`, 'size', [
+                        const backSize = makeAnimChain(mDoc, mNs, `${animPrefix}_fbs_${idx}`, 'size', [
                             { from: [sz, sz], to: [sz, sz], dur: flipStart },
                             { from: [sz, sz], to: [2, sz], dur: halfFlip, ease: 'in_quad' }
                         ]);
-                        const backAlpha = makeAnimChain(root, `${animPrefix}_fba_${idx}`, 'alpha', [
+                        const backAlpha = makeAnimChain(mDoc, mNs, `${animPrefix}_fba_${idx}`, 'alpha', [
                             { from: 1, to: 1, dur: flipMid },
                             { from: 1, to: 0, dur: 0.02 }
                         ]);
-                        const frontSize = makeAnimChain(root, `${animPrefix}_ffs_${idx}`, 'size', [
+                        const frontSize = makeAnimChain(mDoc, mNs, `${animPrefix}_ffs_${idx}`, 'size', [
                             { from: [2, sz], to: [2, sz], dur: flipMid },
                             { from: [2, sz], to: isWin ? [winSz, winSz] : [sz, sz], dur: Math.max(0.05, r3(flipEnd - flipMid)), ease: 'out_back' }
                         ]);
                         const targetAlpha = isWin ? 1.0 : 0.45;
-                        const frontAlpha = makeAnimChain(root, `${animPrefix}_ffa_${idx}`, 'alpha', [
+                        const frontAlpha = makeAnimChain(mDoc, mNs, `${animPrefix}_ffa_${idx}`, 'alpha', [
                             { from: 0, to: 0, dur: flipMid },
                             { from: targetAlpha, to: targetAlpha, dur: 0.04 }
                         ]);
@@ -1134,7 +1515,7 @@
                             curT = tNext;
                         }
                         glowSegs.push({ from: 0, to: 0, dur: Math.max(0.05, r3(dur - tPhase1)) });
-                        const glowAlpha = makeAnimChain(root, `${animPrefix}_fbg_${idx}`, 'alpha', glowSegs);
+                        const glowAlpha = makeAnimChain(mDoc, mNs, `${animPrefix}_fbg_${idx}`, 'alpha', glowSegs);
 
                         const cellControls = [
                             {
@@ -1142,18 +1523,8 @@
                                     type: 'panel', anchor_from: 'center', anchor_to: 'center',
                                     size: backSize, propagate_alpha: true, alpha: backAlpha, clips_children: true, layer: 2,
                                     controls: [
-                                        ...rouletteStaticCard(rw, { mystery: true, accent: el.borderColor || '#e5a43a' }),
-                                        {
-                                            glow: {
-                                                type: 'panel', size: ['100%', '100%'], propagate_alpha: true, alpha: glowAlpha, layer: 5,
-                                                controls: [
-                                                    { gt: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_left', anchor_to: 'top_left', size: ['100%', 2], keep_ratio: false, color: gCol } },
-                                                    { gb: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'bottom_left', anchor_to: 'bottom_left', size: ['100%', 2], keep_ratio: false, color: gCol } },
-                                                    { gl: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_left', anchor_to: 'top_left', size: [2, '100%'], keep_ratio: false, color: gCol } },
-                                                    { gr: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_right', anchor_to: 'top_right', size: [2, '100%'], keep_ratio: false, color: gCol } }
-                                                ]
-                                            }
-                                        }
+                                        ...rouletteStaticCard(rw, { mystery: true, accent: el.borderColor || '#e5a43a' }, commonNs),
+                                        { [`glow@${commonNs}.card_glow`]: { alpha: glowAlpha, layer: 5 } }
                                     ]
                                 }
                             },
@@ -1164,7 +1535,7 @@
                                     controls: rouletteStaticCard(rw, {
                                         accent: isWin ? '#ffd24c' : (rw.color || '#3b82f6'),
                                         winnerSlotControl: isWin ? winnerSlotFactory : null
-                                    })
+                                    }, commonNs)
                                 }
                             }
                         ];
@@ -1180,13 +1551,13 @@
                 } else {
                     const cardH = Math.max(10, Math.min(el.h - 6, slotW));
                     const cardY = Math.round((el.h - cardH) * 0.5);
-                    const WIN_IDX = 20, CARD_COUNT = 26;
+                    const WIN_IDX = 15, CARD_COUNT = 20;
                     const startX = Math.round((el.w - slotW) * 0.5 - 2 * step);
                     const endX = Math.round((el.w - slotW) * 0.5 - WIN_IDX * step);
                     const iconSz = Math.max(8, Math.round(Math.min(slotW, cardH) * 0.68));
                     const winnerSlotFactory = makeWinSlotFactory(iconSz, iconSz);
                     const animName = `${animPrefix}_strip`;
-                    root[animName] = {
+                    mDoc[animName] = {
                         anim_type: 'offset',
                         easing: style === 'tease' ? 'out_back' : 'out_cubic',
                         from: [startX, 0],
@@ -1205,18 +1576,18 @@
                                 controls: rouletteStaticCard(rw, {
                                     accent: idx === WIN_IDX ? '#ffd24c' : rw.color,
                                     winnerSlotControl: idx === WIN_IDX ? winnerSlotFactory : null
-                                })
+                                }, commonNs)
                             }
                         });
                     }
                     vpControls.push(
-                        { track: { type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left', offset: `@server_form.${animName}`, size: [CARD_COUNT * step, el.h], layer: 1, controls: cards } },
-                        { needle: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_middle', anchor_to: 'top_middle', size: [2, '100%'], keep_ratio: false, color: hexToRgb(el.pointerColor || '#ff4d4f'), layer: 6 } }
+                        { track: { type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left', offset: `@${mNs}.${animName}`, size: [CARD_COUNT * step, el.h], layer: 1, controls: cards } },
+                        { [`needle@${commonNs}.solid`]: { anchor_from: 'top_middle', anchor_to: 'top_middle', size: [2, '100%'], color: hexToRgb(el.pointerColor || '#ff4d4f'), layer: 6 } }
                     );
                 }
 
                 // Delayed winner badge: stays hidden during spin, fades in smoothly once the spin lands
-                const claimAlpha = makeAnimChain(root, `${animPrefix}_claim_a`, 'alpha', [
+                const claimAlpha = makeAnimChain(mDoc, mNs, `${animPrefix}_claim_a`, 'alpha', [
                     { from: 0, to: 0, dur: Math.max(0.2, dur) },
                     { from: 0, to: 1, dur: 0.25, ease: 'out_quad' }
                 ]);
@@ -1225,25 +1596,28 @@
                 const claimY = el.y + el.h + 24 <= menu.height
                     ? Math.round(el.y + el.h + 4)
                     : Math.max(2, el.y - 22);
-                const claimBtnName = `${ns}_spinclaim_${menu.id}_${rslug}`;
-                root[claimBtnName] = {
+                const claimBtnName = `spinclaim_${rslug}`;
+                const claimFace = (name, winCol, missCol, alpha) => ({
+                    [name]: {
+                        type: 'panel', size: ['100%', '100%'],
+                        controls: [
+                            { [`w@${commonNs}.solid`]: { color: winCol, alpha, bindings: showIfWinSpin } },
+                            { [`m@${commonNs}.solid`]: { color: missCol, alpha, visible: false, bindings: showIfMissSpin } }
+                        ]
+                    }
+                });
+                mDoc[claimBtnName] = {
                     type: 'panel', size: [0, 0], anchor_from: 'top_left', anchor_to: 'top_left',
                     controls: [{
-                        claim_btn: {
-                            type: 'button', anchor_from: 'top_left', anchor_to: 'top_left',
+                        [`claim_btn@${commonNs}.form_btn_base`]: {
+                            anchor_from: 'top_left', anchor_to: 'top_left',
                             offset: [claimX, claimY], size: [claimW, 20], layer: 18,
                             propagate_alpha: true, alpha: claimAlpha,
-                            default_control: 'default', hover_control: 'hover', pressed_control: 'pressed',
-                            sound_name: 'random.click', sound_volume: 1.0,
-                            button_mappings: [
-                                { from_button_id: 'button.menu_select', to_button_id: 'button.form_button_click', mapping_type: 'pressed' },
-                                { from_button_id: 'button.menu_ok', to_button_id: 'button.form_button_click', mapping_type: 'focused' }
-                            ],
                             bindings: [{ binding_type: 'collection_details', binding_collection_name: 'form_buttons' }, COLLECTION_TEXT, showIfSlot(winSlotIdx)],
                             controls: [
-                                { default: { type: 'image', texture: 'textures/ui/white_background', size: ['100%', '100%'], keep_ratio: false, color: [0.16, 0.44, 0.28], alpha: 0.94 } },
-                                { hover: { type: 'image', texture: 'textures/ui/white_background', size: ['100%', '100%'], keep_ratio: false, color: [0.22, 0.56, 0.36], alpha: 0.98 } },
-                                { pressed: { type: 'image', texture: 'textures/ui/white_background', size: ['100%', '100%'], keep_ratio: false, color: [0.12, 0.34, 0.22], alpha: 0.98 } },
+                                claimFace('default', [0.16, 0.44, 0.28], [0.52, 0.14, 0.16], 0.94),
+                                claimFace('hover', [0.22, 0.56, 0.36], [0.66, 0.20, 0.22], 0.98),
+                                claimFace('pressed', [0.12, 0.34, 0.22], [0.40, 0.10, 0.12], 0.98),
                                 { label: { type: 'label', layer: 2, text: '#kz_text', localize: false, bindings: [COLLECTION_TEXT, textOfSlot(winSlotIdx)], color: [1, 1, 1], shadow: true, text_alignment: 'center' } }
                             ]
                         }
@@ -1251,50 +1625,40 @@
                 };
 
                 const idleEntry = rouletteControlMap.get(el.id);
-                const spinMenuControls = baseControls.filter(item => !idleEntry || item !== idleEntry.c);
-                spinMenuControls.push(
+                if (idleEntry && idleEntry.c) {
+                    const ik = Object.keys(idleEntry.c)[0];
+                    if (ik && idleEntry.c[ik]) {
+                        idleEntry.c[ik].bindings = [
+                            { binding_name: '#title_text', binding_condition: 'once' },
+                            { binding_type: 'view', source_property_name: `((#title_text - '${spinMarker}') = #title_text)`, target_property_name: '#visible', binding_condition: 'once' }
+                        ];
+                    }
+                }
+                const spinVisBindings = [
+                    { binding_name: '#title_text', binding_condition: 'once' },
+                    { binding_type: 'view', source_property_name: `(not ((#title_text - '${spinMarker}') = #title_text))`, target_property_name: '#visible', binding_condition: 'once' }
+                ];
+                controls.push(
                     {
                         [`spin_vp_${rslug}`]: {
                             type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
                             offset: [el.x, el.y], size: [el.w, el.h], clips_children: true,
+                            visible: false,
                             layer: (idleEntry ? idleEntry.layer : 4) + 1,
+                            bindings: spinVisBindings,
                             controls: vpControls
                         }
                     },
-                    slotsFactoryCtrl,
                     {
                         [`claim_slots_${rslug}`]: {
                             type: 'stack_panel', orientation: 'vertical', size: ['100%', '100%'],
-                            anchor_from: 'top_left', anchor_to: 'top_left', layer: 20,
-                            factory: { name: 'buttons', control_name: `server_form.${claimBtnName}` },
-                            collection_name: 'form_buttons',
-                            bindings: [{ binding_name: '#form_button_length', binding_name_override: '#collection_length' }]
+                            anchor_from: 'top_left', anchor_to: 'top_left', visible: false, layer: 20,
+                            bindings: spinVisBindings.concat([COLLECTION_LEN_VIS]),
+                            factory: { name: 'buttons', control_name: `${mNs}.${claimBtnName}` },
+                            collection_name: 'form_buttons'
                         }
                     }
                 );
-
-                const spinPanelName = `${ns}_spinpanel_${menu.id}_${rslug}`;
-                root[spinPanelName] = {
-                    type: 'panel', size: [menu.width, menu.height], anchor_from: 'center', anchor_to: 'center',
-                    controls: spinMenuControls
-                };
-                const spinMarker = `kz:${ns}:spin:${menu.id}:${el.id}|`;
-                wrapperControls.push({
-                    [`${ns}_show_spin_${menu.id}_${rslug}`]: {
-                        type: 'panel', size: ['100%', '100%'],
-                        bindings: [{ binding_name: '#title_text' }, { binding_type: 'view', source_property_name: `(not ((#title_text - '${spinMarker}') = #title_text))`, target_property_name: '#visible' }],
-                        controls: [
-                            ...(menu.fullscreen && menu.bedrockBackdrop ? [{
-                                backdrop: {
-                                    type: 'image', texture: 'textures/ui/white_background', size: ['400%', '400%'], keep_ratio: false, layer: 0,
-                                    anchor_from: 'center', anchor_to: 'center',
-                                    color: hexToRgb(menu.backdrop || '#000000'), alpha: M().clamp(M().num(menu.backdropAlpha, 0.6), 0, 1)
-                                }
-                            }] : []),
-                            { [`spin@server_form.${spinPanelName}`]: { layer: 1 } }
-                        ]
-                    }
-                });
             }
             const menuPanel = {
                 type: 'panel',
@@ -1310,37 +1674,50 @@
                 const fadeOnly = { length: oc.length, delay: 0, loop: false, pivot: oc.pivot, tracks: { alpha: oc.tracks.alpha || [[0, 0, 'inout'], [Math.min(0.3, oc.length || 0.3), 100, 'linear']] } };
                 const c2 = { length: oc.length, delay: 0, loop: false, pivot: oc.pivot, tracks: Object.assign({}, moving ? { x: oc.tracks.x, y: oc.tracks.y } : {}, fadeOnly.tracks) };
                 Object.keys(c2.tracks).forEach(k => { if (!c2.tracks[k]) delete c2.tracks[k]; });
-                const mo = bedrockMotion(`${ns}_open_${menu.id}`, { x: 0, y: 0, w: menu.width, h: menu.height }, [{ clip: c2, start: 0 }]);
-                Object.assign(root, mo.defs);
+                const mo = bedrockMotion('open', { x: 0, y: 0, w: menu.width, h: menu.height }, [{ clip: c2, start: 0 }], mNs);
+                Object.assign(mDoc, mo.defs);
                 if (mo.props.offset) menuPanel.offset = mo.props.offset;
                 if (mo.props.alpha) { menuPanel.propagate_alpha = true; menuPanel.alpha = mo.props.alpha; }
                 if (menu.fullscreen && menu.bedrockBackdrop) {
                     // the backdrop fades in with the menu
                     const ba = M().clamp(M().num(menu.backdropAlpha, 0.6), 0, 1);
-                    const bm = bedrockMotion(`${ns}_open_${menu.id}_bd`, { x: 0, y: 0, w: 1, h: 1 }, [{ clip: { length: c2.length, delay: 0, loop: false, tracks: { alpha: c2.tracks.alpha.map(k => [k[0], k[1] * ba, k[2]]) } }, start: 0 }]);
-                    Object.assign(root, bm.defs);
+                    const bm = bedrockMotion('open_bd', { x: 0, y: 0, w: 1, h: 1 }, [{ clip: { length: c2.length, delay: 0, loop: false, tracks: { alpha: c2.tracks.alpha.map(k => [k[0], k[1] * ba, k[2]]) } }, start: 0 }], mNs);
+                    Object.assign(mDoc, bm.defs);
                     openAlpha = bm.props.alpha || null;
                 }
             }
-            root[`${ns}_menu_${menu.id}`] = menuPanel;
-            wrapperControls.push({
-                [`${ns}_show_${menu.id}`]: {
-                    type: 'panel', size: ['100%', '100%'],
-                    bindings: [{ binding_name: '#title_text' }, { binding_type: 'view', source_property_name: `(not ((#title_text - '${marker}') = #title_text))`, target_property_name: '#visible' }],
-                    controls: [
-                        ...(menu.fullscreen && menu.bedrockBackdrop ? [{
-                            backdrop: {
-                                // the form's content area is narrower than the screen: oversize it, centred, so it covers everything
-                                type: 'image', texture: 'textures/ui/white_background', size: ['400%', '400%'], layer: 0,
-                                anchor_from: 'center', anchor_to: 'center',
-                                color: hexToRgb(menu.backdrop || '#000000'), alpha: openAlpha || M().clamp(M().num(menu.backdropAlpha, 0.6), 0, 1)
-                            }
-                        }] : []),
-                        { [`menu@server_form.${ns}_menu_${menu.id}`]: { layer: 1 } }
-                    ]
-                }
-            });
+            mDoc.menu = menuPanel;
+            const hasRoulettes = shown.some(x => x.type === 'roulette');
+            const spinPrefix = `kz:${ns}:spin:${menu.id}:`;
+            const showMenuExpr = hasRoulettes
+                ? `((not ((#title_text - '${marker}') = #title_text)) or (not ((#title_text - '${spinPrefix}') = #title_text)))`
+                : `(not ((#title_text - '${marker}') = #title_text))`;
+            mDoc.screen = {
+                type: 'panel', size: ['100%', '100%'], visible: false,
+                bindings: [
+                    { binding_name: '#title_text', binding_condition: 'once' },
+                    { binding_type: 'view', source_property_name: showMenuExpr, target_property_name: '#visible', binding_condition: 'once' }
+                ],
+                controls: [
+                    ...(menu.fullscreen && menu.bedrockBackdrop ? [{
+                        [`backdrop@${commonNs}.solid`]: {
+                            size: ['400%', '400%'], layer: 0,
+                            anchor_from: 'center', anchor_to: 'center',
+                            color: hexToRgb(menu.backdrop || '#000000'), alpha: openAlpha || M().clamp(M().num(menu.backdropAlpha, 0.6), 0, 1)
+                        }
+                    }] : []),
+                    { [`menu@${mNs}.menu`]: { layer: 1 } }
+                ]
+            };
+
+            const menuPath = `ui/${ns}/menus/${menu.id}.json`;
+            uiDefs.push(menuPath);
+            files.push({ path: menuPath, text: formatBedrockJson(mDoc) + '\n' });
+            wrapperControls.push({ [`${ns}_show_${menu.id}@${mNs}.screen`]: {} });
         });
+
+        const commonDoc = buildCommonDoc(commonNs, flipBooks || {});
+        files.unshift({ path: `ui/${ns}/common.json`, text: formatBedrockJson(commonDoc) + '\n' });
 
         root[`${ns}_long_form`] = { type: 'panel', size: ['100%', '100%'], controls: wrapperControls };
         // Vanilla: main_screen_content → server_form_factory picks long_form / custom_form.
@@ -1353,7 +1730,15 @@
                 }
             }]
         };
-        return JSON.stringify(root, null, 2) + '\n';
+        return {
+            defsJson: JSON.stringify({ ui_defs: uiDefs }, null, 2) + '\n',
+            serverFormJson: JSON.stringify(root, null, 2) + '\n',
+            files
+        };
+    }
+
+    function serverFormJson(p, texOf, stripOf) {
+        return bedrockUiFiles(p, texOf, stripOf, {}).serverFormJson;
     }
 
     /* ───────────── plugin YAML ───────────── */
@@ -1395,14 +1780,15 @@
             L.push(`    w: ${M().int(e.w, 1)}`);
             L.push(`    h: ${M().int(e.h, 1)}`);
             if (e.scrollGroup) L.push(`    scroll-group: ${q(e.scrollGroup)}`);
-            const pictureYaml = (imageId, key) => {
+            const pictureYaml = (imageId, key, tilesKey) => {
                 const ts = tilesOf(imageId, M().int(e.w, 1), M().int(e.h, 1), e.detail || 1);
                 if (ts.length === 1) {
                     L.push(`    ${key}: ${glyphEsc(ts[0].cp)}`);
                     L.push(`    ${key}-ascent: ${ts[0].ascent}`);
                 } else {
                     // bigger than 256 px: drawn as several glyphs side by side
-                    L.push(`    ${key === 'glyph' ? 'tiles' : 'hover-tiles'}:`);
+                    const tk = tilesKey || (key === 'glyph' ? 'tiles' : 'hover-tiles');
+                    L.push(`    ${tk}:`);
                     ts.forEach(t => L.push(`      - { x: ${t.x}, y: ${t.y}, w: ${t.w}, h: ${t.h}, glyph: ${glyphEsc(t.cp)}, ascent: ${t.ascent} }`));
                 }
             };
@@ -1423,7 +1809,7 @@
                 L.push(`    motion: ${flow(mo)}`);
             }
             if (e.type === 'button') {
-                if (e.hoverImage && p.images[e.hoverImage]) pictureYaml(e.hoverImage, 'hover-glyph');
+                if (e.hoverImage && p.images[e.hoverImage]) pictureYaml(e.hoverImage, 'hover-glyph', 'hover-tiles');
                 L.push(`    label: ${q(e.label || '')}`);
                 L.push(`    label-color: ${q(e.labelColor || '#ffffff')}`);
                 L.push(`    label-scale: ${M().num(e.labelScale, 1)}`);
@@ -1434,6 +1820,20 @@
                 const acts = (e.actions || []).map(a => String(a).trim()).filter(Boolean);
                 if (acts.length) { L.push('    actions:'); acts.forEach(a => L.push(`      - ${q(a)}`)); }
                 else L.push('    actions: []');
+                if (isToggleBtn(e)) {
+                    if (e.toggleVar) L.push(`    toggle-var: ${q(e.toggleVar)}`);
+                    if (e.togglePapi) L.push(`    toggle-papi: ${q(e.togglePapi)}`);
+                    if (e.toggleOnValue) L.push(`    toggle-on-value: ${q(e.toggleOnValue)}`);
+                    L.push(`    toggle-default: ${e.toggleDefault !== false}`);
+                    if (e.offImage && p.images[e.offImage]) pictureYaml(e.offImage, 'off-glyph', 'off-tiles');
+                    if (e.offHoverImage && p.images[e.offHoverImage]) pictureYaml(e.offHoverImage, 'off-hover-glyph', 'off-hover-tiles');
+                    const onActs = (e.onActions || []).map(a => String(a).trim()).filter(Boolean);
+                    if (onActs.length) { L.push('    on-actions:'); onActs.forEach(a => L.push(`      - ${q(a)}`)); }
+                    else L.push('    on-actions: []');
+                    const offActs = (e.offActions || []).map(a => String(a).trim()).filter(Boolean);
+                    if (offActs.length) { L.push('    off-actions:'); offActs.forEach(a => L.push(`      - ${q(a)}`)); }
+                    else L.push('    off-actions: []');
+                }
             }
             if (M().isPlayer(e)) {
                 L.push(`    player: ${q(e.player == null ? '%player_name%' : e.player)}`);
@@ -1461,11 +1861,15 @@
                 L.push(`    spin-style: ${q(e.spinStyle || 'csgo')}`);
                 L.push(`    reels: ${M().clamp(M().int(e.reels, 3), 1, 5)}`);
                 L.push(`    card-count: ${M().clamp(M().int(e.cardCount, 5), 3, 9)}`);
+                const defWc = (e.spinStyle === 'slot_v' && M().int(e.reels, 3) >= 2) ? 65 : 100;
+                L.push(`    win-chance: ${M().clamp(M().num(e.winChance != null ? e.winChance : defWc, defWc), 1, 100)}`);
                 L.push(`    bg-color: ${q(e.bgColor || '#0d111a')}`);
                 L.push(`    border-color: ${q(e.borderColor || '#e5a43a')}`);
                 L.push(`    pointer-color: ${q(e.pointerColor || '#ff4d4f')}`);
                 L.push(`    tick-sound: ${q(e.tickSound || '')}`);
                 L.push(`    win-sound: ${q(e.winSound || '')}`);
+                L.push(`    lose-sound: ${q(e.loseSound || 'minecraft:entity.villager.no;1.0;0.82')}`);
+                L.push(`    lose-message: ${q(e.loseMessage != null ? e.loseMessage : '&c&lMISS! &7No match this time — try again!')}`);
                 L.push(`    rewards: ${flow(Array.isArray(e.rewards) ? e.rewards : [])}`);
             }
             if (e.type === 'scroll_area') {
@@ -1515,7 +1919,13 @@
                 L.push(`    scale: ${M().num(e.scale, 1)}`);
                 L.push(`    shadow: ${!!e.shadow}`);
                 L.push(`    align: ${q(e.align || 'center')}`);
+                if (slots.has(e.id)) L.push(`    bedrock-slot: ${slots.get(e.id)}`);
+            }
+            if (slots.has(e.id) && !['button', 'input', 'item', 'text'].includes(e.type)) {
                 L.push(`    bedrock-slot: ${slots.get(e.id)}`);
+            }
+            if (hasVisibility(e)) {
+                L.push(`    visibility: ${flow(e.visibility.filter(c => c && String(c.papi || '').trim() && c.op !== 'always'))}`);
             }
             if (e.tooltip && String(e.tooltip).trim()) {
                 L.push(`    tooltip: ${q(e.tooltip)}`);
@@ -1728,27 +2138,23 @@ ${creditText}`;
         for (const [vpath, dataUrl] of vanillaIconEntries) {
             bedrockPack.push({ path: `${vpath}.png`, base64: await renderPng(dataUrl, 32, 32) });
         }
+        const commonNs = `kz_${ns}_common`;
         const texDir = `${ns}_gui`;
         const usedTex = new Set();
         const texOf = (imageId) => { usedTex.add(imageId); return `textures/${texDir}/${imageId}`; };
         const strips = new Map();
+        const flipBooks = {};
         const stripOf = (el) => {
             const ids = [el.image].concat(el.frames || []).filter(id => id && p.images[id]);
             if (!el.image || !p.images[el.image] || ids.length < 2) return null;
             const first = p.images[el.image];
             const key = M().slug(`${el.id}_frames`, 'frames');
             if (!strips.has(key)) strips.set(key, { ids, w: first.w, h: first.h });
-            const anim = `${ns}_fb_${key}`;
+            const anim = `fb_${key}`;
             flipBooks[anim] = { anim_type: 'flip_book', initial_uv: [0, 0], frame_count: ids.length, frame_step: first.h, fps: M().clamp(M().num(el.fps, 8), 1, 30), looping: true, easing: 'linear' };
-            return { texture: `textures/${texDir}/${key}`, uvSize: [first.w, first.h], uv: `@server_form.${anim}` };
+            return { texture: `textures/${texDir}/${key}`, uvSize: [first.w, first.h], uv: `@${commonNs}.${anim}` };
         };
-        const flipBooks = {};
-        let formJson = serverFormJson(p, texOf, stripOf);
-        if (Object.keys(flipBooks).length) {
-            const o = JSON.parse(formJson);
-            Object.assign(o, flipBooks);
-            formJson = JSON.stringify(o, null, 2) + '\n';
-        }
+        const uiOut = bedrockUiFiles(p, texOf, stripOf, flipBooks);
         bedrockPack.push({
             path: 'manifest.json',
             text: JSON.stringify({
@@ -1763,7 +2169,9 @@ ${creditText}`;
                 modules: [{ type: 'resources', uuid: p.packUuids.module, version: [1, 0, p.packVersion] }]
             }, null, 2) + '\n'
         });
-        bedrockPack.push({ path: 'ui/server_form.json', text: formJson });
+        bedrockPack.push({ path: 'ui/_ui_defs.json', text: uiOut.defsJson });
+        bedrockPack.push({ path: 'ui/server_form.json', text: uiOut.serverFormJson });
+        for (const uf of uiOut.files) bedrockPack.push({ path: uf.path, text: uf.text });
         for (const id of usedTex) {
             const im = p.images[id];
             if (!im) continue;
@@ -1778,6 +2186,9 @@ ${creditText}`;
             javaPack.forEach(f => root.push(Object.assign({}, f, { path: dir + f.path })));
             javaPack.length = 0;
             javaPackName = null;
+            if (host.extraFiles) {
+                host.extraFiles(ns, p.packVersion).forEach(f => root.push(f));
+            }
         }
         const bedrockPackPath = `plugins/Geyser-Spigot/packs/KaizerUI_${ns}.mcpack`;
         root.push({ path: 'README_KaizerUI.txt', text: readme(p, javaPackName, bedrockPackPath) });
@@ -1791,5 +2202,5 @@ ${creditText}`;
         };
     }
 
-    GS.Export = { PACK_HOSTS, bedrockScale, BEDROCK_MAX_W, BEDROCK_MAX_H, build, bedrockMarker, slotMarker, bedrockSlots, hexToRgb, defaultCursorPng, menuYaml, serverFormJson, bedrockMotion };
+    GS.Export = { PACK_HOSTS, bedrockScale, BEDROCK_MAX_W, BEDROCK_MAX_H, build, bedrockMarker, slotMarker, bedrockSlots, hexToRgb, defaultCursorPng, menuYaml, bedrockUiFiles, serverFormJson, bedrockMotion };
 })();

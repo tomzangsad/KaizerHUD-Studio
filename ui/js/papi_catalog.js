@@ -381,6 +381,17 @@ VALUES <cooldown_key>: dodge, parry, block, weapon_crit, skill_crit, skill_<skil
 %auraskills_mability_[ability]_cost% | Mana ability cost
 VALUES [skill]: farming, foraging, mining, fishing, excavation, archery, defense, fighting, endurance, agility, alchemy, enchanting, sorcery, healing, forging
 
+## EcoSkills | built into EcoSkills
+%ecoskills_<skill>% | Skill level
+%ecoskills_<skill>_numeral% | Skill level (Roman numeral)
+%ecoskills_<skill>_xp% | Current skill XP
+%ecoskills_<skill>_xp_required% | XP required for next level
+%ecoskills_<skill>_percentage_progress% | Progress percentage to next level
+%ecoskills_average_skill_level% | Average level across all skills
+%ecoskills_total_skill_level% | Combined total skill level
+%ecoskills_<stat>% | Stat value (strength, wisdom, etc.)
+VALUES <skill>: mining, combat, farming, foraging, fishing, enchanting, alchemy, armory, exploration
+
 ## mcMMO | built into mcMMO
 %mcmmo_power_level% | Power level
 %mcmmo_power_level_cap% | Power level cap
@@ -427,6 +438,15 @@ VALUES <skillname>: mining, woodcutting, herbalism, excavation, fishing, unarmed
 %luckperms_group_expiry_time_<group name>% | Temp group time left
 %luckperms_current_group_on_track_<track>% | Current group on track
 %luckperms_next_group_on_track_<track>% | Next group on track
+
+## CoinsEngine | built into CoinsEngine
+%coinsengine_balance_<currency>% | Currency balance (formatted)
+%coinsengine_balance_short_<currency>% | Short balance (e.g. 1.2k)
+%coinsengine_balance_rounded_<currency>% | Rounded integer balance
+%coinsengine_balance_raw_<currency>% | Raw numeric balance
+%coinsengine_currency_name_<currency>% | Currency display name
+%coinsengine_currency_symbol_<currency>% | Currency symbol
+VALUES <currency>: coins, gems, tokens, crystals
 
 ## PlayerPoints / TokenManager / MobCoins | built into the plugins · LemonMobCoins: /papi ecloud download LemonMobCoins
 %playerpoints_points% | Points

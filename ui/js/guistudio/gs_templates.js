@@ -1220,6 +1220,37 @@
                     g.strokeStyle = 'rgba(170,130,255,.65)'; g.setLineDash([2, 2]);
                     g.strokeRect(e.x * scale + 0.5, e.y * scale + 0.5, e.w * scale - 1, e.h * scale - 1); g.setLineDash([]);
                 }
+            } else if (e.type === 'scroll_area') {
+                g.fillStyle = e.bgColor || 'rgba(12,17,27,0.85)';
+                g.fillRect(e.x * scale, e.y * scale, e.w * scale, e.h * scale);
+                g.strokeStyle = e.borderColor || '#334155';
+                g.setLineDash([3 * scale, 2 * scale]);
+                g.strokeRect(e.x * scale + 0.5, e.y * scale + 0.5, e.w * scale - 1, e.h * scale - 1);
+                g.setLineDash([]);
+            } else if (e.type === 'roulette') {
+                const rx = e.x * scale, ry = e.y * scale, rw = e.w * scale, rh = e.h * scale;
+                g.fillStyle = e.bgColor || '#0b0f18';
+                g.fillRect(rx, ry, rw, rh);
+                g.strokeStyle = e.borderColor || '#38bdf8';
+                g.strokeRect(rx + 0.5, ry + 0.5, rw - 1, rh - 1);
+                const rewards = Array.isArray(e.rewards) && e.rewards.length ? e.rewards : [{ color: '#38bdf8' }, { color: '#34d399' }, { color: '#a78bfa' }];
+                const sz = Math.min(Math.max(10, (e.slotSize || 44) * scale), Math.min(rw, rh) * 0.72);
+                const gap = Math.max(2, (e.slotGap || 6) * scale);
+                const count = e.spinStyle === 'slot_v' ? (e.reels || 3) : Math.min(5, Math.max(3, Math.floor((rw - gap) / (sz + gap))));
+                const totalW = count * sz + (count - 1) * gap;
+                const sx = rx + (rw - totalW) * 0.5, sy = ry + (rh - sz) * 0.5;
+                for (let ci = 0; ci < count; ci++) {
+                    const cx = sx + ci * (sz + gap), col = rewards[ci % rewards.length].color || '#38bdf8';
+                    g.fillStyle = '#131b2b';
+                    g.fillRect(cx, sy, sz, sz);
+                    g.fillStyle = col;
+                    g.fillRect(cx, sy, sz, Math.max(1.5, 2 * scale));
+                    g.strokeStyle = 'rgba(255,255,255,0.12)';
+                    g.strokeRect(cx + 0.5, sy + 0.5, sz - 1, sz - 1);
+                }
+                g.fillStyle = e.pointerColor || '#f43f5e';
+                if (e.spinStyle === 'slot_v') g.fillRect(rx, ry + rh * 0.5 - scale, rw, Math.max(1.5, 2 * scale));
+                else if (e.spinStyle !== 'flash' && e.spinStyle !== 'flip') g.fillRect(rx + rw * 0.5 - scale, ry, Math.max(1.5, 2 * scale), rh);
             } else if (e.type === 'input') {
                 g.fillStyle = e.bgColor || '#161b26';
                 g.fillRect(e.x * scale, e.y * scale, e.w * scale, e.h * scale);

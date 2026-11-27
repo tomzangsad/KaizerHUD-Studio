@@ -15,21 +15,53 @@ use tauri::{AppHandle, Emitter, State};
 const MAX_BODY_BYTES: usize = 32 * 1024 * 1024;
 const RECENT_LIMIT: usize = 25;
 
+const BUNDLED_MCP_FILES: &[(&str, &[u8])] = &[
+    ("package.json", include_bytes!("../../mcp-server/package.json")),
+    ("index.mjs", include_bytes!("../../mcp-server/index.mjs")),
+    ("art_engine.mjs", include_bytes!("../../mcp-server/art_engine.mjs")),
+    ("hud_bridge.mjs", include_bytes!("../../mcp-server/hud_bridge.mjs")),
+    ("live_client.mjs", include_bytes!("../../mcp-server/live_client.mjs")),
+    ("png_gen.mjs", include_bytes!("../../mcp-server/png_gen.mjs")),
+    ("storage.mjs", include_bytes!("../../mcp-server/storage.mjs")),
+    ("studio_bridge.mjs", include_bytes!("../../mcp-server/studio_bridge.mjs")),
+];
+
+pub fn format_mcp_path(path: &Path) -> String {
+    let raw = path.to_string_lossy();
+    let stripped = raw.strip_prefix(r"\\?\").unwrap_or(&raw);
+    stripped.replace('\\', "/")
+}
+
+pub fn ensure_bundled_mcp_server(data_dir: &Path) -> Result<PathBuf, String> {
+    let mcp_dir = data_dir.join("mcp-server");
+    fs::create_dir_all(&mcp_dir).map_err(|e| format!("Could not create mcp-server dir: {}", e))?;
+    for (name, bytes) in BUNDLED_MCP_FILES {
+        let dest = mcp_dir.join(name);
+        let up_to_date = fs::read(&dest).map(|cur| cur == *bytes).unwrap_or(false);
+        if !up_to_date {
+            fs::write(&dest, bytes).map_err(|e| format!("Could not write {}: {}", name, e))?;
+        }
+    }
+    Ok(mcp_dir.join("index.mjs"))
+}
+
 pub struct McpBridgeState {
     pub port: u16,
     pub token: String,
     pub bridge_file: PathBuf,
+    pub mcp_server_entry: PathBuf,
     active_workspace: Mutex<String>,
     pending: Mutex<HashMap<String, mpsc::Sender<Result<Value, String>>>>,
     recent_actions: Mutex<Vec<Value>>,
 }
 
 impl McpBridgeState {
-    fn new(port: u16, token: String, bridge_file: PathBuf) -> Self {
+    fn new(port: u16, token: String, bridge_file: PathBuf, mcp_server_entry: PathBuf) -> Self {
         Self {
             port,
             token,
             bridge_file,
+            mcp_server_entry,
             active_workspace: Mutex::new("hud".into()),
             pending: Mutex::new(HashMap::new()),
             recent_actions: Mutex::new(Vec::new()),
@@ -89,13 +121,14 @@ fn write_bridge_file(path: &Path, port: u16, token: &str) -> Result<(), String> 
 }
 
 pub fn start_bridge(app: AppHandle, data_dir: PathBuf) -> Result<Arc<McpBridgeState>, String> {
+    let mcp_server_entry = ensure_bundled_mcp_server(&data_dir)?;
     let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| format!("MCP bridge bind failed: {}", e))?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
     let token = random_hex_token();
     let bridge_file = data_dir.join("mcp_bridge.json");
     write_bridge_file(&bridge_file, port, &token)?;
 
-    let state = Arc::new(McpBridgeState::new(port, token, bridge_file));
+    let state = Arc::new(McpBridgeState::new(port, token, bridge_file, mcp_server_entry));
     let bg_state = Arc::clone(&state);
 
     std::thread::Builder::new()
@@ -388,11 +421,14 @@ pub fn mcp_bridge_info(state: State<Arc<McpBridgeState>>) -> Result<Value, Strin
         .lock()
         .map(|g| g.clone())
         .unwrap_or_default();
+    let mcp_dir = state.mcp_server_entry.parent().unwrap_or(&state.mcp_server_entry);
     Ok(json!({
         "port": state.port,
         "workspace": state.workspace(),
         "version": env!("CARGO_PKG_VERSION"),
         "bridgeFile": state.bridge_file.to_string_lossy(),
+        "mcpServerPath": format_mcp_path(&state.mcp_server_entry),
+        "mcpServerDir": format_mcp_path(mcp_dir),
         "recentActions": recent,
     }))
 }
@@ -414,7 +450,8 @@ mod tests {
         write_bridge_file(&bridge_file, port, &token).unwrap();
         assert!(bridge_file.exists());
 
-        let state = Arc::new(McpBridgeState::new(port, token.clone(), bridge_file.clone()));
+        let mcp_entry = dir.join("mcp-server").join("index.mjs");
+        let state = Arc::new(McpBridgeState::new(port, token.clone(), bridge_file.clone(), mcp_entry));
         let st_bg = Arc::clone(&state);
         std::thread::spawn(move || {
             for stream in listener.incoming().take(3) {
@@ -461,6 +498,35 @@ mod tests {
 
         state.cleanup_bridge();
         assert!(!bridge_file.exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn bundled_mcp_server_extracts_and_syncs() {
+        let dir = std::env::temp_dir().join(format!("kz_mcp_bundle_test_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let entry = ensure_bundled_mcp_server(&dir).unwrap();
+        assert!(entry.ends_with("index.mjs"));
+        let formatted = format_mcp_path(&entry);
+        assert!(!formatted.starts_with(r"\\?\"));
+        assert!(!formatted.contains('\\'));
+
+        let mcp_dir = dir.join("mcp-server");
+        for (name, bytes) in BUNDLED_MCP_FILES {
+            let file_path = mcp_dir.join(name);
+            assert!(file_path.exists(), "missing extracted file: {}", name);
+            assert_eq!(fs::read(&file_path).unwrap(), *bytes, "content mismatch for {}", name);
+        }
+
+        // Modify one extracted file and ensure sync restores it cleanly
+        let index_path = mcp_dir.join("index.mjs");
+        fs::write(&index_path, b"// corrupted").unwrap();
+        let entry2 = ensure_bundled_mcp_server(&dir).unwrap();
+        assert_eq!(entry2, entry);
+        assert_eq!(fs::read(&index_path).unwrap(), BUNDLED_MCP_FILES.iter().find(|(n, _)| *n == "index.mjs").unwrap().1);
+
         let _ = fs::remove_dir_all(&dir);
     }
 }

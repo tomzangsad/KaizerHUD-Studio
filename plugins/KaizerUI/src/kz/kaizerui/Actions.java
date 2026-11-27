@@ -47,6 +47,14 @@ public final class Actions {
         Bukkit.getPluginManager().callEvent(clickEvent);
         if (clickEvent.isCancelled()) return After.STAY;
 
+        if (el.isToggle()) {
+            boolean wasOn = plugin.getToggle(p, el);
+            boolean nowOn = !wasOn;
+            if (!el.toggleVar.isEmpty()) plugin.setToggle(p, el.toggleVar, nowOn);
+            List<String> combined = new ArrayList<>(el.actions);
+            combined.addAll(nowOn ? el.onActions : el.offActions);
+            return runList(plugin, p, menu, combined, bedrock, el.closeOnClick);
+        }
         return runList(plugin, p, menu, el.actions, bedrock, el.closeOnClick);
     }
 
@@ -72,7 +80,8 @@ public final class Actions {
                     MenuDef prev = prevId != null ? plugin.menu(prevId) : null;
                     if (prev != null) {
                         after = After.OPENED_OTHER;
-                        Sched.entityLater(plugin, p, 1, () -> plugin.open(p, prev, false));
+                        if (bedrock) Sched.entityLater(plugin, p, 1, () -> plugin.open(p, prev, false));
+                        else plugin.open(p, prev, false);
                     } else {
                         after = After.CLOSE;
                     }
@@ -81,14 +90,51 @@ public final class Actions {
                     MenuDef next = !menu.nextPage.isEmpty() ? plugin.menu(menu.nextPage) : null;
                     if (next != null) {
                         after = After.OPENED_OTHER;
-                        Sched.entityLater(plugin, p, 1, () -> plugin.open(p, next, false));
+                        if (bedrock) Sched.entityLater(plugin, p, 1, () -> plugin.open(p, next, false));
+                        else plugin.open(p, next, false);
                     }
                 }
                 case "prev" -> {
                     MenuDef prev = !menu.prevPage.isEmpty() ? plugin.menu(menu.prevPage) : null;
                     if (prev != null) {
                         after = After.OPENED_OTHER;
-                        Sched.entityLater(plugin, p, 1, () -> plugin.open(p, prev, false));
+                        if (bedrock) Sched.entityLater(plugin, p, 1, () -> plugin.open(p, prev, false));
+                        else plugin.open(p, prev, false);
+                    }
+                }
+                case "require" -> {
+                    int bar = arg.indexOf('|');
+                    String expr = (bar >= 0 ? arg.substring(0, bar) : arg).trim();
+                    String deny = bar >= 0 ? arg.substring(bar + 1).trim() : "&cYou do not meet the requirements.";
+                    if (!ConditionEval.evalExpr(plugin, p, expr)) {
+                        if (!deny.isEmpty()) p.sendMessage(Texts.component(plugin.resolveText(p, deny)));
+                        playSound(p, "minecraft:entity.villager.no;0.9;1.0");
+                        return After.STAY;
+                    }
+                }
+                case "points" -> {
+                    int pc = arg.indexOf(':');
+                    String mode = pc < 0 ? "take" : arg.substring(0, pc).trim().toLowerCase(java.util.Locale.ROOT);
+                    int amt = (int) Math.max(0, Math.round(parseAmt(plugin.resolveText(p, pc < 0 ? arg : arg.substring(pc + 1)), 0)));
+                    boolean ok = "give".equals(mode) ? CurrencyHook.givePoints(p, amt) : CurrencyHook.takePoints(p, amt);
+                    if (!ok) {
+                        econFail(p, CurrencyHook.hasPlayerPoints() ? "&cNot enough Points!" : "&cPlayerPoints plugin is not installed.");
+                        return After.STAY;
+                    }
+                }
+                case "currency" -> {
+                    String[] cp = arg.split(":", 3);
+                    if (cp.length < 3) {
+                        econFail(p, "&cInvalid currency action (expected currency:<id>:take|give:<amount>).");
+                        return After.STAY;
+                    }
+                    String cid = plugin.resolveText(p, cp[0]).trim();
+                    String mode = cp[1].trim().toLowerCase(java.util.Locale.ROOT);
+                    double amt = Math.max(0, parseAmt(plugin.resolveText(p, cp[2]), 0));
+                    boolean ok = "give".equals(mode) ? CurrencyHook.giveCurrency(p, cid, amt) : CurrencyHook.takeCurrency(p, cid, amt);
+                    if (!ok) {
+                        econFail(p, CurrencyHook.hasCoinsEngine() ? ("&cNot enough " + cid + "!") : "&cCoinsEngine plugin is not installed.");
+                        return After.STAY;
                     }
                 }
                 case "set" -> {
@@ -97,6 +143,18 @@ public final class Actions {
                         String k = arg.substring(0, eq).trim();
                         String v = plugin.resolveText(p, arg.substring(eq + 1).trim());
                         plugin.setSessionVar(p.getUniqueId(), k, v);
+                    }
+                }
+                case "toggle" -> {
+                    if (!arg.isEmpty()) {
+                        int tc = arg.indexOf(':');
+                        String tv = (tc < 0 ? arg : arg.substring(0, tc)).trim();
+                        if (!tv.isEmpty()) {
+                            String mode = tc < 0 ? "" : arg.substring(tc + 1).trim().toLowerCase(java.util.Locale.ROOT);
+                            if ("on".equals(mode) || "true".equals(mode)) plugin.setToggle(p, tv, true);
+                            else if ("off".equals(mode) || "false".equals(mode)) plugin.setToggle(p, tv, false);
+                            else plugin.flipToggle(p, tv, true);
+                        }
                     }
                 }
                 case "add" -> mutateNumericVar(plugin, p, arg, true);
@@ -149,7 +207,8 @@ public final class Actions {
                     if (next != null) {
                         plugin.pushHistory(p.getUniqueId(), menu.id);
                         after = After.OPENED_OTHER;
-                        Sched.entityLater(plugin, p, 1, () -> plugin.open(p, next, false));
+                        if (bedrock) Sched.entityLater(plugin, p, 1, () -> plugin.open(p, next, false));
+                        else plugin.open(p, next, false);
                     } else {
                         plugin.getLogger().warning("Menu " + menu.id + ": opens unknown menu '" + menuId + "'");
                     }
@@ -399,12 +458,17 @@ public final class Actions {
 
     /** "id", "id;volume", "id;volume;pitch" */
     public static void playSound(Player p, String spec) {
+        playSoundPitch(p, spec, 1f);
+    }
+
+    public static void playSoundPitch(Player p, String spec, float pitchMul) {
         if (spec == null || spec.isBlank()) return;
         String[] parts = spec.split(";");
         float vol = 1f, pitch = 1f;
         try { if (parts.length > 1) vol = Float.parseFloat(parts[1].trim()); } catch (NumberFormatException ignored) {}
         try { if (parts.length > 2) pitch = Float.parseFloat(parts[2].trim()); } catch (NumberFormatException ignored) {}
-        p.playSound(p.getLocation(), parts[0].trim(), vol, pitch);
+        float finalPitch = Math.max(0.5f, Math.min(2.0f, pitch * pitchMul));
+        p.playSound(p.getLocation(), parts[0].trim(), vol, finalPitch);
     }
 
     static void sendToServer(KaizerUIPlugin plugin, Player p, String server) {

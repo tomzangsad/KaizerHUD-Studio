@@ -76,6 +76,12 @@ final class JavaMenus implements Listener {
         if (s != null) s.close(reason);
     }
 
+    /** Temporarily hides the hologram so the player can type into chat without losing session vars. */
+    void pauseForInput(Player p) {
+        JavaSession s = sessions.remove(p.getUniqueId());
+        if (s != null) s.closeForInput();
+    }
+
     void closeAll() {
         for (JavaSession s : sessions.values()) {
             try { s.close(MenuCloseEvent.Reason.RELOAD); } catch (Throwable ignored) { /* shutting down */ }
@@ -186,10 +192,18 @@ final class JavaMenus implements Listener {
         if (s.locked) Sched.entityLater(plugin, e.getPlayer(), 1, () -> CameraHook.hideHands(e.getPlayer()));
     }
 
-    /** No inventories (other plugins' GUIs, the vehicle's) while a menu is open */
+    /** Block the invisible Horse mount's own inventory, while letting other plugins' GUIs close this menu and open cleanly */
     @EventHandler(priority = EventPriority.LOWEST)
     public void onInventory(InventoryOpenEvent e) {
-        if (e.getPlayer() instanceof Player p && isOpen(p)) e.setCancelled(true);
+        if (!(e.getPlayer() instanceof Player p)) return;
+        JavaSession s = session(p);
+        if (s == null) return;
+        if ((s.vehicle() != null && s.vehicle().equals(e.getInventory().getHolder()))
+                || e.getInventory().getHolder() instanceof org.bukkit.entity.AbstractHorse) {
+            e.setCancelled(true);
+            return;
+        }
+        close(p, MenuCloseEvent.Reason.API);
     }
 
     /* ───────────── close when the player leaves the spot ───────────── */

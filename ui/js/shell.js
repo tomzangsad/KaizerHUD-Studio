@@ -384,6 +384,7 @@
         'fullscreen': () => { if (appWindow) appWindow.toggleMaximize(); },
         'wiki': openHelp,
         'shortcuts': showShortcuts,
+        'mcp-connect': () => window.KZMcp && window.KZMcp.openConnectDialog(),
         'check-updates': () => window.KZUpdater && window.KZUpdater.checkManual(),
         'about': showAbout,
         'live-sync': () => { openDockPane('project'); click('btn-sync-choose'); },

@@ -64,25 +64,44 @@ function readCommitSection(tag) {
   }
 }
 
+function readPomVersion(relPath, fallback) {
+  try {
+    const xml = fs.readFileSync(path.join(REPO_ROOT, relPath), 'utf8');
+    const clean = xml.replace(/<parent>[\s\S]*?<\/parent>/gi, '').replace(/<dependencies>[\s\S]*?<\/dependencies>/gi, '');
+    const m = /<version>\s*([^<\s]+)\s*<\/version>/i.exec(clean);
+    return m ? m[1].trim() : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function buildBody() {
   const verMatch = /^v?(\d+\.\d+\.\d+)/.exec(TAG);
   const ver = verMatch ? verMatch[1] : '*';
+  const mbVer = readPomVersion('plugins/KaizerMultiBar/pom.xml', '2.2.0');
+  const uiVer = readPomVersion('plugins/KaizerUI/pom.xml', '1.2.0');
+  const dlBase = `https://github.com/${REPO}/releases/download/${encodeURIComponent(TAG)}`;
+
+  const setupFile = `KaizerHUD-Studio_${ver}_x64-setup.exe`;
+  const mbFile = `KaizerMultiBar-${mbVer}.jar`;
+  const uiFile = `KaizerUI-${uiVer}.jar`;
+  const portableFile = 'kz-kaizerhud-portable.exe';
 
   const table = [
     '> [!IMPORTANT]',
-    '> **Recommended Update (' + TAG + '):** Install this version using **`KaizerHUD-Studio_' + ver + '_x64-setup.exe`** (Windows Installer) so all future versions can be updated directly via the **In-App Auto-Updater**. Please also update **both** server plugins (**`KaizerMultiBar-2.2.0.jar`** & **`KaizerUI-1.1.0.jar`**) to stay in sync.',
-    '> **แนะนำให้อัปเดตเป็นเวอร์ชันนี้ (' + TAG + '):** แนะนำให้ติดตั้งผ่านไฟล์ตัวติดตั้ง **`KaizerHUD-Studio_' + ver + '_x64-setup.exe`** เพื่อให้สามารถอัปเดตเวอร์ชันถัดไปได้จากในตัวโปรแกรมโดยตรง และอย่าลืมอัปเดตปลั๊กอินเซิร์ฟเวอร์ **ทั้งสองตัว** (**`KaizerMultiBar-2.2.0.jar`** และ **`KaizerUI-1.1.0.jar`**) ให้ตรงกับเวอร์ชันนี้',
+    '> **Recommended Update (' + TAG + '):** Install this version using **`' + setupFile + '`** (Windows Installer) so future versions update automatically via the **In-App Auto-Updater**. Update server plugins (**`' + mbFile + '`** & **`' + uiFile + '`**) to stay in sync.',
+    '> **แนะนำให้อัปเดตเป็นเวอร์ชันนี้ (' + TAG + '):** ติดตั้งผ่าน **`' + setupFile + '`** เพื่อให้เวอร์ชันถัดไปกดอัปเดตในตัวโปรแกรมได้ทันที และอัปเดตปลั๊กอินเซิร์ฟเวอร์ (**`' + mbFile + '`** และ **`' + uiFile + '`**) ให้ตรงกันครับ',
     '',
-    '## What to Download / ไฟล์ไหนใช้ทำอะไร',
+    '## Downloads / ลำดับไฟล์ดาวน์โหลด',
     '',
-    '| File | English | ภาษาไทย |',
-    '|---|---|---|',
-    '| `KaizerHUD-Studio_' + ver + '_x64-setup.exe` | **Windows Installer** *(Recommended — enables one-click In-App Auto-Updater for future releases)* | **ตัวติดตั้ง Windows** *(แนะนำ — รองรับการอัปเดตเวอร์ชันถัดไปผ่านตัวโปรแกรมได้เลย)* |',
-    '| `kaizerhud-portable.exe` | **Portable Windows app** *(run directly without installing)* | **ตัวโปรแกรมแบบพกพา** *(เปิดใช้งานได้ทันที ไม่ต้องติดตั้ง)* |',
-    '| `KaizerMultiBar-2.2.0.jar` | **HUD Studio server plugin** *(update required for Title Multi-Bank; put in Paper/Purpur/Folia `plugins/`)* | **ปลั๊กอินสำหรับ HUD Studio** *(ต้องอัปเดต — ใส่ใน `plugins/` บน Paper/Purpur/Folia 1.21.x–26.x)* |',
-    '| `KaizerUI-1.1.0.jar` | **GUI Studio server plugin** *(updated for ' + ver + ' compatibility — optional if only using HUD Studio)* | **ปลั๊กอินสำหรับ GUI Studio** *(อัปเดตให้ตรงเวอร์ชัน ' + ver + ' — ลงเมื่อใช้เมนู GUI)* |',
+    '| # | File | English | ภาษาไทย |',
+    '|---|---|---|---|',
+    `| 1 | [\`${setupFile}\`](${dlBase}/${encodeURIComponent(setupFile)}) | **Windows Installer** *(Recommended — In-App Auto-Updater)* | **ตัวติดตั้ง Windows** *(แนะนำ — รองรับอัปเดตอัตโนมัติในแอป)* |`,
+    `| 2 | [\`${mbFile}\`](${dlBase}/${encodeURIComponent(mbFile)}) | **HUD Studio server plugin** *(Paper/Purpur/Folia \`plugins/\`)* | **ปลั๊กอินสำหรับ HUD Studio** *(ใส่ใน \`plugins/\`)* |`,
+    `| 3 | [\`${uiFile}\`](${dlBase}/${encodeURIComponent(uiFile)}) | **GUI Studio server plugin** *(updated for ${ver})* | **ปลั๊กอินสำหรับ GUI Studio** *(อัปเดตให้ตรงเวอร์ชัน ${ver})* |`,
+    `| 4 | [\`${portableFile}\`](${dlBase}/${encodeURIComponent(portableFile)}) | **Portable Windows app** *(run directly without installing)* | **ตัวโปรแกรมแบบพกพา** *(เปิดใช้ได้ทันที ไม่ต้องติดตั้ง)* |`,
     '',
-    '> **Note:** `Source code (zip)` and `Source code (tar.gz)` are for developers only — see [docs/DEVELOPMENT.md](https://github.com/' + REPO + '/blob/main/docs/DEVELOPMENT.md).',
+    '> **Other files (`latest.json`, `Source code`):** `latest.json` is used automatically by the In-App Auto-Updater, and `Source code (zip/tar.gz)` are for developers ([docs/DEVELOPMENT.md](https://github.com/' + REPO + '/blob/main/docs/DEVELOPMENT.md)).',
     '> **Docs / คู่มือ:** [User Guide (EN / TH)](https://github.com/' + REPO + '/blob/main/docs/USER_GUIDE.md) · [Plugin Setup (EN / TH)](https://github.com/' + REPO + '/blob/main/plugins/README.md) · [CHANGELOG](https://github.com/' + REPO + '/blob/main/CHANGELOG.md)',
     '',
     '---',

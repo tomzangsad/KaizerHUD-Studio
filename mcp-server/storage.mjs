@@ -24,6 +24,13 @@ export function resolveProjectsDir() {
   return path.join(xdg, APP_ID, 'gui_projects');
 }
 
+export function resolveCustomAssetsDir() {
+  if (process.env.KAIZER_CUSTOM_ASSETS_DIR) {
+    return path.resolve(process.env.KAIZER_CUSTOM_ASSETS_DIR);
+  }
+  return path.join(path.dirname(resolveProjectsDir()), 'custom_assets');
+}
+
 export function sanitizeName(name) {
   let out = String(name || '').trim().replace(/[<>:"/\\|?*]/g, '_').replace(/\.+$/, '');
   out = out.replace(/\s+/g, ' ').slice(0, 100);

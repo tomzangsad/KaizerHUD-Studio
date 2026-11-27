@@ -2,6 +2,26 @@
 
 > เริ่มไฟล์นี้ 2026-11-23 (ก่อนหน้านี้บันทึกอยู่ใน `HANDOFF.md` และ `docs/*.md`)
 
+## v1.0.5 (2026-11-27)
+
+### English
+- Update `KaizerUI-1.2.0.jar` to match `KaizerHUD Studio 1.0.5` (`KaizerMultiBar` remains `2.2.0`)
+- Overhauled GUI Studio no-code UX with Visual Action Builder, `{ }` Variable Picker, 3-Tab Properties (`General` / `Actions` / `Effects`), Smart Blocks generator (Shop cards, Menu cards, Qty steppers, Navbars), Layer Lock, and Smart Alignment Guides
+- Added 5 Crate Roulette (`roulette`) spin styles (`csgo`, `tease`, `slot_v` with 1–5 vertical casino reels, `flash` random reward shuffling across 3–9 cards, and `flip` multi-card mystery `?` pick & reveal) with auto-frame sizing and Bedrock in-place same-page spin animations
+- Added in-page Scrollable & 2D Pannable Viewport (`scroll_area` + `scrollGroup`) across Studio Preview, Java Holograms (mouse wheel + click-drag panning), and Bedrock JSON UI
+- Added optional built-in Vault Economy actions (`buy:`, `sell:`, `sellhand:`, `pay:`, `trade:`) alongside full external plugin command compatibility (`player:` / `console:`), parameterized links (`open:menu?k=v`), Interactive Input (`input`), and 3 bundled Complete Template Sets
+- Added Bedrock Live Player Armor rendering (`live_player_renderer`), dynamic Bedrock item textures (`slot:*`, `{item_id}`), and Custom Plugin Items & 3D Models (`ItemsAdder`, `Nexo`, `Oraxen`, `ModelEngine 4`, `BetterModel`)
+- Fixed Java hologram basis-vector mutation in multi-roulette menus, fixed Bedrock digit/symbol label stripping (`§` prefix) & `keep_ratio: false` on buttons, prevented duplicate tile filenames on export, and expanded the Unified MCP Server (HUD + GUI + Creative Art Engine + Live Bridge)
+
+### ภาษาไทย
+- อัปเดตปลั๊กอิน **`KaizerUI-1.2.0.jar`** ให้ตรงกับ **KaizerHUD Studio 1.0.5** (ส่วน `KaizerMultiBar` ยังเป็น `2.2.0`)
+- ยกเครื่อง UX ฝั่ง GUI Studio ให้ทำเมนูได้ง่ายโดยไม่ต้องเขียนโค้ด: เพิ่ม **Visual Action Builder**, ตัวเลือกตัวแปร `{ }`, แยก Properties เป็น **3 แท็บ** (`General` · `Actions` · `Effects`), ปุ่ม **Smart Blocks** สร้างการ์ดร้านค้า/การ์ดเมนู/ตัวบวกลบจำนวน/แถบนำทางในคลิกเดียว, ระบบล็อกเลเยอร์ (`🔒`) และเส้นแม่เหล็กจัดแนวอัจฉริยะ
+- เพิ่ม **Crate Roulette (`roulette`)** พร้อมลูกเล่นสุ่ม **5 รูปแบบ** (`csgo`, `tease`, `slot_v` เลือก 1–5 แถวแนวตั้งแบบคาสิโน, `flash` สุ่มไอเท็มทุกช่องระหว่างไฟวิ่ง 3–9 ช่อง, `flip` การ์ดคว่ำหน้า `?` 3–9 ใบสุ่มพลิกเปิดรางวัล) ปรับขนาดกรอบอัตโนมัติ และฝั่ง Bedrock หมุนอยู่บนหน้าเดิมโดยไม่สลับหน้า
+- เพิ่ม **Scrollable & 2D Map Viewport (`scroll_area` + `scrollGroup`)** เลื่อนสกอร์ล/ลากแผนที่ 2D ได้ทั้งใน Studio Preview, Java Hologram และ Bedrock JSON UI
+- เพิ่มระบบ **Vault Economy ในตัวแบบเลือกใช้ได้** (`buy:`, `sell:`, `sellhand:`, `pay:`, `trade:`) คู่กับการสั่งคำสั่งปลั๊กอินภายนอก (`player:`/`console:`), ลิงก์ส่งค่าพารามิเตอร์ (`open:menu?k=v`), ช่องกรอกค่า `input` และชุดเทมเพลตสมบูรณ์ 3 ชุดในโปรแกรม
+- รองรับ **เกราะผู้เล่นบน Bedrock (`live_player_renderer`)**, ไอเทมแบบ dynamic (`slot:*`, `{item_id}`), ไอเทม/โมเดล 3D จาก `ItemsAdder`, `Nexo`, `Oraxen`, `ModelEngine 4`, `BetterModel` และอัปเกรด **Unified MCP Server** ครบวงจร
+- แก้บั๊ก Java Hologram กองรวมกลางจอเมื่อมีหลาย Roulette, แก้ข้อความขึ้นต้นด้วยตัวเลข/สัญลักษณ์บน Bedrock หายและปุ่มโดนบีบครึ่ง, แก้ชื่อไฟล์ tile ซ้ำตอน Export และจัดตัวอักษรใน Studio Preview ให้อยู่กลางกรอบ
+
 ## v1.0.4 (2026-11-26)
 
 ### English

@@ -168,9 +168,9 @@ function formatAssets(assets, releaseUrl) {
 
   const labelFor = (name) => {
     if (/-setup\.exe$/i.test(name)) return { rank: 1, label: 'Windows Installer (Recommended - In-App Auto-Updater)' };
-    if (/portable.*\.exe$/i.test(name)) return { rank: 2, label: 'Windows Portable' };
-    if (/^KaizerMultiBar-.*\.jar$/i.test(name)) return { rank: 3, label: 'HUD Plugin (Update Required)' };
-    if (/^KaizerUI-.*\.jar$/i.test(name)) return { rank: 4, label: 'GUI Plugin (Update Recommended)' };
+    if (/^KaizerMultiBar-.*\.jar$/i.test(name)) return { rank: 2, label: 'HUD Plugin' };
+    if (/^KaizerUI-.*\.jar$/i.test(name)) return { rank: 3, label: 'GUI Plugin (Update Required)' };
+    if (/portable.*\.exe$/i.test(name)) return { rank: 4, label: 'Windows Portable' };
     return { rank: 5, label: '' };
   };
 

@@ -88,8 +88,12 @@
         selected: null,          // element id
         zoom: 2,
         snap: false,
+        propTab: 'general',
         previewMode: false,
         previewHistory: [],
+        previewVars: {},
+        previewScroll: {},
+        previewSpins: {},
         platform: 'java',
         clipboard: null,
         onChange: null,          // set by shell: marks the document dirty
@@ -99,6 +103,15 @@
             this.history.clear();
             this.menuIndex = 0;
             this.selected = null;
+            this.previewVars = {};
+            if (GS.CustomAssets && !this._caHooked) {
+                this._caHooked = true;
+                GS.CustomAssets.onUpdate(() => {
+                    if (this._caTimer) return;
+                    this._caTimer = setTimeout(() => { this._caTimer = 0; this.renderCanvas(); }, 80);
+                });
+                GS.CustomAssets.ensureLoaded();
+            }
             this.bindCanvas();
             this.renderAll();
             requestAnimationFrame(() => this.zoomFit());
@@ -109,8 +122,52 @@
             this.history.clear();
             this.menuIndex = 0;
             this.selected = null;
+            this.previewVars = {};
             this.renderAll();
             this.zoomFit();
+        },
+
+        resolvePreviewVars(text, varsOverride) {
+            let s = samplePapi(text);
+            if (!s.includes('{')) return s;
+            const vars = Object.create(null);
+            (this.project && this.project.menus || []).forEach(mm => {
+                (mm.elements || []).forEach(el => {
+                    if (el.type === 'input' && el.varName && !(el.varName in vars)) {
+                        vars[el.varName] = el.defaultValue == null ? '1' : String(el.defaultValue);
+                    }
+                });
+            });
+            Object.entries(this.previewVars || {}).forEach(([k, v]) => { vars[k] = String(v); });
+            if (varsOverride) Object.entries(varsOverride).forEach(([k, v]) => { vars[k] = String(v); });
+            const fmtNum = (n) => Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100);
+            const lookup = (tok) => {
+                if (tok in vars) return vars[tok];
+                if (/^-?\d+(\.\d+)?$/.test(tok)) return tok;
+                return null;
+            };
+            for (let pass = 0; pass < 2; pass++) {
+                s = s.replace(/\{([^{}]+)\}/g, (full, expr) => {
+                    const t = expr.trim();
+                    const direct = lookup(t);
+                    if (direct != null) return direct;
+                    const m = /^([A-Za-z0-9_.\-]+)\s*([+\-*/])\s*([A-Za-z0-9_.\-]+)$/.exec(t);
+                    if (m) {
+                        const la = lookup(m[1]), lb = lookup(m[3]);
+                        if (la != null && lb != null) {
+                            const a = Number(la), b = Number(lb);
+                            if (Number.isFinite(a) && Number.isFinite(b)) {
+                                if (m[2] === '+') return fmtNum(a + b);
+                                if (m[2] === '-') return fmtNum(a - b);
+                                if (m[2] === '*') return fmtNum(a * b);
+                                if (m[2] === '/') return b === 0 ? '0' : fmtNum(a / b);
+                            }
+                        }
+                    }
+                    return full;
+                });
+            }
+            return s;
         },
 
         menu() { return this.project.menus[Math.min(this.menuIndex, this.project.menus.length - 1)]; },
@@ -185,6 +242,354 @@
             return im ? im.data : null;
         },
 
+        scrollOffset(areaId) {
+            const o = (this.previewScroll && this.previewScroll[areaId]) || null;
+            return o ? { x: Number(o.x) || 0, y: Number(o.y) || 0 } : { x: 0, y: 0 };
+        },
+        scrollAreaOf(e) {
+            if (!e || !e.scrollGroup) return null;
+            return this.menu().elements.find(a => a.id === e.scrollGroup && a.type === 'scroll_area' && !a.hidden) || null;
+        },
+        effectivePos(e) {
+            const area = this.scrollAreaOf(e);
+            if (!area) return { x: e.x, y: e.y, area: null };
+            const off = this.scrollOffset(area.id);
+            return { x: e.x - off.x, y: e.y - off.y, area, off };
+        },
+        fitRouletteFrame(e) {
+            if (!e || e.type !== 'roulette') return;
+            const m = this.menu();
+            const style = ['csgo', 'tease', 'slot_v', 'flash', 'flip'].includes(e.spinStyle) ? e.spinStyle : 'csgo';
+            const slot = Math.max(16, M.int(e.slotSize, 44));
+            const gap = Math.max(0, M.int(e.slotGap, 6));
+            const reels = M.clamp(M.int(e.reels, 3), 1, 5);
+            const cards = M.clamp(M.int(e.cardCount, 5), 3, 9);
+            let targetW, targetH;
+            if (style === 'slot_v') {
+                targetW = reels * slot + (reels - 1) * gap + 20;
+                targetH = slot * 3 + gap * 2 + 16;
+            } else if (style === 'flash' || style === 'flip') {
+                const rows = cards >= 6 ? 2 : 1;
+                const cols = Math.ceil(cards / rows);
+                targetW = cols * slot + (cols - 1) * gap + 24;
+                targetH = rows * slot + (rows - 1) * gap + 24;
+            } else {
+                targetW = slot * 5 + gap * 4 + 16;
+                targetH = slot + 14;
+            }
+            const maxW = Math.max(48, m.width - 12);
+            const maxH = Math.max(36, m.height - 12);
+            const w = M.clamp(Math.round(targetW), 48, maxW);
+            const h = M.clamp(Math.round(targetH), 36, maxH);
+            const cx = e.x + e.w / 2;
+            const cy = e.y + e.h / 2;
+            e.w = w;
+            e.h = h;
+            e.x = M.clamp(Math.round(cx - w / 2), 0, Math.max(0, m.width - w));
+            e.y = M.clamp(Math.round(cy - h / 2), 0, Math.max(0, m.height - h));
+        },
+        rouletteGridLayout(e, count, slotW, gap) {
+            const rows = count >= 6 ? 2 : 1;
+            const colsTop = Math.ceil(count / rows);
+            const availW = Math.max(24, e.w - 16);
+            const availH = Math.max(24, e.h - 14);
+            const maxCardW = Math.floor((availW - (colsTop - 1) * gap) / colsTop);
+            const maxCardH = Math.floor((availH - (rows - 1) * gap) / rows);
+            const size = Math.max(14, Math.min(slotW, maxCardW, maxCardH));
+            const totalH = rows * size + (rows - 1) * gap;
+            const startY = (e.h - totalH) * 0.5;
+            const boxes = [];
+            for (let idx = 0; idx < count; idx++) {
+                const row = idx < colsTop ? 0 : 1;
+                const rowCols = row === 0 ? colsTop : (count - colsTop);
+                const col = row === 0 ? idx : (idx - colsTop);
+                const rowW = rowCols * size + (rowCols - 1) * gap;
+                const startX = (e.w - rowW) * 0.5;
+                boxes.push({
+                    x: Math.round(startX + col * (size + gap)),
+                    y: Math.round(startY + row * (size + gap)),
+                    size
+                });
+            }
+            return boxes;
+        },
+        renderRoulette(d, e) {
+            d.innerHTML = '';
+            d.style.background = e.bgColor || '#0d111a';
+            d.style.border = `1px solid ${e.borderColor || '#e5a43a'}`;
+            const rewards = Array.isArray(e.rewards) && e.rewards.length ? e.rewards : [{ name: 'Prize', item: 'minecraft:diamond', color: '#3b82f6' }];
+            const style = ['csgo', 'tease', 'slot_v', 'flash', 'flip'].includes(e.spinStyle) ? e.spinStyle : 'csgo';
+            const slotW = Math.max(16, M.int(e.slotSize, 44));
+            const gap = Math.max(0, M.int(e.slotGap, 6));
+            const step = slotW + gap;
+            const reels = M.clamp(M.int(e.reels, 3), 1, 5);
+            const cardCount = M.clamp(M.int(e.cardCount, 5), 3, 9);
+            const track = document.createElement('div');
+            track.className = 'gs-roulette-track';
+            const spinState = this.previewMode && this.previewSpins && this.previewSpins[e.id];
+            const makeCardDom = (rw) => {
+                const card = document.createElement('div');
+                card.className = 'gs-roulette-card';
+                card.innerHTML = `<i style="background:${esc(rw.color || '#3b82f6')}"></i>`;
+                const u = GS.Items && GS.Items.url(rw.item);
+                if (u) {
+                    const im = document.createElement('img');
+                    im.src = u;
+                    card.appendChild(im);
+                }
+                const sp = document.createElement('span');
+                sp.textContent = String(rw.name || rw.item || '').replace(/^minecraft:/, '');
+                card.appendChild(sp);
+                return card;
+            };
+            const makeMysteryCardDom = () => {
+                const card = document.createElement('div');
+                card.className = 'gs-roulette-card mystery';
+                card.innerHTML = `<i style="background:${esc(e.borderColor || '#e5a43a')}"></i><div class="gs-roulette-q">?</div>`;
+                return card;
+            };
+
+            if (style === 'flash') {
+                const boxes = this.rouletteGridLayout(e, cardCount, slotW, gap);
+                const board = (spinState && Array.isArray(spinState.board) && spinState.board.length === cardCount)
+                    ? spinState.board
+                    : Array.from({ length: cardCount }, (_, i) => rewards[i % rewards.length]);
+                boxes.forEach((b, idx) => {
+                    const card = makeCardDom(board[idx]);
+                    const lit = spinState ? (spinState.litIdx === idx) : (idx === 0);
+                    if (spinState) card.classList.add(lit ? 'lit' : 'dim');
+                    Object.assign(card.style, {
+                        left: b.x + 'px',
+                        top: b.y + 'px',
+                        width: b.size + 'px',
+                        height: b.size + 'px',
+                        transform: lit ? 'scale(1.08)' : (spinState ? 'scale(0.95)' : 'scale(1)')
+                    });
+                    track.appendChild(card);
+                });
+                d.appendChild(track);
+            } else if (style === 'flip') {
+                const boxes = this.rouletteGridLayout(e, cardCount, slotW, gap);
+                boxes.forEach((b, idx) => {
+                    const cState = spinState && spinState.cards && spinState.cards[idx];
+                    const revealed = !!(cState && cState.revealed);
+                    const rw = (cState && cState.rw) || rewards[idx % rewards.length];
+                    const card = revealed ? makeCardDom(rw) : makeMysteryCardDom();
+                    const sx = cState && cState.scaleX != null ? cState.scaleX : 1;
+                    const lit = !!(cState && cState.lit);
+                    const dim = !!(cState && cState.dim);
+                    if (lit) card.classList.add('lit');
+                    else if (dim) card.classList.add('dim');
+                    const sy = (lit && revealed) ? 1.08 : 1;
+                    const scaleXVal = (lit && revealed) ? sx * 1.08 : sx;
+                    Object.assign(card.style, {
+                        left: b.x + 'px',
+                        top: b.y + 'px',
+                        width: b.size + 'px',
+                        height: b.size + 'px',
+                        transform: `scale(${scaleXVal.toFixed(3)}, ${sy.toFixed(3)})`
+                    });
+                    track.appendChild(card);
+                });
+                d.appendChild(track);
+            } else if (style === 'slot_v') {
+                const availW = Math.max(20, e.w - 12 - (reels - 1) * gap);
+                const colW = availW / reels;
+                const cardW = Math.max(14, Math.min(slotW, Math.floor(colW)));
+                const cardH = Math.max(14, Math.min(slotW, Math.floor((e.h - 8) * 0.52)));
+                const stepV = cardH + gap;
+                const totalW = reels * cardW + (reels - 1) * gap;
+                const startX = (e.w - totalW) * 0.5;
+                const baseOffY = (e.h - cardH) * 0.5 - 2 * stepV;
+                for (let r = 0; r < reels; r++) {
+                    const lx = Math.round(startX + r * (cardW + gap));
+                    if (r > 0) {
+                        const sep = document.createElement('div');
+                        sep.className = 'gs-roulette-reel-sep';
+                        sep.style.left = Math.round(lx - gap * 0.5) + 'px';
+                        d.appendChild(sep);
+                    }
+                    const strip = (spinState && spinState.reelStrips && spinState.reelStrips[r])
+                        || Array.from({ length: 24 }, (_, idx) => rewards[(idx + r) % rewards.length]);
+                    const ty = (spinState && spinState.reelOffsets && spinState.reelOffsets[r] != null)
+                        ? spinState.reelOffsets[r]
+                        : baseOffY;
+                    strip.forEach((rw, idx) => {
+                        const cy = idx * stepV + ty;
+                        if (cy + cardH < -24 || cy > e.h + 24) return;
+                        const card = makeCardDom(rw);
+                        Object.assign(card.style, { left: lx + 'px', top: cy.toFixed(2) + 'px', width: cardW + 'px', height: cardH + 'px' });
+                        track.appendChild(card);
+                    });
+                }
+                d.appendChild(track);
+                const needle = document.createElement('div');
+                needle.className = 'gs-roulette-needle horiz';
+                needle.style.background = e.pointerColor || '#ff4d4f';
+                needle.style.color = e.pointerColor || '#ff4d4f';
+                d.appendChild(needle);
+            } else {
+                const strip = (spinState && spinState.strip) || Array.from({ length: 24 }, (_, idx) => rewards[idx % rewards.length]);
+                const baseOffset = (e.w - slotW) * 0.5 - 3 * step;
+                const tx = spinState ? spinState.offsetPx : baseOffset;
+                track.style.transform = `translate3d(${tx.toFixed(2)}px, 0, 0)`;
+                const cardH = Math.max(12, Math.min(e.h - 8, slotW));
+                strip.forEach((rw, idx) => {
+                    const cx = idx * step;
+                    if (cx + tx + slotW < -24 || cx + tx > e.w + 24) return;
+                    const card = makeCardDom(rw);
+                    Object.assign(card.style, {
+                        left: cx + 'px',
+                        top: Math.round((e.h - cardH) * 0.5) + 'px',
+                        width: slotW + 'px',
+                        height: cardH + 'px'
+                    });
+                    track.appendChild(card);
+                });
+                d.appendChild(track);
+                const needle = document.createElement('div');
+                needle.className = 'gs-roulette-needle';
+                needle.style.background = e.pointerColor || '#ff4d4f';
+                needle.style.color = e.pointerColor || '#ff4d4f';
+                d.appendChild(needle);
+            }
+            d.title = `${e.name || 'Crate Roulette'} (${style}) · ${rewards.length} rewards`;
+        },
+        startPreviewSpin(rouletteId) {
+            const m = this.menu();
+            const rEl = (rouletteId ? m.elements.find(x => x.id === rouletteId && x.type === 'roulette') : null)
+                || m.elements.find(x => x.type === 'roulette' && !x.hidden);
+            if (!rEl || !rEl.rewards || !rEl.rewards.length) {
+                GS.toast('No crate roulette configured in this menu', 'warn');
+                return;
+            }
+            const style = ['csgo', 'tease', 'slot_v', 'flash', 'flip'].includes(rEl.spinStyle) ? rEl.spinStyle : 'csgo';
+            const totalW = rEl.rewards.reduce((s, r) => s + Math.max(0.01, Number(r.weight) || 1), 0);
+            let roll = Math.random() * totalW, winIdx = 0;
+            for (let i = 0; i < rEl.rewards.length; i++) {
+                roll -= Math.max(0.01, Number(rEl.rewards[i].weight) || 1);
+                if (roll <= 0) { winIdx = i; break; }
+            }
+            const winner = rEl.rewards[winIdx];
+            const randRw = () => rEl.rewards[Math.floor(Math.random() * rEl.rewards.length)];
+            const WIN_SLOT = 34;
+            const strip = [];
+            for (let i = 0; i < 42; i++) strip.push(i === WIN_SLOT ? winner : randRw());
+
+            const slotW = Math.max(16, M.int(rEl.slotSize, 44));
+            const gap = Math.max(0, M.int(rEl.slotGap, 6));
+            const step = slotW + gap;
+            const reels = M.clamp(M.int(rEl.reels, 3), 1, 5);
+            const cardCount = M.clamp(M.int(rEl.cardCount, 5), 3, 9);
+            const slotCardH = Math.max(14, Math.min(slotW, Math.floor((rEl.h - 8) * 0.52)));
+            const stepV = slotCardH + gap;
+            const startX = (rEl.w - slotW) * 0.5 - 2 * step;
+            const targetX = (rEl.w - slotW) * 0.5 - WIN_SLOT * step + (Math.random() - 0.5) * slotW * 0.28;
+            const startY = (rEl.h - slotCardH) * 0.5 - 2 * stepV;
+            const targetY = (rEl.h - slotCardH) * 0.5 - WIN_SLOT * stepV;
+            const durMs = Math.max(800, M.num(rEl.durationSec, 4.2) * 1000);
+            const t0 = performance.now();
+
+            const reelStrips = Array.from({ length: reels }, () =>
+                Array.from({ length: 42 }, (_, i) => (i === WIN_SLOT ? winner : randRw()))
+            );
+            const reelEndPs = Array.from({ length: reels }, (_, r) =>
+                reels === 1 ? 1 : (0.58 + 0.42 * (r / (reels - 1)))
+            );
+
+            const pickSlot = Math.floor(Math.random() * cardCount);
+            const flashHops = Math.max(18, Math.round((durMs / 1000) * 7));
+            const flashStart = ((pickSlot - flashHops) % cardCount + cardCount) % cardCount;
+            let lastFlashHop = -1;
+
+            const flipHops = Math.max(12, Math.round((durMs / 1000) * 5));
+            const flipStart = ((pickSlot - flipHops) % cardCount + cardCount) % cardCount;
+            const flipFinalBoard = Array.from({ length: cardCount }, (_, i) => (i === pickSlot ? winner : randRw()));
+
+            const spinObj = this.previewSpins[rEl.id] = {
+                strip,
+                offsetPx: startX,
+                reelStrips,
+                reelOffsets: Array(reels).fill(startY),
+                board: Array.from({ length: cardCount }, (_, i) => rEl.rewards[i % rEl.rewards.length]),
+                litIdx: 0,
+                cards: Array.from({ length: cardCount }, () => ({ rw: winner, revealed: false, scaleX: 1, lit: false, dim: false })),
+                done: false,
+                running: true
+            };
+
+            const stepFrame = (now) => {
+                if (!this.previewMode || this.previewSpins[rEl.id] !== spinObj) return;
+                const p = Math.min(1, (now - t0) / durMs);
+                if (style === 'flash') {
+                    const hop = Math.min(flashHops, Math.floor((1 - Math.pow(1 - p, 2.5)) * (flashHops + 0.99)));
+                    if (hop !== lastFlashHop || p >= 1) {
+                        lastFlashHop = hop;
+                        spinObj.board = Array.from({ length: cardCount }, () => randRw());
+                        const active = (hop >= flashHops || p >= 1) ? pickSlot : (flashStart + hop) % cardCount;
+                        if (hop >= flashHops || p >= 1) spinObj.board[pickSlot] = winner;
+                        spinObj.litIdx = active;
+                    }
+                } else if (style === 'flip') {
+                    if (p < 0.68) {
+                        const sp = p / 0.68;
+                        const hop = Math.min(flipHops, Math.floor((1 - Math.pow(1 - sp, 2.4)) * (flipHops + 0.99)));
+                        const active = hop >= flipHops ? pickSlot : (flipStart + hop) % cardCount;
+                        spinObj.cards = spinObj.cards.map((_, i) => ({
+                            rw: flipFinalBoard[i],
+                            revealed: false,
+                            scaleX: 1,
+                            lit: i === active,
+                            dim: i !== active
+                        }));
+                    } else if (p < 0.86) {
+                        const fp = (p - 0.68) / 0.18;
+                        const sx = Math.max(0.06, Math.abs(Math.cos(fp * Math.PI)));
+                        spinObj.cards = spinObj.cards.map((_, i) => i === pickSlot
+                            ? { rw: winner, revealed: fp >= 0.5, scaleX: sx, lit: true, dim: false }
+                            : { rw: flipFinalBoard[i], revealed: false, scaleX: 1, lit: false, dim: true }
+                        );
+                    } else {
+                        const fp2 = Math.min(1, (p - 0.86) / 0.14);
+                        const sx2 = Math.max(0.06, Math.abs(Math.cos(fp2 * Math.PI)));
+                        spinObj.cards = spinObj.cards.map((_, i) => i === pickSlot
+                            ? { rw: winner, revealed: true, scaleX: 1, lit: true, dim: false }
+                            : { rw: flipFinalBoard[i], revealed: fp2 >= 0.5, scaleX: p >= 1 ? 1 : sx2, lit: false, dim: true }
+                        );
+                    }
+                } else if (style === 'slot_v') {
+                    for (let r = 0; r < reels; r++) {
+                        const rp = Math.min(1, p / reelEndPs[r]);
+                        const ease = 1 - Math.pow(1 - rp, 4);
+                        spinObj.reelOffsets[r] = startY + (targetY - startY) * ease;
+                    }
+                } else {
+                    let ease;
+                    if (style === 'tease') {
+                        const pm1 = p - 1, c1 = 1.85, c3 = c1 + 1;
+                        ease = 1 + c3 * pm1 * pm1 * pm1 + c1 * pm1 * pm1;
+                    } else {
+                        ease = 1 - Math.pow(1 - p, 4);
+                    }
+                    spinObj.offsetPx = startX + (targetX - startX) * ease;
+                }
+                const dom = document.querySelector(`#gs-elements .gs-el[data-id="${rEl.id}"]`);
+                if (dom) this.renderRoulette(dom, rEl);
+                if (p < 1) {
+                    requestAnimationFrame(stepFrame);
+                } else {
+                    spinObj.running = false;
+                    spinObj.done = true;
+                    this.previewVars.reward_name = winner.name;
+                    this.previewVars.reward_item = winner.item;
+                    this.previewVars.reward_id = winner.id;
+                    GS.toast(`Won: ${winner.name}!`, 'ok');
+                    this.renderCanvas();
+                }
+            };
+            requestAnimationFrame(stepFrame);
+        },
+
         renderCanvas() {
             const m = this.menu();
             const screen = $('#gs-screen');
@@ -206,10 +611,44 @@
             m.elements.forEach((e, i) => {
                 if (e.hidden) return;
                 const d = document.createElement('div');
-                d.className = `gs-el gs-${e.type}` + (selIds.includes(e.id) && !this.previewMode ? ' selected' : '');
+                d.className = `gs-el gs-${e.type}` + (selIds.includes(e.id) && !this.previewMode ? ' selected' : '') + (e.locked && !this.previewMode ? ' locked' : '');
                 // layer order stays as in the Layers list even when selected (the frame is drawn on top separately)
                 d.dataset.id = e.id;
-                Object.assign(d.style, { left: e.x + 'px', top: e.y + 'px', width: e.w + 'px', height: e.h + 'px', zIndex: i + 1 });
+                const eff = this.effectivePos(e);
+                Object.assign(d.style, { left: eff.x + 'px', top: eff.y + 'px', width: e.w + 'px', height: e.h + 'px', zIndex: i + 1 });
+                if (eff.area) {
+                    const topC = Math.max(0, eff.area.y - eff.y);
+                    const leftC = Math.max(0, eff.area.x - eff.x);
+                    const botC = Math.max(0, (eff.y + e.h) - (eff.area.y + eff.area.h));
+                    const rightC = Math.max(0, (eff.x + e.w) - (eff.area.x + eff.area.w));
+                    if (topC + botC >= e.h || leftC + rightC >= e.w) {
+                        if (this.previewMode) d.style.display = 'none';
+                        else d.style.opacity = '0.28';
+                    } else if (topC > 0 || leftC > 0 || botC > 0 || rightC > 0) {
+                        d.style.clipPath = `inset(${topC}px ${rightC}px ${botC}px ${leftC}px)`;
+                    }
+                }
+                if (e.type === 'roulette') this.renderRoulette(d, e);
+                if (e.type === 'scroll_area') {
+                    d.style.background = e.bgColor || '#0e131f';
+                    d.style.borderColor = e.borderColor || '#3a8ee6';
+                    const b = document.createElement('span');
+                    b.className = 'gs-scroll-badge';
+                    b.textContent = e.scrollMode === 'vertical' ? 'SCROLL V' : e.scrollMode === 'horizontal' ? 'SCROLL H' : 'PAN 2D';
+                    d.appendChild(b);
+                    if (e.showScrollbar !== false && e.scrollMode !== 'horizontal') {
+                        const bar = document.createElement('span');
+                        bar.className = 'gs-scroll-bar';
+                        const thumb = document.createElement('b');
+                        const maxY = Math.max(1, (e.contentH || e.h) - e.h);
+                        const ratio = Math.min(1, e.h / Math.max(e.h, e.contentH || e.h));
+                        const sy = this.scrollOffset(e.id).y / maxY;
+                        thumb.style.height = Math.max(12, ratio * 100) + '%';
+                        thumb.style.top = (sy * (100 - Math.max(12, ratio * 100))) + '%';
+                        bar.appendChild(thumb);
+                        d.appendChild(bar);
+                    }
+                }
                 if (e.type === 'image' || e.type === 'button') {
                     if ((e.detail || 1) > 1) d.classList.add('smooth');
                     const url = this.liveArt(e) || this.imageUrl(e.image);
@@ -223,21 +662,70 @@
                     const lab = document.createElement('span');
                     lab.className = 'gs-label' + (e.labelShadow !== false ? ' shadow' : '');
                     lab.style.fontSize = (8 * M.num(e.labelScale, 1)) + 'px';
-                    lab.innerHTML = mcToHtml(samplePapi(e.label), e.labelColor || '#ffffff');
+                    lab.innerHTML = mcToHtml(this.resolvePreviewVars(e.label), e.labelColor || '#ffffff');
                     d.appendChild(lab);
                 }
                 if (e.type === 'item') {
-                    const url = GS.Items && GS.Items.url(e.item);
+                    const resolvedItem = this.resolvePreviewVars(e.item);
+                    const url = GS.Items && GS.Items.url(resolvedItem);
                     if (url) d.style.backgroundImage = `url("${url}")`;
                     else {
                         d.classList.add('no-item');
                         const t = document.createElement('span');
                         t.className = 'gs-item-id';
-                        t.textContent = GS.Items && GS.Items.isSlot(e.item) ? (GS.Items.SLOTS.find(x => x[0] === String(e.item).trim().toLowerCase()) || [0, e.item])[1] : String(e.item || 'no item').replace(/^minecraft:/, '');
+                        t.textContent = GS.Items && GS.Items.isSlot(resolvedItem) ? (GS.Items.SLOTS.find(x => x[0] === String(resolvedItem).trim().toLowerCase()) || [0, resolvedItem])[1] : String(resolvedItem || 'no item').replace(/^minecraft:/, '');
                         d.appendChild(t);
                     }
                     if (e.glint) d.classList.add('glint');
-                    d.title = `${e.item}${e.look === '3d' ? ' · 3D' : ''}${e.spin ? ' · spinning' : ''}`;
+                    d.title = `${resolvedItem}${e.look === '3d' ? ' · 3D' : ''}${e.spin ? ' · spinning' : ''}`;
+                }
+                if (e.type === 'custom_model') {
+                    const mid = this.resolvePreviewVars(e.modelId);
+                    const icon = GS.CustomAssets && GS.CustomAssets.iconUrl(mid);
+                    const hasModelData = GS.CustomAssets && GS.CustomAssets.findItem(mid);
+                    if (hasModelData && hasModelData.hasModel && GS.BbModel) {
+                        const cv = document.createElement('canvas');
+                        cv.className = 'gs-cmodel-cv';
+                        const k = Math.max(4, Math.min(10, Math.round(320 / Math.max(e.w, e.h))));
+                        cv.width = Math.max(32, Math.round(e.w * k));
+                        cv.height = Math.max(32, Math.round(e.h * k));
+                        d.appendChild(cv);
+                        GS.CustomAssets.getModel(mid).then(mod => {
+                            if (mod && d.isConnected) {
+                                GS.BbModel.drawToCanvas(mod, cv, { angle: M.num(e.angle, 20) });
+                            } else if (icon && d.isConnected) {
+                                d.style.backgroundImage = `url("${icon}")`;
+                            }
+                        });
+                    } else if (icon) {
+                        d.style.backgroundImage = `url("${icon}")`;
+                    } else {
+                        d.classList.add('no-model');
+                        const t = document.createElement('span');
+                        t.className = 'gs-item-id';
+                        t.textContent = mid || 'meg:model';
+                        d.appendChild(t);
+                    }
+                    d.title = `${mid}${e.animation ? ' · ' + e.animation : ''}${e.spin ? ' · spinning' : ''}`;
+                }
+                if (e.type === 'input') {
+                    const bg = e.bgColor || '#161b26';
+                    const br = e.borderColor || '#52a0f0';
+                    d.style.background = bg;
+                    d.style.border = `1px solid ${br}`;
+                    const curVal = (e.varName && e.varName in this.previewVars) ? this.previewVars[e.varName] : (e.defaultValue == null ? '1' : String(e.defaultValue));
+                    const disp = `${e.prefix || ''}${curVal}${e.suffix || ''}`;
+                    const inner = document.createElement('span');
+                    inner.className = 'gs-input-inner' + (e.shadow !== false ? ' shadow' : '');
+                    inner.style.fontSize = (8 * M.num(e.scale, 1)) + 'px';
+                    inner.style.justifyContent = e.align === 'left' ? 'flex-start' : e.align === 'right' ? 'flex-end' : 'center';
+                    inner.innerHTML = mcToHtml(this.resolvePreviewVars(disp), e.textColor || '#ffffff');
+                    const ed = document.createElement('span');
+                    ed.className = 'gs-input-edit';
+                    ed.textContent = '✎';
+                    d.appendChild(inner);
+                    d.appendChild(ed);
+                    d.title = `Input: {${e.varName || 'qty'}} (${e.inputType || 'number'})`;
                 }
                 if (M.isPlayer(e)) {
                     // stand-in picture like the HUD's Player Head; Java draws the real skin,
@@ -262,7 +750,7 @@
                     t.className = 'gs-text-inner' + (e.shadow ? ' shadow' : '');
                     t.style.fontSize = (8 * M.num(e.scale, 1)) + 'px';
                     t.style.justifyContent = e.align === 'left' ? 'flex-start' : e.align === 'right' ? 'flex-end' : 'center';
-                    t.innerHTML = mcToHtml(samplePapi(e.text), e.color || '#ffffff');
+                    t.innerHTML = mcToHtml(this.resolvePreviewVars(e.text), e.color || '#ffffff');
                     d.appendChild(t);
                 }
                 wrap.appendChild(d);
@@ -274,9 +762,10 @@
                 // many selected: a thin frame on each, a dashed box around all (move them together)
                 this.selElements().forEach(e => {
                     if (e.hidden) return;
+                    const eff = this.effectivePos(e);
                     const f = document.createElement('div');
                     f.className = 'gs-selframe multi' + (e.id === this.selected ? ' main' : '');
-                    Object.assign(f.style, { left: e.x + 'px', top: e.y + 'px', width: e.w + 'px', height: e.h + 'px' });
+                    Object.assign(f.style, { left: eff.x + 'px', top: eff.y + 'px', width: e.w + 'px', height: e.h + 'px' });
                     wrap.appendChild(f);
                 });
                 const b = this.selBounds();
@@ -285,9 +774,10 @@
                 Object.assign(g.style, { left: b.x + 'px', top: b.y + 'px', width: b.w + 'px', height: b.h + 'px' });
                 wrap.appendChild(g);
             } else if (sel && !sel.hidden && !this.previewMode) {
+                const eff = this.effectivePos(sel);
                 const f = document.createElement('div');
                 f.className = 'gs-selframe';
-                Object.assign(f.style, { left: sel.x + 'px', top: sel.y + 'px', width: sel.w + 'px', height: sel.h + 'px' });
+                Object.assign(f.style, { left: eff.x + 'px', top: eff.y + 'px', width: sel.w + 'px', height: sel.h + 'px' });
                 ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].forEach(h => {
                     const k = document.createElement('i');
                     k.className = 'gs-handle h-' + h;
@@ -379,16 +869,24 @@
             const ul = $('#gs-page-list');
             const ids = new Set(this.project.menus.map(x => x.id));
             ul.innerHTML = this.project.menus.map((m, i) => {
-                const outs = [];
+                const counts = new Map();
                 m.elements.forEach(e => {
-                    if (e.type !== 'button' || e.hidden) return;
+                    if ((e.type !== 'button' && e.type !== 'input') || e.hidden) return;
                     (e.actions || []).forEach(a => {
                         const t = /^open:(.+)$/i.exec(String(a).trim());
                         if (t) {
-                            const tid = t[1].trim();
-                            outs.push(`<span class="gs-page-badge ${ids.has(tid) ? '' : 'warn'}" title="Opens ${esc(tid)}">→ ${esc(tid)}</span>`);
+                            const raw = t[1].trim();
+                            const qi = raw.indexOf('?');
+                            const tid = (qi >= 0 ? raw.slice(0, qi) : raw).trim();
+                            if (tid) counts.set(tid, (counts.get(tid) || 0) + 1);
                         }
                     });
+                });
+                const outs = [];
+                counts.forEach((cnt, tid) => {
+                    const isWarn = !ids.has(tid) && !/\{[^}]+\}/.test(tid);
+                    const tip = cnt > 1 ? `Opens ${tid} (${cnt} buttons)` : `Opens ${tid}`;
+                    outs.push(`<span class="gs-page-badge ${isWarn ? 'warn' : ''}" title="${esc(tip)}">→ ${esc(tid)}${cnt > 1 ? ` ×${cnt}` : ''}</span>`);
                 });
                 if (m.nextPage) outs.push(`<span class="gs-page-badge page" title="Next page">⇄ ${esc(m.nextPage)}</span>`);
                 return `<li class="${i === this.menuIndex ? 'active' : ''}" data-i="${i}">
@@ -402,13 +900,14 @@
         renderLayers() {
             const m = this.menu();
             const ul = $('#gs-layer-list');
-            const icon = { image: '#g-image', button: '#g-button', text: '#g-text', player_head: '#g-head', player_model: '#g-model', item: '#g-item' };
+            const icon = { image: '#g-image', button: '#g-button', text: '#g-text', player_head: '#g-head', player_model: '#g-model', item: '#g-item', custom_model: '#g-cmodel', input: '#g-input', roulette: '#g-roulette', scroll_area: '#g-scroll' };
             ul.innerHTML = m.elements.slice().reverse().map(e => `
                 <li class="${this.isSel(e.id) ? 'active' : ''} ${e.id === this.selected && this.isMulti() ? 'main' : ''} ${e.hidden ? 'is-hidden' : ''}" data-id="${esc(e.id)}">
                   <svg class="gs-layer-ico"><use href="${icon[e.type]}"/></svg>
                   <span class="gs-layer-name">${esc(e.name || e.id)}</span>
+                  <button class="icon-btn small gs-lock ${e.locked ? 'active' : ''}" data-lock="${esc(e.id)}" title="${e.locked ? 'Unlock layer' : 'Lock layer'}"><svg><use href="#g-${e.locked ? 'lock' : 'unlock'}"/></svg></button>
                   <button class="icon-btn small gs-eye" data-eye="${esc(e.id)}" title="Show / hide"><svg><use href="#g-eye"/></svg></button>
-                </li>`).join('') || '<li class="gs-empty">No elements yet — add an image, button or text from the left toolbar, or <button class="link-btn" data-cmd="templates">start from a template</button> (M).</li>';
+                </li>`).join('') || '<li class="gs-empty">No elements yet — add a Smart Block or element from the left toolbar, or <button class="link-btn" data-cmd="templates">start from a template</button> (M).</li>';
         },
 
         renderStatus() {
@@ -438,11 +937,15 @@
                 return `<div class="gs-field"><label for="${id}">${label}</label><select id="${id}" data-k="${key}">${opts.options.map(o => `<option value="${esc(o[0])}" ${String(value) === String(o[0]) ? 'selected' : ''}>${esc(o[1])}</option>`).join('')}</select></div>`;
             }
             if (type === 'textarea') {
-                return `<div class="gs-field wide"><label for="${id}">${label}</label><textarea id="${id}" data-k="${key}" rows="${opts.rows || 4}" spellcheck="false">${esc(value)}</textarea>${opts.hint ? `<div class="gs-hint">${opts.hint}</div>` : ''}</div>`;
+                const body = `<textarea id="${id}" data-k="${key}" rows="${opts.rows || 4}" spellcheck="false">${esc(value)}</textarea>`;
+                const ctrl = opts.varBtn ? `<div class="gs-varwrap">${body}<button type="button" class="ghost-btn small" data-var-field="${key}" title="Insert Variable">{ }</button></div>` : body;
+                return `<div class="gs-field wide"><label for="${id}">${label}</label>${ctrl}${opts.hint ? `<div class="gs-hint">${opts.hint}</div>` : ''}</div>`;
             }
             const attrs = type === 'number' ? `step="${opts.step || 1}" ${opts.min != null ? `min="${opts.min}"` : ''} ${opts.max != null ? `max="${opts.max}"` : ''}` : 'spellcheck="false"';
             const ph = opts.placeholder != null ? ` placeholder="${esc(opts.placeholder)}"` : '';
-            return `<div class="gs-field ${opts.wide ? 'wide' : ''}"><label for="${id}">${label}</label><input id="${id}" type="${type === 'color' ? 'color' : type}" data-k="${key}" value="${esc(value)}" ${attrs}${ph}/>${opts.hint ? `<div class="gs-hint">${opts.hint}</div>` : ''}</div>`;
+            const inp = `<input id="${id}" type="${type === 'color' ? 'color' : type}" data-k="${key}" value="${esc(value)}" ${attrs}${ph}/>`;
+            const ctrl = opts.varBtn ? `<div class="gs-varwrap">${inp}<button type="button" class="ghost-btn small" data-var-field="${key}" title="Insert Variable">{ }</button></div>` : inp;
+            return `<div class="gs-field ${opts.wide ? 'wide' : ''}"><label for="${id}">${label}</label>${ctrl}${opts.hint ? `<div class="gs-hint">${opts.hint}</div>` : ''}</div>`;
         },
 
         imagePicker(label, key, imageId) {
@@ -464,105 +967,197 @@
             if (this.propsMode === 'cursor') { box.innerHTML = this.cursorPropsHtml(); return; }
             if (!e) { box.innerHTML = this.menuPropsHtml(); return; }
             if (this.isMulti()) { box.innerHTML = this.multiPropsHtml(); return; }
-            let h = `<div class="gs-prop-title"><svg><use href="${{ image: '#g-image', button: '#g-button', text: '#g-text', player_head: '#g-head', player_model: '#g-model', item: '#g-item' }[e.type]}"/></svg>${{ image: 'Image', button: 'Button', text: 'Text', player_head: 'Player Head', player_model: 'Player Model', item: 'Item' }[e.type]}</div>`;
-            h += `<div class="gs-section">`;
-            h += this.field('Name', 'name', e.name, { wide: true });
-            h += `<div class="gs-grid4">${this.field('X', 'x', e.x, { type: 'number' })}${this.field('Y', 'y', e.y, { type: 'number' })}${this.field('W', 'w', e.w, { type: 'number', min: 1 })}${this.field('H', 'h', e.h, { type: 'number', min: 1 })}</div>`;
-            h += `</div>`;
-            if (e.type === 'image') {
-                h += `<div class="gs-section">${this.imagePicker('Picture', 'image', e.image)}
-                      ${this.detailField(e)}
-                      <button class="ghost-btn block" data-action="fit-image">Size to picture</button></div>`;
-            }
-            if (e.type === 'button') {
-                h += `<div class="gs-section"><div class="gs-sec-head">Look</div>
-                      ${this.imagePicker('Picture', 'image', e.image)}
-                      ${this.imagePicker('Hover picture', 'hoverImage', e.hoverImage)}
-                      ${this.detailField(e)}
-                      <button class="ghost-btn block" data-action="fit-image">Size to picture</button></div>`;
-                h += `<div class="gs-section"><div class="gs-sec-head">Label</div>
-                      ${this.field('Text', 'label', e.label, { wide: true, hint: '&amp; colour codes and %placeholders% work' })}
-                      <div class="gs-grid2">${this.field('Colour', 'labelColor', e.labelColor || '#ffffff', { type: 'color' })}${this.field('Size', 'labelScale', e.labelScale, { type: 'number', step: 0.25, min: 0.25 })}</div>
-                      ${this.field('Shadow', 'labelShadow', e.labelShadow !== false, { type: 'checkbox' })}</div>`;
-                const navCur = (e.actions || []).map(s => String(s).trim()).find(s => /^open:/.test(s) || s === 'back' || s === 'close' || s === 'next' || s === 'prev') || '';
-                const linkOpts = [
-                    ['', '(No page link)'],
-                    ['back', '← Back (previous menu)'],
-                    ['next', '▶ Next page'],
-                    ['prev', '◀ Previous page'],
-                    ['close', '✕ Close menu']
-                ].concat(this.project.menus.map(mm => ['open:' + mm.id, `Open: ${mm.title || mm.id} (${mm.id})`]));
-                const openTarget = /^open:(.+)$/.exec(navCur);
+            const hasAct = e.type === 'button' || e.type === 'input';
+            const tab = (!['general', 'actions', 'effects'].includes(this.propTab) || (this.propTab === 'actions' && !hasAct)) ? 'general' : this.propTab;
+            let h = `<div class="gs-prop-title"><svg><use href="${{ image: '#g-image', button: '#g-button', text: '#g-text', player_head: '#g-head', player_model: '#g-model', item: '#g-item', custom_model: '#g-cmodel', input: '#g-input', roulette: '#g-roulette', scroll_area: '#g-scroll' }[e.type]}"/></svg>${{ image: 'Image', button: 'Button', text: 'Text', player_head: 'Player Head', player_model: 'Player Model', item: 'Item', custom_model: '3D Model', input: 'Input Box', roulette: 'Crate Roulette', scroll_area: 'Scroll / Map Area' }[e.type]}</div>`;
+            h += `<div class="gs-prop-tabs">
+                <button type="button" class="gs-prop-tab ${tab === 'general' ? 'active' : ''}" data-prop-tab="general">General</button>
+                ${hasAct ? `<button type="button" class="gs-prop-tab ${tab === 'actions' ? 'active' : ''}" data-prop-tab="actions">Actions</button>` : ''}
+                <button type="button" class="gs-prop-tab ${tab === 'effects' ? 'active' : ''}" data-prop-tab="effects">Effects</button>
+            </div>`;
+
+            if (tab === 'general') {
+                h += `<div class="gs-section">`;
+                h += this.field('Name', 'name', e.name, { wide: true });
+                h += `<div class="gs-grid4">${this.field('X', 'x', e.x, { type: 'number' })}${this.field('Y', 'y', e.y, { type: 'number' })}${this.field('W', 'w', e.w, { type: 'number', min: 1 })}${this.field('H', 'h', e.h, { type: 'number', min: 1 })}</div>`;
+                h += this.field('Lock on canvas (prevent accidental drag)', 'locked', !!e.locked, { type: 'checkbox' });
+                h += `</div>`;
+                if (e.type === 'image') {
+                    h += `<div class="gs-section">${this.imagePicker('Picture', 'image', e.image)}
+                          <button class="ghost-btn block" data-action="fit-image">Size to picture</button></div>`;
+                }
+                if (e.type === 'button') {
+                    h += `<div class="gs-section"><div class="gs-sec-head">Look</div>
+                          ${this.imagePicker('Picture', 'image', e.image)}
+                          ${this.imagePicker('Hover picture', 'hoverImage', e.hoverImage)}
+                          <button class="ghost-btn block" data-action="fit-image">Size to picture</button></div>`;
+                    h += `<div class="gs-section"><div class="gs-sec-head">Label</div>
+                          ${this.field('Text', 'label', e.label, { wide: true, varBtn: true, hint: '&amp; colour codes and {variables} work' })}
+                          <div class="gs-grid2">${this.field('Colour', 'labelColor', e.labelColor || '#ffffff', { type: 'color' })}${this.field('Size', 'labelScale', e.labelScale, { type: 'number', step: 0.25, min: 0.25 })}</div>
+                          ${this.field('Shadow', 'labelShadow', e.labelShadow !== false, { type: 'checkbox' })}</div>`;
+                }
+                if (e.type === 'text') {
+                    h += `<div class="gs-section"><div class="gs-sec-head">Text</div>
+                          ${this.field('Text', 'text', e.text, { type: 'textarea', rows: 2, varBtn: true, hint: '&amp; colour codes, {variables}, and {qty*price} math work.' })}
+                          <div class="gs-grid2">${this.field('Colour', 'color', e.color || '#ffffff', { type: 'color' })}${this.field('Size', 'scale', e.scale, { type: 'number', step: 0.25, min: 0.25 })}</div>
+                          ${this.field('Align', 'align', e.align, { type: 'select', options: [['left', 'Left'], ['center', 'Center'], ['right', 'Right']] })}
+                          ${this.field('Shadow', 'shadow', !!e.shadow, { type: 'checkbox' })}</div>`;
+                }
+                if (M.isPlayer(e)) {
+                    h += `<div class="gs-section"><div class="gs-sec-head">Player</div>
+                          ${this.field('Whose skin', 'player', e.player, { wide: true, hint: '<code>%player_name%</code> = viewer.' })}
+                          ${this.field('Hat layer (Java)', 'hat', e.hat !== false, { type: 'checkbox' })}</div>`;
+                    if (e.type === 'player_model') {
+                        h += `<div class="gs-section"><div class="gs-sec-head">Java 3D model</div>
+                          ${this.field('Real 3D player (Mannequin)', 'java3d', e.java3d !== false, { type: 'checkbox' })}
+                          ${e.java3d !== false ? `
+                          ${this.field('Outfit', 'outfit', e.outfit || 'own', { type: 'select', options: [['own', 'What that player wears (armour + held items)'], ['none', 'No armour']] })}
+                          <div class="gs-grid2">${this.field('Pose', 'pose', e.pose || 'standing', { type: 'select', options: [['standing', 'Standing'], ['crouching', 'Crouching']] })}${this.field('Turn', 'turn', e.turn || 'none', { type: 'select', options: [['none', 'Still'], ['spin', 'Spin'], ['cursor', 'Look at the cursor'], ['mouse', 'Turn with the cursor'], ['drag', 'Drag to turn']] })}</div>
+                          <div class="gs-grid2">${this.field('Angle (°)', 'angle', e.angle || 0, { type: 'number', step: 5 })}${e.turn === 'spin' ? this.field('Spin (° / s)', 'spinSpeed', e.spinSpeed || 45, { type: 'number', step: 5, min: 1 }) : ''}</div>` : ''}</div>`;
+                    }
+                }
+                if (e.type === 'item') {
+                    h += `<div class="gs-section"><div class="gs-sec-head">Item</div>
+                          ${this.field('Item id (supports {var} & worn slot:)', 'item', e.item, { wide: true, hint: '<code>minecraft:diamond_sword</code> · <code>itemsadder:ns:id</code> · <code>nexo:id</code> · <code>slot:head..feet</code> · <code>{item_id}</code>' })}
+                          <div class="gs-row-actions">
+                            <button class="ghost-btn" data-action="pick-item"><svg><use href="#g-item"/></svg><span>Choose item…</span></button>
+                            <button class="ghost-btn" data-action="open-custom-assets"><span>Plugin Packs…</span></button>
+                          </div>
+                          <div class="gs-grid2">${this.field('Look (Java)', 'look', e.look || 'flat', { type: 'select', options: [['flat', 'Like inventory'], ['3d', '3D held item']] })}${this.field('Enchant glint', 'glint', !!e.glint, { type: 'checkbox' })}</div>
+                          ${this.field('Spin (Java)', 'spin', !!e.spin, { type: 'checkbox' })}</div>`;
+                }
+                if (e.type === 'custom_model') {
+                    h += `<div class="gs-section"><div class="gs-sec-head">3D Model (ModelEngine / BetterModel)</div>
+                          ${this.field('Model id (or {model_id})', 'modelId', e.modelId || '', { wide: true })}
+                          <div class="gs-row-actions">
+                            <button class="ghost-btn" data-action="pick-model"><svg><use href="#g-cmodel"/></svg><span>Choose 3D model…</span></button>
+                            <button class="ghost-btn" data-action="open-custom-assets"><span>Plugin Packs…</span></button>
+                          </div>
+                          ${this.field('Animation name', 'animation', e.animation || 'idle', { wide: true, placeholder: 'idle' })}
+                          <div class="gs-grid2">${this.field('Scale 3D', 'scale3d', e.scale3d || 1, { type: 'number', step: 0.1, min: 0.1, max: 10 })}${this.field('Angle (°)', 'angle', e.angle || 0, { type: 'number', step: 5 })}</div>
+                          <div class="gs-grid2">${this.field('Spin (Java)', 'spin', !!e.spin, { type: 'checkbox' })}${e.spin ? this.field('Spin (° / s)', 'spinSpeed', e.spinSpeed || 45, { type: 'number', step: 5, min: 1 }) : '<div></div>'}</div></div>`;
+                }
+                if (e.type === 'input') {
+                    h += `<div class="gs-section"><div class="gs-sec-head">Interactive Input (Java + Bedrock)</div>
+                          <div class="gs-grid2">${this.field('Variable name', 'varName', e.varName || 'qty', { placeholder: 'qty' })}${this.field('Input type', 'inputType', e.inputType || 'number', { type: 'select', options: [['number', 'Number'], ['slider', 'Slider'], ['text', 'Text']] })}</div>
+                          ${this.field('Default value', 'defaultValue', e.defaultValue == null ? '1' : e.defaultValue, { wide: true })}
+                          ${e.inputType !== 'text' ? `<div class="gs-grid3">${this.field('Min', 'min', e.min, { type: 'number', step: 1 })}${this.field('Max', 'max', e.max, { type: 'number', step: 1 })}${this.field('Step', 'step', e.step || 1, { type: 'number', step: 0.5, min: 0.01 })}</div>` : ''}
+                          <div class="gs-grid2">${this.field('Prefix', 'prefix', e.prefix || '')}${this.field('Suffix', 'suffix', e.suffix || '')}</div>
+                          ${this.field('Prompt title', 'promptTitle', e.promptTitle || '', { wide: true })}
+                          <div class="gs-grid3">${this.field('Text', 'textColor', e.textColor || '#ffffff', { type: 'color' })}${this.field('Background', 'bgColor', e.bgColor || '#161b26', { type: 'color' })}${this.field('Border', 'borderColor', e.borderColor || '#52a0f0', { type: 'color' })}</div>
+                          <div class="gs-grid2">${this.field('Text size', 'scale', e.scale || 1, { type: 'number', step: 0.25, min: 0.25 })}${this.field('Align', 'align', e.align || 'center', { type: 'select', options: [['left', 'Left'], ['center', 'Center'], ['right', 'Right']] })}</div></div>`;
+                }
+                if (e.type === 'roulette') {
+                    const rws = Array.isArray(e.rewards) ? e.rewards : [];
+                    const st = ['csgo', 'tease', 'slot_v', 'flash', 'flip'].includes(e.spinStyle) ? e.spinStyle : 'csgo';
+                    h += `<div class="gs-section"><div class="gs-sec-head">Crate Roulette Animation</div>
+                          ${this.field('Spin Style', 'spinStyle', st, { type: 'select', options: [
+                              ['csgo', 'CS:GO Tape — Classic Smooth Ease-Out'],
+                              ['tease', 'Near-Miss Tease — Overshoot & Pull Back'],
+                              ['slot_v', 'Slot Machine — Multi-Reel Vertical'],
+                              ['flash', 'Mystery Spotlight — Random Shuffle'],
+                              ['flip', 'Mystery Cards — Multi-Card Pick & Flip']
+                          ] })}
+                          ${st === 'slot_v' ? this.field('Slot Reels (Columns)', 'reels', M.clamp(M.int(e.reels, 3), 1, 5), { type: 'select', options: [
+                              ['1', '1 Reel (Single)'], ['2', '2 Reels'], ['3', '3 Reels (Classic Casino)'], ['4', '4 Reels'], ['5', '5 Reels']
+                          ] }) : ''}
+                          ${(st === 'flash' || st === 'flip') ? this.field('Card Count', 'cardCount', M.clamp(M.int(e.cardCount, 5), 3, 9), { type: 'select', options: [
+                              ['3', '3 Cards'], ['4', '4 Cards'], ['5', '5 Cards'], ['6', '6 Cards (2 rows)'], ['7', '7 Cards (2 rows)'], ['8', '8 Cards (2 rows)'], ['9', '9 Cards (2 rows)']
+                          ] }) : ''}
+                          <div class="gs-grid3">${this.field('Slot Size', 'slotSize', e.slotSize || 44, { type: 'number', min: 16, max: 128 })}${this.field('Gap (px)', 'slotGap', e.slotGap ?? 6, { type: 'number', min: 0, max: 32 })}${this.field('Duration (s)', 'durationSec', e.durationSec || 4.2, { type: 'number', step: 0.2, min: 1, max: 15 })}</div>
+                          <div class="gs-grid3">${this.field('Background', 'bgColor', e.bgColor || '#0d111a', { type: 'color' })}${this.field('Border', 'borderColor', e.borderColor || '#e5a43a', { type: 'color' })}${this.field('Needle', 'pointerColor', e.pointerColor || '#ff4d4f', { type: 'color' })}</div>
+                          <div class="gs-grid2">${this.field('Tick Sound', 'tickSound', e.tickSound || '')}${this.field('Win Sound', 'winSound', e.winSound || '')}</div>
+                          <div class="gs-row-actions">
+                            <button class="primary-btn small" data-action="test-spin"><svg><use href="#g-play"/></svg><span>Test Spin</span></button>
+                            <button class="ghost-btn small" data-action="fit-roulette" title="Resize frame to match selected spin style"><span>Fit Frame</span></button>
+                            <button class="ghost-btn small" data-action="add-spin-btn"><span>+ SPIN Button</span></button>
+                          </div></div>`;
+                    h += `<div class="gs-section"><div class="gs-sec-head gs-head-row"><span>Rewards Pool (${rws.length})</span><button class="ghost-btn small" data-action="add-reward"><span>+ Add Reward</span></button></div>`;
+                    rws.forEach((rw, idx) => {
+                        h += `<div class="gs-reward-row">
+                            <div class="gs-reward-head">
+                              <span style="width:10px;height:10px;border-radius:2px;background:${esc(rw.color || '#3b82f6')};display:inline-block"></span>
+                              <strong>#${idx + 1} ${esc(rw.name || 'Reward')}</strong>
+                              ${rws.length > 1 ? `<button class="icon-btn small danger" data-del-reward="${idx}" title="Remove reward"><svg><use href="#g-close"/></svg></button>` : ''}
+                            </div>
+                            <div class="gs-grid2">${this.field('Name', `reward.${idx}.name`, rw.name || '')}${this.field('Weight (%)', `reward.${idx}.weight`, rw.weight ?? 10, { type: 'number', step: 1, min: 0.01 })}</div>
+                            <div class="gs-grid2">${this.field('Item ID', `reward.${idx}.item`, rw.item || 'minecraft:diamond')}${this.field('Rarity', `reward.${idx}.color`, rw.color || '#3b82f6', { type: 'color' })}</div>
+                            <div class="gs-row-actions"><button class="ghost-btn small" data-pick-reward="${idx}"><span>Choose Item…</span></button></div>
+                            ${this.field('Win Actions (one per line)', `reward.${idx}.actions`, (rw.actions || []).join('\n'), { type: 'textarea', rows: 2 })}
+                        </div>`;
+                    });
+                    h += `</div>`;
+                }
+                if (e.type === 'scroll_area') {
+                    const off = this.scrollOffset(e.id);
+                    h += `<div class="gs-section"><div class="gs-sec-head">Scrollable / 2D Map Viewport</div>
+                          ${this.field('Scroll Mode', 'scrollMode', e.scrollMode || 'pan2d', { type: 'select', options: [['pan2d', '2D Panning Map / Skill Tree (drag or arrows)'], ['vertical', 'Vertical Scroll List (mouse wheel / swipe)'], ['horizontal', 'Horizontal Scroll Strip']] })}
+                          <div class="gs-grid3">${this.field('Content W', 'contentW', e.contentW || Math.max(e.w, 720), { type: 'number', min: e.w })}${this.field('Content H', 'contentH', e.contentH || Math.max(e.h, 480), { type: 'number', min: e.h })}${this.field('Wheel Step', 'stepPx', e.stepPx || 28, { type: 'number', min: 4, max: 200 })}</div>
+                          <div class="gs-grid2">${this.field('Background', 'bgColor', e.bgColor || '#0e131f', { type: 'color' })}${this.field('Border', 'borderColor', e.borderColor || '#3a8ee6', { type: 'color' })}</div>
+                          ${this.field('Show Scrollbar', 'showScrollbar', e.showScrollbar !== false, { type: 'checkbox' })}
+                          <div class="gs-grid2">${this.field('Preview Scroll X', `scrollPreview.${e.id}.x`, off.x, { type: 'number', min: 0 })}${this.field('Preview Scroll Y', `scrollPreview.${e.id}.y`, off.y, { type: 'number', min: 0 })}</div>
+                          <div class="gs-row-actions"><button class="ghost-btn small" data-action="assign-scroll-children"><span>Assign elements inside box</span></button></div></div>`;
+                }
+            } else if (tab === 'actions' && hasAct) {
+                const navCurRaw = (e.actions || []).map(s => String(s).trim()).find(s => /^open:/.test(s) || s === 'back' || s === 'close' || s === 'next' || s === 'prev') || '';
+                const navCur = /^open:([^?]+)/.exec(navCurRaw) ? 'open:' + /^open:([^?]+)/.exec(navCurRaw)[1].trim() : navCurRaw;
+                const linkOpts = [['', '(No quick link)'], ['back', '← Back'], ['next', '▶ Next page'], ['prev', '◀ Prev page'], ['close', '✕ Close']]
+                    .concat(this.project.menus.map(mm => ['open:' + mm.id, `Open: ${mm.title || mm.id} (${mm.id})`]));
+                const openTarget = /^open:([^?]+)/.exec(navCurRaw);
                 const canJump = openTarget && this.project.menus.some(mm => mm.id === openTarget[1].trim());
-                h += `<div class="gs-section"><div class="gs-sec-head">On click</div>
-                      ${this.field('Quick link (menu navigation)', 'quickLink', navCur, { type: 'select', options: linkOpts })}
+                h += `<div class="gs-section"><div class="gs-sec-head">Quick Navigation</div>
+                      ${this.field('Quick link', 'quickLink', navCur, { type: 'select', options: linkOpts })}
                       <div class="gs-row-actions">
                         ${canJump ? `<button class="ghost-btn small" data-action="jump-link"><span>Go → ${esc(openTarget[1].trim())}</span></button>` : ''}
-                        <button class="ghost-btn small" data-action="create-link"><span>+ New linked page</span></button>
+                        <button class="ghost-btn small" data-action="create-link"><span>+ New page</span></button>
                         <button class="ghost-btn small" data-action="link-confirm"><span>+ Ask Confirm</span></button>
-                      </div>
-                      ${this.field('Actions (one per line)', 'actions', (e.actions || []).join('\n'), {
-                          type: 'textarea', rows: 4,
-                          hint: '<code>open:</code>menu · <code>back</code> · <code>next</code> · <code>prev</code> · <code>close</code> · <code>event:</code>key · <code>player:</code>cmd · <code>console:</code>cmd · <code>message:</code>text · <code>sound:</code>id · <code>server:</code>name'
-                      })}
-                      ${this.field('Close the menu after clicking', 'closeOnClick', !!e.closeOnClick, { type: 'checkbox' })}
-                      ${this.field('Hover sound (optional)', 'hoverSound', e.hoverSound || '', { wide: true, hint: 'Empty = the project hover sound' })}
-                      ${this.field('Tooltip (hover popup, Java)', 'tooltip', e.tooltip || '', { type: 'textarea', rows: 2, hint: 'Shown on hover in Java &amp; Preview. Supports &amp; colours and %placeholders%.' })}</div>`;
-            }
-            if (e.type === 'text') {
-                h += `<div class="gs-section"><div class="gs-sec-head">Text</div>
-                      ${this.field('Text', 'text', e.text, { type: 'textarea', rows: 2, hint: '&amp; colour codes and %placeholders% work. Updated every few ticks in game.' })}
-                      <div class="gs-grid2">${this.field('Colour', 'color', e.color || '#ffffff', { type: 'color' })}${this.field('Size', 'scale', e.scale, { type: 'number', step: 0.25, min: 0.25 })}</div>
-                      ${this.field('Align', 'align', e.align, { type: 'select', options: [['left', 'Left'], ['center', 'Center'], ['right', 'Right']] })}
-                      ${this.field('Shadow', 'shadow', !!e.shadow, { type: 'checkbox' })}</div>`;
-            }
-            if (M.isPlayer(e)) {
-                const db = M.dollBox(e);
-                const ds = e.dollSize || ['', ''], dof = e.dollOffset || ['', ''];
-                h += `<div class="gs-section"><div class="gs-sec-head">Player</div>
-                      ${this.field('Whose skin', 'player', e.player, { wide: true, hint: '<code>%player_name%</code> = the player who opens the menu. A name or a placeholder (e.g. <code>%ajlb_lb_statistic_player_kills_1_alltime_name%</code>) shows that player.<br><b>Java:</b> KaizerUI draws the real skin of anyone. <b>Bedrock:</b> the game\'s paper doll can only show the player who opens the menu — anyone else shows as Steve.' })}
-                      ${this.field('Hat layer (Java)', 'hat', e.hat !== false, { type: 'checkbox' })}</div>`;
-                if (e.type === 'player_model') {
-                    h += `<div class="gs-section"><div class="gs-sec-head">Java 3D model</div>
-                      ${this.field('Real 3D player (Mannequin)', 'java3d', e.java3d !== false, { type: 'checkbox' })}
-                      ${e.java3d !== false ? `
-                      ${this.field('Outfit', 'outfit', e.outfit || 'own', { type: 'select', options: [['own', 'What that player wears (armour + held items)'], ['none', 'No armour']] })}
-                      <div class="gs-grid2">${this.field('Pose', 'pose', e.pose || 'standing', { type: 'select', options: [['standing', 'Standing'], ['crouching', 'Crouching']] })}${this.field('Turn', 'turn', e.turn || 'none', { type: 'select', options: [['none', 'Still'], ['spin', 'Spin'], ['cursor', 'Look at the cursor'], ['mouse', 'Turn with the cursor'], ['drag', 'Drag to turn']] })}</div>
-                      <div class="gs-grid2">${this.field('Angle (°)', 'angle', e.angle || 0, { type: 'number', step: 5 })}${e.turn === 'spin' ? this.field('Spin (° / s)', 'spinSpeed', e.spinSpeed || 45, { type: 'number', step: 5, min: 1 }) : ''}</div>
-                      <div class="gs-hint">Drag the round handle under the model to set its Angle. ${e.turn === 'mouse' ? 'In game it turns all the way round as the cursor goes from one side of the menu to the other. ' : e.turn === 'drag' ? '<b>Drag to turn:</b> Java — click the player, move the mouse, click again to let go · Bedrock — hold and drag, like the pause screen. ' : ''}Try it in Preview (P).</div>
-                      <div class="gs-hint">A real player model in the menu scene (needs 1.21.9+ clients). It is lit by the light where the player stands — dark in caves / at night. Off = the skin drawn flat, like the head.</div>` : '<div class="gs-hint">Flat: the front of the skin drawn as pixels (works on every 1.21 client).</div>'}</div>`;
+                      </div></div>`;
+                h += `<div class="gs-section"><div class="gs-sec-head">Click / Submit Actions</div>
+                      ${GS.ActionBuilder ? GS.ActionBuilder.renderHtml(e, this) : this.field('Actions', 'actions', (e.actions || []).join('\n'), { type: 'textarea', rows: 4 })}
+                      ${e.type === 'button' ? this.field('Close the menu after clicking', 'closeOnClick', !!e.closeOnClick, { type: 'checkbox' }) : ''}</div>`;
+            } else if (tab === 'effects') {
+                const scrollAreas = e.type !== 'scroll_area' ? this.menu().elements.filter(x => x.type === 'scroll_area') : [];
+                if (scrollAreas.length) {
+                    h += `<div class="gs-section">${this.field('Inside Scroll / Map Area', 'scrollGroup', e.scrollGroup || '', { type: 'select', options: [['', '(Fixed on screen)']].concat(scrollAreas.map(a => [a.id, `${a.name || a.id} (${a.scrollMode})`])) })}</div>`;
                 }
-                h += `<div class="gs-section"><div class="gs-sec-head">Bedrock paper doll</div>
-                      <div class="gs-grid2">${this.field('Doll W', 'dollSize.0', ds[0], { placeholder: String(db.size[0]) })}${this.field('Doll H', 'dollSize.1', ds[1], { placeholder: String(db.size[1]) })}</div>
-                      <div class="gs-grid2">${this.field('Doll X', 'dollOffset.0', dof[0], { placeholder: String(db.offset[0]) })}${this.field('Doll Y', 'dollOffset.1', dof[1], { placeholder: String(db.offset[1]) })}</div>
-                      <div class="gs-hint">Same as Doll Size / Doll Offset of the HUD's Player Head${e.type === 'player_head' ? ' — the doll is drawn bigger than the box and only the head shows' : ''}. Empty = worked out from the size.</div></div>`;
-                h += `<div class="gs-section"><div class="gs-sec-head">Tooltip</div>
-                      ${this.field('Tooltip (hover popup, Java)', 'tooltip', e.tooltip || '', { type: 'textarea', rows: 2, hint: 'Shown on hover in Java &amp; Preview.' })}</div>`;
+                if (e.type === 'image' || e.type === 'button') {
+                    h += `<div class="gs-section">${this.detailField(e)}</div>`;
+                    if (e.type === 'image' && e.gen) {
+                        const g = e.gen, what = g.kind === 'icon' ? 'icon' : 'shape';
+                        h += `<div class="gs-section"><button class="ghost-btn" data-action="edit-gen"><svg><use href="#g-${what}"/></svg><span>Edit ${what}…</span></button></div>`;
+                    }
+                    h += this.framesHtml(e);
+                }
+                if (M.isPlayer(e)) {
+                    const db = M.dollBox(e), ds = e.dollSize || ['', ''], dof = e.dollOffset || ['', ''];
+                    h += `<div class="gs-section"><div class="gs-sec-head">Bedrock 3D model</div>
+                          ${e.type === 'player_model' ? this.field('Renderer on Bedrock', 'bedrockRenderer', e.bedrockRenderer || 'auto', { type: 'select', options: [
+                              ['auto', 'Auto (Live Player w/ armor, Paper Doll if Drag)'],
+                              ['live', 'Live Player (Inventory — armor & held item)'],
+                              ['doll', 'Paper Doll (Pause — skin only, 360° drag)']
+                          ] }) : ''}
+                          <div class="gs-grid2">${this.field('Doll W', 'dollSize.0', ds[0], { placeholder: String(db.size[0]) })}${this.field('Doll H', 'dollSize.1', ds[1], { placeholder: String(db.size[1]) })}</div>
+                          <div class="gs-grid2">${this.field('Doll X', 'dollOffset.0', dof[0], { placeholder: String(db.offset[0]) })}${this.field('Doll Y', 'dollOffset.1', dof[1], { placeholder: String(db.offset[1]) })}</div></div>`;
+                }
+                if (e.type === 'item' || e.type === 'custom_model') {
+                    h += `<div class="gs-section"><div class="gs-sec-head">Bedrock &amp; Hitbox</div>
+                          ${this.field('Bedrock texture override', 'bedrockTexture', e.bedrockTexture || '', { wide: true, placeholder: '(auto-packed on export)' })}
+                          ${e.type === 'custom_model' ? `<div class="gs-grid2">${this.field('Hitbox W', 'hitboxW', e.hitboxW || 1, { type: 'number', step: 0.25, min: 0.2, max: 8 })}${this.field('Hitbox H', 'hitboxH', e.hitboxH || 2, { type: 'number', step: 0.25, min: 0.2, max: 8 })}</div>` : ''}</div>`;
+                }
+                if (e.type === 'button') {
+                    h += `<div class="gs-section">${this.field('Hover sound (optional)', 'hoverSound', e.hoverSound || '', { wide: true })}</div>`;
+                }
+                if (['button', 'item', 'player_head', 'player_model', 'custom_model', 'input', 'roulette', 'scroll_area'].includes(e.type)) {
+                    h += `<div class="gs-section">${this.field('Tooltip (hover popup, Java)', 'tooltip', e.tooltip || '', { type: 'textarea', rows: 2 })}</div>`;
+                }
+                h += this.motionHtml(e);
             }
-            if (e.type === 'item') {
-                const bt = GS.Items ? GS.Items.bedrockTexture(Object.assign({}, e, { bedrockTexture: '' })) : null;
-                h += `<div class="gs-section"><div class="gs-sec-head">Item</div>
-                      ${this.field('Item id', 'item', e.item, { wide: true, hint: '<code>minecraft:diamond_sword</code> · <code>itemsadder:namespace:id</code> · <code>nexo:id</code> · <code>slot:head</code> / <code>chest</code> / <code>legs</code> / <code>feet</code> / <code>hand</code> / <code>offhand</code> (what the player wears / holds)' })}
-                      <div class="gs-row-actions"><button class="ghost-btn" data-action="pick-item"><svg><use href="#g-item"/></svg><span>Choose item…</span></button></div>
-                      <div class="gs-grid2">${this.field('Look (Java)', 'look', e.look || 'flat', { type: 'select', options: [['flat', 'Like in the inventory'], ['3d', '3D (held item)']] })}${this.field('Enchant glint', 'glint', !!e.glint, { type: 'checkbox' })}</div>
-                      ${this.field('Spin (Java)', 'spin', !!e.spin, { type: 'checkbox' })}
-                      ${this.field('Bedrock texture', 'bedrockTexture', e.bedrockTexture || '', { wide: true, placeholder: bt || '(not shown on Bedrock)', hint: 'Path in the Bedrock game\'s own pack. Empty = worked out from the id (names differ from Java for some items).' })}
-                      ${this.field('Tooltip (hover popup, Java)', 'tooltip', e.tooltip || '', { type: 'textarea', rows: 2, hint: 'Shown on hover in Java &amp; Preview.' })}
-                      <div class="gs-hint">Java shows the real item (ItemsAdder / Nexo items too). The picture here comes from your own Minecraft files — Choose item… → Load.</div></div>`;
-            }
-            if (e.type === 'image' && e.gen) {
-                const g = e.gen, what = g.kind === 'icon' ? 'icon' : 'shape';
-                const sub = g.kind === 'icon' ? `${esc(g.icon.name)} · ${esc(g.icon.setName || g.icon.prefix)} · ${esc((g.icon.license || {}).title || '')}` : `${esc((GS.Assets.SHAPES[g.shape] || {}).label || g.shape)} · ${g.opts.look === 'pixel' ? 'pixel' : '2D'}`;
-                h += `<div class="gs-section"><div class="gs-sec-head">Made in the studio</div>
-                    <div class="gs-hint">${sub}</div>
-                    <div class="gs-row-actions"><button class="ghost-btn" data-action="edit-gen"><svg><use href="#g-${what}"/></svg><span>Edit ${what}…</span></button></div></div>`;
-            }
-            if (e.type === 'image' || e.type === 'button') h += this.framesHtml(e);
-            h += this.motionHtml(e);
+
             h += `<div class="gs-section gs-row-actions">
                     <button class="ghost-btn" data-action="duplicate"><svg><use href="#g-copy"/></svg><span>Duplicate</span></button>
                     <button class="ghost-btn danger" data-action="delete"><svg><use href="#g-trash"/></svg><span>Delete</span></button></div>`;
             box.innerHTML = h;
+            if (tab === 'actions' && GS.ActionBuilder) GS.ActionBuilder.bind(box, e, this);
         },
 
         /** How finely the picture is drawn in game: 1× = pixel art, 2–8× = smooth */
@@ -746,9 +1341,34 @@
                 else target[k] = val;
                 return this.changed();
             }
+            if (key.startsWith('scrollPreview.')) {
+                const [, areaId, axis] = key.split('.');
+                const area = this.menu().elements.find(a => a.id === areaId && a.type === 'scroll_area');
+                if (area) {
+                    const maxX = Math.max(0, (area.contentW || area.w) - area.w);
+                    const maxY = Math.max(0, (area.contentH || area.h) - area.h);
+                    const cur = Object.assign({}, this.scrollOffset(areaId));
+                    cur[axis] = M.clamp(M.num(val, 0), 0, axis === 'x' ? maxX : maxY);
+                    this.previewScroll[areaId] = cur;
+                    this.renderCanvas();
+                }
+                return;
+            }
             const e = this.element();
             if (!e) return;
             this.checkpoint();
+            if (key.startsWith('reward.')) {
+                const [, idxS, field] = key.split('.');
+                const idx = Number(idxS);
+                if (Array.isArray(e.rewards) && e.rewards[idx]) {
+                    const rw = e.rewards[idx];
+                    if (field === 'weight') rw.weight = Math.max(0.01, M.num(val, 10));
+                    else if (field === 'actions') rw.actions = String(val).split('\n').map(s => s.trim()).filter(Boolean);
+                    else rw[field] = String(val);
+                    this.changed();
+                }
+                return;
+            }
             if (key.startsWith('motion.')) {
                 const k = key.slice(7);
                 e.motion = Object.assign(GS.Motion.elementDefaults(e.type), e.motion || {});
@@ -785,7 +1405,37 @@
             }
             if (key === 'angle') { e.angle = M.num(val, 0); return this.changed(); }
             if (key === 'spinSpeed') { e.spinSpeed = M.clamp(M.num(val, 45), 1, 720); return this.changed(); }
-            if (key === 'item') { e.item = String(val).trim(); return this.changed(); }
+            if (key === 'scale3d') { e.scale3d = M.clamp(M.num(val, 1), 0.1, 10); return this.changed(); }
+            if (key === 'hitboxW') { e.hitboxW = M.clamp(M.num(val, 1), 0.2, 8); return this.changed(); }
+            if (key === 'hitboxH') { e.hitboxH = M.clamp(M.num(val, 2), 0.2, 8); return this.changed(); }
+            if (key === 'min' || key === 'max') { e[key] = M.num(val, e[key]); return this.changed(); }
+            if (key === 'step') { e.step = Math.max(0.01, M.num(val, 1)); return this.changed(); }
+            if (key === 'varName') { e.varName = String(val || 'qty').trim(); return this.changed(); }
+            if (key === 'spinStyle') {
+                e.spinStyle = val;
+                if (this.previewSpins) delete this.previewSpins[e.id];
+                this.fitRouletteFrame(e);
+                return this.changed();
+            }
+            if (key === 'reels') {
+                e.reels = M.clamp(M.int(val, 3), 1, 5);
+                if (this.previewSpins) delete this.previewSpins[e.id];
+                this.fitRouletteFrame(e);
+                return this.changed();
+            }
+            if (key === 'cardCount') {
+                e.cardCount = M.clamp(M.int(val, 5), 3, 9);
+                if (this.previewSpins) delete this.previewSpins[e.id];
+                this.fitRouletteFrame(e);
+                return this.changed();
+            }
+            if (key === 'slotSize') { e.slotSize = M.clamp(M.int(val, 44), 16, 128); return this.changed(); }
+            if (key === 'slotGap') { e.slotGap = M.clamp(M.int(val, 6), 0, 32); return this.changed(); }
+            if (key === 'durationSec') { e.durationSec = M.clamp(M.num(val, 4.2), 1, 15); return this.changed(); }
+            if (key === 'contentW') { e.contentW = Math.max(e.w, M.int(val, e.w)); return this.changed(); }
+            if (key === 'contentH') { e.contentH = Math.max(e.h, M.int(val, e.h)); return this.changed(); }
+            if (key === 'stepPx') { e.stepPx = M.clamp(M.int(val, 28), 4, 200); return this.changed(); }
+            if (key === 'modelId' || key === 'item') { e[key] = String(val).trim(); return this.changed(); }
             if (['x', 'y'].includes(key)) e[key] = M.int(val, e[key]);
             else if (['w', 'h'].includes(key)) e[key] = Math.max(1, M.int(val, e[key]));
             else if (['labelScale', 'scale'].includes(key)) e[key] = Math.max(0.25, M.num(val, 1));
@@ -800,6 +1450,12 @@
             if (type === 'image') { this.pickImage(id => this.addElement('image', id)); return; }
             if (type === 'item' && GS.Items) {
                 GS.Items.pick('').then(id => { if (id) { this.addElement('item'); const e = this.element(); e.item = id; e.name = itemName(id); this.changed(); } });
+                return;
+            }
+            if (type === 'custom_model' && GS.Items) {
+                GS.Items.pick('', { tab: 'models', title: 'Choose a 3D Model (ModelEngine / BetterModel)' }).then(id => {
+                    if (id) { this.addElement('custom_model'); const e = this.element(); e.modelId = id; e.name = itemName(id); this.changed(); }
+                });
                 return;
             }
             this.addElement(type);
@@ -832,6 +1488,19 @@
                 this.checkpoint();
                 const auto = !e.name || /^Item \d+$/.test(e.name) || e.name === itemName(e.item);
                 e.item = id;
+                if (auto) e.name = itemName(id);
+                this.changed();
+            });
+        },
+
+        pickModel() {
+            const e = this.element();
+            if (!e || e.type !== 'custom_model' || !GS.Items) return;
+            GS.Items.pick(e.modelId, { tab: 'models', title: 'Choose a 3D Model (ModelEngine / BetterModel)' }).then(id => {
+                if (!id) return;
+                this.checkpoint();
+                const auto = !e.name || /^3D Model \d+$/.test(e.name) || e.name === itemName(e.modelId);
+                e.modelId = id;
                 if (auto) e.name = itemName(id);
                 this.changed();
             });
@@ -1002,7 +1671,7 @@
                 const x = Math.min(p.x, start.x), y = Math.min(p.y, start.y), w = Math.abs(p.x - start.x), h = Math.abs(p.y - start.y);
                 Object.assign(box.style, { left: x + 'px', top: y + 'px', width: w + 'px', height: h + 'px' });
                 // live: everything the box touches
-                const hit = this.menu().elements.filter(e => !e.hidden && e.x < x + w && e.x + e.w > x && e.y < y + h && e.y + e.h > y).map(e => e.id);
+                const hit = this.menu().elements.filter(e => !e.hidden && !e.locked && e.x < x + w && e.x + e.w > x && e.y < y + h && e.y + e.h > y).map(e => e.id);
                 this.setSel(before.concat(hit));
                 this.renderCanvas();
                 this.renderStatus();
@@ -1337,16 +2006,45 @@
 
             pb.addEventListener('mousedown', (ev) => {
                 if (ev.button !== 0) return;
-                if (this.previewMode) { if (!this.dollGrab(ev, toLocal(ev))) this.previewClick(toLocal(ev)); return; }
+                if (this.previewMode) {
+                    const pt = toLocal(ev);
+                    if (this.dollGrab(ev, pt)) return;
+                    const hit = this.hitTest(pt);
+                    const panArea = !hit ? this.menu().elements.slice().reverse().find(a => a.type === 'scroll_area' && !a.hidden && a.scrollMode === 'pan2d' && pt.x >= a.x && pt.y >= a.y && pt.x < a.x + a.w && pt.y < a.y + a.h) : null;
+                    if (panArea) {
+                        const sx0 = ev.clientX, sy0 = ev.clientY;
+                        const o0 = this.scrollOffset(panArea.id);
+                        const maxX = Math.max(0, (panArea.contentW || panArea.w) - panArea.w);
+                        const maxY = Math.max(0, (panArea.contentH || panArea.h) - panArea.h);
+                        let panned = false;
+                        const mv = (mEv) => {
+                            const dx = (mEv.clientX - sx0) / this.zoom, dy = (mEv.clientY - sy0) / this.zoom;
+                            if (!panned && Math.abs(dx) + Math.abs(dy) < 3) return;
+                            panned = true;
+                            this.previewScroll[panArea.id] = { x: M.clamp(o0.x - dx, 0, maxX), y: M.clamp(o0.y - dy, 0, maxY) };
+                            this.renderCanvas();
+                        };
+                        const up = () => {
+                            window.removeEventListener('mousemove', mv);
+                            window.removeEventListener('mouseup', up);
+                            if (!panned) this.previewClick(pt);
+                        };
+                        window.addEventListener('mousemove', mv);
+                        window.addEventListener('mouseup', up);
+                        return;
+                    }
+                    this.previewClick(pt);
+                    return;
+                }
                 if (ev.target.closest('.gs-turn')) { this.dragTurn(ev); return; }
                 const handle = ev.target.closest('.gs-handle');
                 const elDiv = ev.target.closest('.gs-el');
                 const additive = ev.ctrlKey || ev.shiftKey || ev.metaKey;
-                let id = handle ? this.selected : elDiv && elDiv.dataset.id;
+                let id = handle ? this.selected : (elDiv && !(this.element(elDiv.dataset.id) || {}).locked ? elDiv.dataset.id : null);
                 if (!handle && elDiv && ev.altKey) {
                     // Alt+click: the next element underneath the one selected (cycles through the stack)
                     const pt = toLocal(ev);
-                    const under = this.menu().elements.filter(e => !e.hidden && pt.x >= e.x && pt.y >= e.y && pt.x < e.x + e.w && pt.y < e.y + e.h).reverse();
+                    const under = this.menu().elements.filter(e => !e.hidden && !e.locked && pt.x >= e.x && pt.y >= e.y && pt.x < e.x + e.w && pt.y < e.y + e.h).reverse();
                     const i = under.findIndex(e => e.id === this.selected);
                     if (under.length) id = under[(i + 1) % under.length].id;
                 }
@@ -1368,14 +2066,46 @@
                 const mode = handle ? handle.dataset.handle : 'move';
                 let moved = false;
                 const snap = (v) => this.snap ? Math.round(v / 4) * 4 : Math.round(v);
+                const guidesEl = $('#gs-guides');
+                const m = this.menu();
+                const refXs = [Math.round(m.width / 2)];
+                const refYs = [Math.round(m.height / 2)];
+                m.elements.forEach(o => {
+                    if (o.hidden || origs.has(o.id)) return;
+                    refXs.push(o.x, Math.round(o.x + o.w / 2), o.x + o.w);
+                    refYs.push(o.y, Math.round(o.y + o.h / 2), o.y + o.h);
+                });
                 const onMove = (mv) => {
                     const p = toLocal(mv);
                     const dx = p.x - start.x, dy = p.y - start.y;
                     if (!moved && Math.abs(dx) * this.zoom < 3 && Math.abs(dy) * this.zoom < 3) return;
                     if (!moved) { this.checkpoint(); moved = true; }
                     if (mode === 'move') {
-                        // the element under the mouse snaps; the others move by the same amount
-                        const ddx = snap(orig.x + dx) - orig.x, ddy = snap(orig.y + dy) - orig.y;
+                        // the element under the mouse snaps + magnetizes to smart alignment guides
+                        let ddx = snap(orig.x + dx) - orig.x, ddy = snap(orig.y + dy) - orig.y;
+                        let gx = null, gy = null;
+                        if (!mv.altKey) {
+                            const candX = orig.x + ddx;
+                            const ptsX = [candX, Math.round(candX + orig.w / 2), candX + orig.w];
+                            let bestDx = 5;
+                            for (const px of ptsX) for (const rx of refXs) {
+                                const diff = rx - px;
+                                if (Math.abs(diff) < Math.abs(bestDx)) { bestDx = diff; gx = rx; }
+                            }
+                            if (gx != null) ddx += bestDx;
+                            const candY = orig.y + ddy;
+                            const ptsY = [candY, Math.round(candY + orig.h / 2), candY + orig.h];
+                            let bestDy = 5;
+                            for (const py of ptsY) for (const ry of refYs) {
+                                const diff = ry - py;
+                                if (Math.abs(diff) < Math.abs(bestDy)) { bestDy = diff; gy = ry; }
+                            }
+                            if (gy != null) ddy += bestDy;
+                        }
+                        if (guidesEl) {
+                            guidesEl.innerHTML = (gx != null ? `<div class="gs-guide-v" style="left:${gx}px"></div>` : '')
+                                + (gy != null ? `<div class="gs-guide-h" style="top:${gy}px"></div>` : '');
+                        }
                         group.forEach(g => { const o = origs.get(g.id); g.x = o.x + ddx; g.y = o.y + ddy; });
                     } else {
                         let { x, y, w, h } = orig;
@@ -1395,6 +2125,7 @@
                 const onUp = () => {
                     window.removeEventListener('mousemove', onMove);
                     window.removeEventListener('mouseup', onUp);
+                    if (guidesEl) guidesEl.innerHTML = '';
                     if (moved) this.changed();
                     else if (!handle && !additive && this.isMulti()) {
                         // a plain click (no drag) on one of many: select just that one
@@ -1423,6 +2154,25 @@
             // mouse wheel = scroll pages in preview, or zoom at the mouse while editing (Shift + wheel = scroll sideways)
             pb.addEventListener('wheel', (ev) => {
                 if (this.previewMode && !ev.ctrlKey) {
+                    const pt = toLocal(ev);
+                    const sArea = this.menu().elements.slice().reverse().find(a => a.type === 'scroll_area' && !a.hidden && pt.x >= a.x && pt.y >= a.y && pt.x < a.x + a.w && pt.y < a.y + a.h);
+                    if (sArea) {
+                        ev.preventDefault();
+                        const dyRaw = ev.deltaMode === 1 ? ev.deltaY * 33 : ev.deltaY;
+                        const dir = dyRaw > 0 ? 1 : -1;
+                        const step = M.int(sArea.stepPx, 28);
+                        const cur = Object.assign({}, this.scrollOffset(sArea.id));
+                        const maxX = Math.max(0, (sArea.contentW || sArea.w) - sArea.w);
+                        const maxY = Math.max(0, (sArea.contentH || sArea.h) - sArea.h);
+                        if (sArea.scrollMode === 'horizontal' || (ev.shiftKey && sArea.scrollMode === 'pan2d')) {
+                            cur.x = M.clamp(cur.x + dir * step, 0, maxX);
+                        } else {
+                            cur.y = M.clamp(cur.y + dir * step, 0, maxY);
+                        }
+                        this.previewScroll[sArea.id] = cur;
+                        this.renderCanvas();
+                        return;
+                    }
                     const m = this.menu();
                     const dy = ev.deltaMode === 1 ? ev.deltaY * 33 : ev.deltaY;
                     const targetId = dy > 0 ? m.nextPage : dy < 0 ? m.prevPage : '';
@@ -1482,6 +2232,12 @@
 
             // layers
             $('#gs-layer-list').addEventListener('click', (ev) => {
+                const lock = ev.target.closest('[data-lock]');
+                if (lock) {
+                    const e = this.element(lock.dataset.lock);
+                    if (e) { this.checkpoint(); e.locked = !e.locked; this.changed(); }
+                    return;
+                }
                 const eye = ev.target.closest('[data-eye]');
                 if (eye) {
                     const e = this.element(eye.dataset.eye);
@@ -1511,6 +2267,27 @@
                 this.applyField(k, ev.target.type === 'checkbox' ? ev.target.checked : ev.target.value, ev.target.type === 'checkbox');
             });
             props.addEventListener('click', (ev) => {
+                const ptab = ev.target.closest('[data-prop-tab]');
+                if (ptab) {
+                    this.propTab = ptab.dataset.propTab;
+                    this.renderProps();
+                    return;
+                }
+                const vbtn = ev.target.closest('[data-var-field]');
+                if (vbtn && GS.ActionBuilder) {
+                    const fk = vbtn.dataset.varField;
+                    const id = 'gsf-' + fk.replace(/[^a-z0-9]/gi, '_');
+                    const inp = document.getElementById(id);
+                    if (inp) {
+                        GS.ActionBuilder.openVarMenu(vbtn, (token) => {
+                            const st = inp.selectionStart != null ? inp.selectionStart : inp.value.length;
+                            const en = inp.selectionEnd != null ? inp.selectionEnd : st;
+                            inp.value = inp.value.slice(0, st) + token + inp.value.slice(en);
+                            this.applyField(fk, inp.value, false);
+                        });
+                    }
+                    return;
+                }
                 const pick = ev.target.closest('[data-pick]');
                 if (pick) return this.setImage(pick.dataset.pick);
                 const gpick = ev.target.closest('[data-gen-pick]');
@@ -1519,15 +2296,98 @@
                 if (clear) return this.clearImage(clear.dataset.clear);
                 const fdel = ev.target.closest('[data-frame-del]');
                 if (fdel) return this.removeFrame(Number(fdel.dataset.frameDel));
+                const rdel = ev.target.closest('[data-del-reward]');
+                if (rdel) {
+                    const el = this.element();
+                    if (el && el.type === 'roulette' && Array.isArray(el.rewards) && el.rewards.length > 1) {
+                        this.checkpoint();
+                        el.rewards.splice(Number(rdel.dataset.delReward), 1);
+                        this.changed();
+                    }
+                    return;
+                }
+                const rpick = ev.target.closest('[data-pick-reward]');
+                if (rpick && GS.Items) {
+                    const el = this.element(), idx = Number(rpick.dataset.pickReward);
+                    if (el && el.type === 'roulette' && el.rewards && el.rewards[idx]) {
+                        GS.Items.pick(el.rewards[idx].item || '').then(id => {
+                            if (!id) return;
+                            this.checkpoint();
+                            el.rewards[idx].item = id;
+                            this.changed();
+                        });
+                    }
+                    return;
+                }
                 const act = ev.target.closest('[data-action]');
                 if (!act) return;
                 const a = act.dataset.action;
-                if (a === 'fit-image') this.fitImage();
+                if (a === 'add-reward') {
+                    const el = this.element();
+                    if (el && el.type === 'roulette') {
+                        this.checkpoint();
+                        el.rewards = el.rewards || [];
+                        el.rewards.push({ id: 'r' + (el.rewards.length + 1), name: 'New Prize', item: 'minecraft:emerald', color: '#22c55e', weight: 15, actions: ['console:give %player_name% emerald 8'] });
+                        this.changed();
+                    }
+                }
+                else if (a === 'test-spin') {
+                    const el = this.element();
+                    if (el && el.type === 'roulette') {
+                        if (!this.previewMode) this.togglePreview();
+                        this.startPreviewSpin(el.id);
+                    }
+                }
+                else if (a === 'fit-roulette') {
+                    const el = this.element();
+                    if (el && el.type === 'roulette') {
+                        this.checkpoint();
+                        this.fitRouletteFrame(el);
+                        this.changed();
+                    }
+                }
+                else if (a === 'add-spin-btn') {
+                    const el = this.element();
+                    if (el && el.type === 'roulette') {
+                        const m = this.menu();
+                        const b = M.newElement('button', m);
+                        b.name = 'Spin ' + (el.name || 'Crate');
+                        b.label = '&e&lSPIN!';
+                        b.w = 96; b.h = 22;
+                        b.x = Math.round(el.x + (el.w - b.w) / 2);
+                        b.y = Math.min(m.height - b.h - 4, el.y + el.h + 8);
+                        b.actions = ['spin:' + el.id];
+                        if (el.scrollGroup) b.scrollGroup = el.scrollGroup;
+                        this.checkpoint();
+                        m.elements.push(b);
+                        this.selected = b.id;
+                        this.changed();
+                    }
+                }
+                else if (a === 'assign-scroll-children') {
+                    const area = this.element();
+                    if (area && area.type === 'scroll_area') {
+                        let cnt = 0;
+                        this.checkpoint();
+                        this.menu().elements.forEach(x => {
+                            if (x === area || x.type === 'scroll_area') return;
+                            if (x.x >= area.x && x.y >= area.y && x.x < area.x + (area.contentW || area.w) && x.y < area.y + (area.contentH || area.h)) {
+                                x.scrollGroup = area.id;
+                                cnt++;
+                            }
+                        });
+                        this.changed();
+                        GS.toast(`Assigned ${cnt} elements into ${area.name || area.id}`, 'ok');
+                    }
+                }
+                else if (a === 'fit-image') this.fitImage();
                 else if (a === 'add-frames') this.addFrames();
                 else if (a === 'clear-frames') this.clearFrames();
                 else if (a === 'play-motion') this.playMotion();
                 else if (a === 'edit-gen') this.editGenerated();
                 else if (a === 'pick-item') this.pickItem();
+                else if (a === 'pick-model') this.pickModel();
+                else if (a === 'open-custom-assets') GS.CustomAssets && GS.CustomAssets.openManagerDialog(() => this.renderAll());
                 else if (a === 'jump-link') this.jumpLink();
                 else if (a === 'create-link') this.createLinkedPage();
                 else if (a === 'link-confirm') this.linkConfirmDialog();
@@ -1675,8 +2535,10 @@
             const els = this.menu().elements;
             for (let i = els.length - 1; i >= 0; i--) {
                 const e = els[i];
-                if (e.hidden || e.type !== 'button') continue;
-                if (p.x >= e.x && p.y >= e.y && p.x < e.x + e.w && p.y < e.y + e.h) return e;
+                if (e.hidden || (e.type !== 'button' && e.type !== 'input')) continue;
+                const eff = this.effectivePos(e);
+                if (eff.area && (p.x < eff.area.x || p.y < eff.area.y || p.x >= eff.area.x + eff.area.w || p.y >= eff.area.y + eff.area.h)) continue;
+                if (p.x >= eff.x && p.y >= eff.y && p.x < eff.x + e.w && p.y < eff.y + e.h) return e;
             }
             return null;
         },
@@ -1713,19 +2575,96 @@
             if (!hit) return;
             if (this._mo) this._mo.press[hit.id] = this._mo.now();
             const cur = this.menu();
-            const acts = (hit.actions || []).map(a => String(a).trim());
-            const open = acts.map(a => /^open:(.+)$/.exec(a)).find(Boolean);
+            if (hit.type === 'input') {
+                const vname = hit.varName || 'qty';
+                const curV = (vname in this.previewVars) ? this.previewVars[vname] : (hit.defaultValue == null ? '1' : String(hit.defaultValue));
+                const nextV = window.prompt(hit.promptTitle || `Enter ${vname}`, curV);
+                if (nextV == null) return;
+                let cleaned = String(nextV).trim();
+                if (hit.inputType !== 'text') {
+                    let n = Number(cleaned);
+                    if (!Number.isFinite(n)) { GS.toast('Please enter a valid number', 'error'); return; }
+                    if (hit.min != null) n = Math.max(Number(hit.min), n);
+                    if (hit.max != null) n = Math.min(Number(hit.max), n);
+                    cleaned = Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100);
+                }
+                this.previewVars[vname] = cleaned;
+                this.renderCanvas();
+                if (!(hit.actions && hit.actions.length)) return;
+            }
+            const acts = (hit.actions || []).map(a => String(a).trim()).filter(Boolean);
+            acts.forEach(a => {
+                if (/^set:/i.test(a)) {
+                    const kv = a.slice(4), eq = kv.indexOf('=');
+                    if (eq > 0) this.previewVars[kv.slice(0, eq).trim()] = this.resolvePreviewVars(kv.slice(eq + 1).trim());
+                } else if (/^add:/i.test(a)) {
+                    const kv = a.slice(4), eq = kv.indexOf('=');
+                    if (eq > 0) {
+                        const k = kv.slice(0, eq).trim();
+                        const d = Number(this.resolvePreviewVars(kv.slice(eq + 1).trim())) || 0;
+                        const c = Number(this.resolvePreviewVars('{' + k + '}')) || 0;
+                        this.previewVars[k] = String(c + d);
+                    }
+                } else if (/^mul:/i.test(a)) {
+                    const kv = a.slice(4), eq = kv.indexOf('=');
+                    if (eq > 0) {
+                        const k = kv.slice(0, eq).trim();
+                        const m = Number(this.resolvePreviewVars(kv.slice(eq + 1).trim())) || 1;
+                        const c = Number(this.resolvePreviewVars('{' + k + '}')) || 0;
+                        this.previewVars[k] = String(c * m);
+                    }
+                }
+            });
+            const open = acts.map(a => /^open:([^?]+)(?:\?(.*))?$/.exec(a)).find(Boolean);
+            const spinAct = acts.map(a => /^spin(?::(.*))?$/i.exec(a)).find(Boolean);
+            const scrollAct = acts.map(a => /^scroll:([^:]+):(.+)$/i.exec(a)).find(Boolean);
             const hasBack = acts.some(a => a.toLowerCase() === 'back');
             const hasNext = acts.some(a => a.toLowerCase() === 'next');
             const hasPrev = acts.some(a => a.toLowerCase() === 'prev');
-            const others = acts.filter(a => !/^(open:|back$|next$|prev$)/i.test(a));
-            if (others.length) GS.toast(others.join('  ·  '));
+            const others = acts.filter(a => !/^(open:|spin(?::|$)|scroll:|back$|next$|prev$|set:|add:|mul:)/i.test(a));
+            if (others.length) {
+                const msgList = others.map(o => {
+                    const res = this.resolvePreviewVars(o);
+                    if (/^(buy|sell|trade|pay|sellhand):/i.test(res)) return '[Vault Preview] ' + res;
+                    return res;
+                });
+                GS.toast(msgList.join('  ·  '));
+            }
+            if (spinAct) this.startPreviewSpin((spinAct[1] || '').trim());
+            if (scrollAct) {
+                const areaId = scrollAct[1].trim();
+                const area = cur.elements.find(a => a.id === areaId && a.type === 'scroll_area');
+                if (area) {
+                    if (/^reset$/i.test(scrollAct[2].trim())) this.previewScroll[area.id] = { x: 0, y: 0 };
+                    else {
+                        const [dxS, dyS] = scrollAct[2].split(':');
+                        const o = Object.assign({}, this.scrollOffset(area.id));
+                        const maxX = Math.max(0, (area.contentW || area.w) - area.w);
+                        const maxY = Math.max(0, (area.contentH || area.h) - area.h);
+                        o.x = M.clamp(o.x + (Number(dxS) || 0), 0, maxX);
+                        o.y = M.clamp(o.y + (Number(dyS) || 0), 0, maxY);
+                        this.previewScroll[area.id] = o;
+                    }
+                    this.renderCanvas();
+                }
+            }
             if (open) {
-                const i = this.project.menus.findIndex(m => m.id === open[1].trim());
+                if (open[2]) {
+                    open[2].split('&').forEach(pair => {
+                        const eq = pair.indexOf('=');
+                        if (eq > 0) {
+                            const k = decodeURIComponent(pair.slice(0, eq).trim());
+                            const v = decodeURIComponent(pair.slice(eq + 1).trim());
+                            this.previewVars[k] = this.resolvePreviewVars(v);
+                        }
+                    });
+                }
+                const targetId = this.resolvePreviewVars(open[1].trim());
+                const i = this.project.menus.findIndex(m => m.id === targetId);
                 if (i >= 0) {
                     this.previewHistory.push(cur.id);
                     this.menuIndex = i; this.renderAll(); this.zoomFit();
-                } else GS.toast(`Menu "${open[1]}" does not exist`, 'error');
+                } else GS.toast(`Menu "${targetId}" does not exist`, 'error');
             } else if (hasBack) {
                 const prevId = this.previewHistory.pop();
                 const i = prevId ? this.project.menus.findIndex(m => m.id === prevId) : -1;
@@ -1738,6 +2677,7 @@
                 const i = this.project.menus.findIndex(m => m.id === cur.prevPage);
                 if (i >= 0) { this.menuIndex = i; this.renderAll(); this.zoomFit(); }
             } else if (hit.closeOnClick || acts.includes('close')) GS.toast('(menu closes)');
+            else if (acts.some(a => /^(set|add|mul):/i.test(a))) this.renderCanvas();
         },
         /* ───────────── motion preview (same presets as the game) ───────────── */
 
@@ -1993,13 +2933,17 @@
                     if (ids.has(m.prevPage)) incoming.set(m.prevPage, (incoming.get(m.prevPage) || 0) + 1);
                 }
                 m.elements.forEach(e => {
-                    if (e.type !== 'button' || e.hidden) return;
+                    if ((e.type !== 'button' && e.type !== 'input') || e.hidden) return;
                     (e.actions || []).forEach(a => {
-                        const t = /^open:(.+)$/.exec(String(a).trim());
+                        const rawAction = String(a).trim();
+                        const t = /^open:(.+)$/i.exec(rawAction);
                         if (t) {
-                            const tid = t[1].trim();
+                            const raw = t[1].trim();
+                            const qi = raw.indexOf('?');
+                            const tid = (qi >= 0 ? raw.slice(0, qi) : raw).trim();
+                            if (!tid) return;
                             const rawLbl = String(e.label || e.name || 'btn').replace(/[&§][0-9a-fk-or]/gi, '').trim() || 'btn';
-                            edges.push({ from: m.id, to: tid, kind: 'open', btnId: e.id, label: rawLbl, broken: !ids.has(tid) });
+                            edges.push({ from: m.id, to: tid, kind: 'open', btnId: e.id, rawAction, label: rawLbl, broken: !/\{[^}]+\}/.test(tid) && !ids.has(tid) });
                             if (ids.has(tid)) incoming.set(tid, (incoming.get(tid) || 0) + 1);
                         }
                     });
@@ -2228,7 +3172,8 @@
                             } else if (ed.btnId) {
                                 const btn = fromM.elements.find(e => e.id === ed.btnId);
                                 if (btn) {
-                                    btn.actions = (btn.actions || []).filter(a => String(a).trim() !== 'open:' + ed.to);
+                                    const targetRaw = ed.rawAction || ('open:' + ed.to);
+                                    btn.actions = (btn.actions || []).filter(a => String(a).trim() !== targetRaw);
                                 }
                             }
                             this.changed();

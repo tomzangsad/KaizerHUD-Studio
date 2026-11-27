@@ -19,7 +19,7 @@
         return (prefix || 'e') + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-3);
     }
 
-    const TYPES = ['image', 'button', 'text', 'player_head', 'player_model', 'item'];
+    const TYPES = ['image', 'button', 'text', 'player_head', 'player_model', 'item', 'custom_model', 'input', 'roulette', 'scroll_area'];
     const isPlayer = (e) => !!e && (e.type === 'player_head' || e.type === 'player_model');
     /** [a, b] numbers, or null (= worked out from the size) */
     function pair(v) {
@@ -110,7 +110,7 @@
     }
 
     function newElement(type, menu) {
-        const base = { id: uid(type[0]), type, name: '', x: 0, y: 0, w: 32, h: 16, hidden: false, motion: GS.Motion.elementDefaults(type) };
+        const base = { id: uid(type[0]), type, name: '', x: 0, y: 0, w: 32, h: 16, hidden: false, locked: false, scrollGroup: '', motion: GS.Motion.elementDefaults(type) };
         if (type === 'image') {
             // frames: more pictures after `image` that play as an animation, fps frames a second
             Object.assign(base, { w: 64, h: 64, image: null, frames: [], fps: 8 });
@@ -130,10 +130,49 @@
             Object.assign(base, { w: 32, h: head ? 32 : 64, player: '%player_name%', hat: true, dollSize: null, dollOffset: null, tooltip: '' });
             // model on Java: a real 3D player (Mannequin, 1.21.9+) wearing the player's armour,
             // turning as set; flat = the skin drawn as pixels like the head
-            if (!head) Object.assign(base, { java3d: true, outfit: 'own', pose: 'standing', turn: 'none', angle: 20, spinSpeed: 45 });
+            if (!head) Object.assign(base, { java3d: true, outfit: 'own', pose: 'standing', turn: 'none', angle: 20, spinSpeed: 45, bedrockRenderer: 'auto' });
         } else if (type === 'item') {
             // a Minecraft item: Java = the real item (ItemDisplay), Bedrock = the game's texture
             Object.assign(base, { w: 24, h: 24, item: 'minecraft:diamond_sword', glint: false, look: 'flat', spin: false, bedrockTexture: '', tooltip: '' });
+        } else if (type === 'custom_model') {
+            // a 3D animated model from ModelEngine 4 / BetterModel on Java, auto-rendered icon on Bedrock
+            Object.assign(base, {
+                w: 48, h: 64, modelId: 'meg:dragon', animation: 'idle',
+                scale3d: 1, angle: 20, spin: false, spinSpeed: 45,
+                hitboxW: 1, hitboxH: 2, bedrockTexture: '', tooltip: ''
+            });
+        } else if (type === 'input') {
+            // interactive input box: Java = chat prompt + hologram refresh, Bedrock = Cumulus CustomForm
+            Object.assign(base, {
+                w: 96, h: 20, varName: 'qty', inputType: 'number', defaultValue: '1',
+                min: 1, max: 64, step: 1, prefix: 'Qty: ', suffix: '',
+                promptTitle: 'Enter amount', placeholder: 'Type value...',
+                textColor: '#ffffff', bgColor: '#161b26', borderColor: '#52a0f0',
+                scale: 1, shadow: true, align: 'center', actions: [], tooltip: ''
+            });
+        } else if (type === 'roulette') {
+            // CS:GO crate roller with weighted rewards and selectable spin animations
+            Object.assign(base, {
+                w: 260, h: 56, slotSize: 44, slotGap: 6, durationSec: 4.2, spinStyle: 'csgo',
+                reels: 3, cardCount: 5,
+                bgColor: '#0d111a', borderColor: '#e5a43a', pointerColor: '#ff4d4f',
+                tickSound: 'minecraft:block.note_block.hat;0.7;1.4',
+                winSound: 'minecraft:entity.player.levelup;1.0;1.1',
+                tooltip: '',
+                rewards: [
+                    { id: 'r1', name: 'Iron Ingot', item: 'minecraft:iron_ingot', color: '#9ca3af', weight: 45, actions: ['console:give %player_name% iron_ingot 16', 'message:&7You won &fIron Ingot x16&7!'] },
+                    { id: 'r2', name: 'Golden Apple', item: 'minecraft:golden_apple', color: '#22c55e', weight: 28, actions: ['console:give %player_name% golden_apple 4', 'message:&aYou won &eGolden Apple x4&a!'] },
+                    { id: 'r3', name: 'Diamond Sword', item: 'minecraft:diamond_sword', color: '#3b82f6', weight: 15, actions: ['console:give %player_name% diamond_sword 1', 'message:&bYou won &bDiamond Sword&b!'] },
+                    { id: 'r4', name: 'Undying Totem', item: 'minecraft:totem_of_undying', color: '#a855f7', weight: 8, actions: ['console:give %player_name% totem_of_undying 1', 'message:&dYou won &dTotem of Undying&d!'] },
+                    { id: 'r5', name: 'Netherite Blade', item: 'minecraft:netherite_sword', color: '#f59e0b', weight: 4, actions: ['console:give %player_name% netherite_sword 1', 'message:&6&lLEGENDARY! &eYou won Netherite Blade!'] }
+                ]
+            });
+        } else if (type === 'scroll_area') {
+            // Scrollable / 2D Pannable viewport container inside a menu
+            Object.assign(base, {
+                w: 360, h: 200, scrollMode: 'pan2d', contentW: 720, contentH: 480,
+                stepPx: 28, bgColor: '#0e131f', borderColor: '#3a8ee6', showScrollbar: true, tooltip: ''
+            });
         }
         if (menu) {
             base.x = Math.max(0, Math.round((menu.width - base.w) / 2));
@@ -144,7 +183,7 @@
     }
 
     function defaultName(type, menu) {
-        const label = { image: 'Image', button: 'Button', text: 'Text', player_head: 'Player Head', player_model: 'Player Model', item: 'Item' }[type] || 'Element';
+        const label = { image: 'Image', button: 'Button', text: 'Text', player_head: 'Player Head', player_model: 'Player Model', item: 'Item', custom_model: '3D Model', input: 'Input', roulette: 'Crate Roulette', scroll_area: 'Scroll / Map Area' }[type] || 'Element';
         let n = 1;
         const names = new Set(menu.elements.map(e => e.name));
         while (names.has(`${label} ${n}`)) n++;
@@ -175,9 +214,11 @@
                     const ee = Object.assign(newElement(e.type), e);
                     ee.id = ee.id || uid(e.type[0]);
                     if (ee.type === 'button' && !Array.isArray(ee.actions)) ee.actions = [];
-                    if (['button', 'item', 'player_head', 'player_model'].includes(ee.type)) {
+                    if (['button', 'item', 'player_head', 'player_model', 'custom_model', 'input', 'roulette', 'scroll_area'].includes(ee.type)) {
                         ee.tooltip = String(ee.tooltip || '');
                     }
+                    ee.scrollGroup = ee.type === 'scroll_area' ? '' : String(ee.scrollGroup || '');
+                    ee.locked = !!ee.locked;
                     ee.motion = Object.assign(GS.Motion.elementDefaults(ee.type), e.motion || {});
                     if (isPlayer(ee)) {
                         ee.player = String(ee.player == null ? '%player_name%' : ee.player);
@@ -191,6 +232,7 @@
                             ee.turn = ['none', 'spin', 'cursor', 'mouse', 'drag'].includes(ee.turn) ? ee.turn : 'none';
                             ee.angle = num(ee.angle, 0);
                             ee.spinSpeed = clamp(num(ee.spinSpeed, 45), 1, 720);
+                            ee.bedrockRenderer = ['auto', 'live', 'doll'].includes(ee.bedrockRenderer) ? ee.bedrockRenderer : 'auto';
                         }
                     } else if (ee.type === 'item') {
                         ee.item = String(ee.item || '');
@@ -198,6 +240,66 @@
                         ee.look = ee.look === '3d' ? '3d' : 'flat';
                         ee.spin = !!ee.spin;
                         ee.bedrockTexture = String(ee.bedrockTexture || '');
+                    } else if (ee.type === 'custom_model') {
+                        ee.modelId = String(ee.modelId || '');
+                        ee.animation = String(ee.animation || 'idle');
+                        ee.scale3d = clamp(num(ee.scale3d, 1), 0.1, 10);
+                        ee.angle = num(ee.angle, 20);
+                        ee.spin = !!ee.spin;
+                        ee.spinSpeed = clamp(num(ee.spinSpeed, 45), 1, 720);
+                        ee.hitboxW = clamp(num(ee.hitboxW, 1), 0.2, 8);
+                        ee.hitboxH = clamp(num(ee.hitboxH, 2), 0.2, 8);
+                        ee.bedrockTexture = String(ee.bedrockTexture || '');
+                    } else if (ee.type === 'input') {
+                        ee.varName = String(ee.varName || 'qty').trim();
+                        ee.inputType = ['number', 'text', 'slider'].includes(ee.inputType) ? ee.inputType : 'number';
+                        ee.defaultValue = String(ee.defaultValue == null ? '1' : ee.defaultValue);
+                        ee.min = num(ee.min, 1);
+                        ee.max = num(ee.max, 64);
+                        ee.step = Math.max(0.01, num(ee.step, 1));
+                        ee.prefix = String(ee.prefix == null ? '' : ee.prefix);
+                        ee.suffix = String(ee.suffix == null ? '' : ee.suffix);
+                        ee.promptTitle = String(ee.promptTitle || 'Enter value');
+                        ee.placeholder = String(ee.placeholder || 'Type value...');
+                        ee.textColor = String(ee.textColor || '#ffffff');
+                        ee.bgColor = String(ee.bgColor || '#161b26');
+                        ee.borderColor = String(ee.borderColor || '#52a0f0');
+                        ee.scale = Math.max(0.25, num(ee.scale, 1));
+                        ee.shadow = ee.shadow !== false;
+                        ee.align = ['left', 'center', 'right'].includes(ee.align) ? ee.align : 'center';
+                        ee.actions = Array.isArray(ee.actions) ? ee.actions.filter(Boolean) : [];
+                    } else if (ee.type === 'roulette') {
+                        ee.slotSize = clamp(int(ee.slotSize, 44), 16, 128);
+                        ee.slotGap = clamp(int(ee.slotGap, 6), 0, 32);
+                        ee.durationSec = clamp(num(ee.durationSec, 4.2), 1, 15);
+                        ee.spinStyle = ['csgo', 'tease', 'slot_v', 'flash', 'flip'].includes(ee.spinStyle) ? ee.spinStyle : 'csgo';
+                        ee.reels = clamp(int(ee.reels, 3), 1, 5);
+                        ee.cardCount = clamp(int(ee.cardCount, 5), 3, 9);
+                        ee.bgColor = String(ee.bgColor || '#0d111a');
+                        ee.borderColor = String(ee.borderColor || '#e5a43a');
+                        ee.pointerColor = String(ee.pointerColor || '#ff4d4f');
+                        ee.tickSound = String(ee.tickSound || 'minecraft:block.note_block.hat;0.7;1.4');
+                        ee.winSound = String(ee.winSound || 'minecraft:entity.player.levelup;1.0;1.1');
+                        const defRewards = newElement('roulette').rewards;
+                        const srcR = Array.isArray(ee.rewards) && ee.rewards.length ? ee.rewards : defRewards;
+                        ee.rewards = srcR.map((r, idx) => ({
+                            id: String((r && r.id) || ('r' + (idx + 1))),
+                            name: String((r && r.name) || 'Reward'),
+                            item: String((r && r.item) || 'minecraft:diamond'),
+                            color: String((r && r.color) || '#3b82f6'),
+                            weight: Math.max(0.01, num(r && r.weight, 10)),
+                            actions: Array.isArray(r && r.actions) ? r.actions.filter(Boolean).map(String) : []
+                        }));
+                    } else if (ee.type === 'scroll_area') {
+                        ee.scrollMode = ['vertical', 'horizontal', 'pan2d'].includes(ee.scrollMode) ? ee.scrollMode : 'pan2d';
+                        ee.w = Math.max(16, int(ee.w, 360));
+                        ee.h = Math.max(16, int(ee.h, 200));
+                        ee.contentW = Math.max(ee.w, int(ee.contentW, Math.max(ee.w, 720)));
+                        ee.contentH = Math.max(ee.h, int(ee.contentH, Math.max(ee.h, 480)));
+                        ee.stepPx = clamp(int(ee.stepPx, 28), 4, 200);
+                        ee.bgColor = String(ee.bgColor || '#0e131f');
+                        ee.borderColor = String(ee.borderColor || '#3a8ee6');
+                        ee.showScrollbar = ee.showScrollbar !== false;
                     } else if (ee.type !== 'text') {
                         ee.detail = [1, 2, 4, 8].includes(Number(ee.detail)) ? Number(ee.detail) : 1;
                         ee.frames = Array.isArray(ee.frames) ? ee.frames.filter(Boolean) : [];
@@ -240,13 +342,16 @@
                     if (pieces > 6) out.push({ level: 'warn', menu: m.id, element: e.id, msg: `${where}: Detail ${e.detail}× cuts this ${e.w}×${e.h} picture into ${pieces} pieces on Java — use 1× or 2× for big backgrounds` });
                 }
                 if (e.type === 'item' && !String(e.item || '').trim()) out.push({ level: 'warn', menu: m.id, element: e.id, msg: `${where}: no item chosen (skipped)` });
-                if (e.type === 'item' && String(e.item || '').trim() && GS.Items && !GS.Items.isSlot(e.item) && !GS.Items.bedrockTexture(e)) out.push({ level: 'warn', menu: m.id, element: e.id, msg: `${where}: Bedrock cannot show "${e.item}" (plugin items / placeholders are Java only) — set a Bedrock texture to show a picture there` });
+                if (e.type === 'item' && String(e.item || '').trim() && GS.Items && !GS.Items.isDynamic(e.item) && !GS.Items.bedrockTexture(e)) out.push({ level: 'warn', menu: m.id, element: e.id, msg: `${where}: Bedrock cannot show "${e.item}" (import Plugin Packs or set a Bedrock texture to show a picture there)` });
+                if (e.type === 'custom_model' && !String(e.modelId || '').trim()) out.push({ level: 'warn', menu: m.id, element: e.id, msg: `${where}: no 3D model id set (skipped)` });
+                if (e.type === 'input' && !String(e.varName || '').trim()) out.push({ level: 'warn', menu: m.id, element: e.id, msg: `${where}: input variable name is empty` });
+                if (e.type === 'roulette' && !(Array.isArray(e.rewards) && e.rewards.length)) out.push({ level: 'warn', menu: m.id, element: e.id, msg: `${where}: roulette has no rewards configured` });
                 if (isPlayer(e) && !String(e.player || '').trim()) out.push({ level: 'warn', menu: m.id, element: e.id, msg: `${where}: no player set — the player who opens the menu is shown` });
                 if (e.w < 1 || e.h < 1) out.push({ level: 'error', menu: m.id, element: e.id, msg: `${where}: size must be at least 1×1` });
-                if (e.type === 'button') {
+                if (e.type === 'button' || e.type === 'input') {
                     (e.actions || []).forEach(a => {
-                        const m2 = /^open:(.+)$/.exec(String(a).trim());
-                        if (m2 && !p.menus.some(mm => mm.id === m2[1].trim())) out.push({ level: 'warn', menu: m.id, element: e.id, msg: `${where}: opens menu "${m2[1].trim()}" which does not exist` });
+                        const m2 = /^open:([^?]+)/.exec(String(a).trim());
+                        if (m2 && !/\{[^}]+\}/.test(m2[1]) && !p.menus.some(mm => mm.id === m2[1].trim())) out.push({ level: 'warn', menu: m.id, element: e.id, msg: `${where}: opens menu "${m2[1].trim()}" which does not exist` });
                     });
                 }
             });

@@ -175,7 +175,7 @@
     }
 
     class GlyphTable {
-        constructor(ns) { this.ns = ns; this.byKey = new Map(); this.next = FIRST_GLYPH; }
+        constructor(ns) { this.ns = ns; this.byKey = new Map(); this.usedFiles = new Set(['cursor', 'kz_px']); this.next = FIRST_GLYPH; }
         /** One glyph for a w×h picture (GUI px), or for one tile of it; `detail` = texture px per GUI px */
         get(imageId, w, h, tile, detail) {
             const d = detail || 1;
@@ -185,9 +185,20 @@
             if (!g) {
                 if (this.next > 0xF8FF) throw new Error('Too many different picture sizes (more than 6400)');
                 const gw = tile ? tile.w : w, gh = tile ? tile.h : h;
+                const suffix = (tile ? `_${tile.x}_${tile.y}` : '') + (d > 1 ? `_x${d}` : '');
+                const base = String(imageId || 'img').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 36) || 'img';
+                let file = imageId === '__cursor' ? 'cursor' : `${base}_${w}x${h}${suffix}`;
+                if (imageId !== '__cursor') {
+                    if (this.usedFiles.has(file)) {
+                        let n = 2;
+                        while (this.usedFiles.has(`${file}_${n}`)) n++;
+                        file = `${file}_${n}`;
+                    }
+                    this.usedFiles.add(file);
+                }
                 g = {
                     key, imageId, w: gw, h: gh, fullW: w, fullH: h, tile: tile || null, detail: d, cp: this.next++, ascent: Math.min(LINE_ASCENT, gh),
-                    file: M().slug(`${imageId}_${w}x${h}` + (tile ? `_${tile.x}_${tile.y}` : '') + (d > 1 ? `_x${d}` : ''), 'img')
+                    file
                 };
                 this.byKey.set(key, g);
             }
@@ -234,24 +245,256 @@
     const showIfSlot = (slot) => ({ binding_type: 'view', source_property_name: `(not ((#form_button_text - '${slotMarker(slot)}') = #form_button_text))`, target_property_name: '#visible' });
     const textOfSlot = (slot) => ({ binding_type: 'view', source_property_name: `(#form_button_text - '${slotMarker(slot)}')`, target_property_name: '#kz_text' });
 
+    function rouletteGridBoxes(el, count, slotW, gap) {
+        const rows = count >= 6 ? 2 : 1;
+        const colsTop = Math.ceil(count / rows);
+        const availW = Math.max(24, el.w - 16);
+        const availH = Math.max(24, el.h - 14);
+        const maxCardW = Math.floor((availW - (colsTop - 1) * gap) / colsTop);
+        const maxCardH = Math.floor((availH - (rows - 1) * gap) / rows);
+        const size = Math.max(12, Math.min(slotW, maxCardW, maxCardH));
+        const totalH = rows * size + (rows - 1) * gap;
+        const startY = (el.h - totalH) * 0.5;
+        const boxes = [];
+        for (let idx = 0; idx < count; idx++) {
+            const row = idx < colsTop ? 0 : 1;
+            const rowCols = row === 0 ? colsTop : (count - colsTop);
+            const col = row === 0 ? idx : (idx - colsTop);
+            const rowW = rowCols * size + (rowCols - 1) * gap;
+            const startX = (el.w - rowW) * 0.5;
+            boxes.push({
+                x: Math.round(startX + col * (size + gap)),
+                y: Math.round(startY + row * (size + gap)),
+                size
+            });
+        }
+        return boxes;
+    }
+
+    function makeAnimChain(root, prefix, prop, segs) {
+        if (!segs || !segs.length) return null;
+        const clean = segs.filter(s => s && s.dur > 0.005);
+        if (!clean.length) return null;
+        const name = (i) => `${prefix}_${prop}_${i}`;
+        clean.forEach((s, i) => {
+            const def = {
+                anim_type: prop,
+                easing: s.ease || 'linear',
+                from: s.from,
+                to: s.to,
+                duration: Math.max(0.01, r3(s.dur))
+            };
+            if (i < clean.length - 1) def.next = `@server_form.${name(i + 1)}`;
+            root[name(i)] = def;
+        });
+        return `@server_form.${name(0)}`;
+    }
+
+    function rouletteStaticCard(rw, opts) {
+        const o = opts || {};
+        const controls = [
+            {
+                bg: {
+                    type: 'image', texture: 'textures/ui/white_background',
+                    size: ['100%', '100%'], keep_ratio: false,
+                    color: o.mystery ? [0.12, 0.16, 0.25] : [0.1, 0.12, 0.18],
+                    alpha: o.alpha != null ? o.alpha : 0.92, layer: 1
+                }
+            },
+            {
+                bar: {
+                    type: 'image', texture: 'textures/ui/white_background',
+                    anchor_from: 'top_left', anchor_to: 'top_left',
+                    size: ['100%', 2], keep_ratio: false,
+                    color: hexToRgb(o.accent || (rw && rw.color) || '#3b82f6'),
+                    alpha: o.alpha != null ? Math.min(1, o.alpha + 0.08) : 1.0, layer: 2
+                }
+            }
+        ];
+        if (o.mystery) {
+            controls.push({
+                q: {
+                    type: 'label', text: '?', localize: false,
+                    color: [0.96, 0.77, 0.33], shadow: true, font_scale_factor: 1.25,
+                    layer: 3
+                }
+            });
+        } else if (o.winnerSlotControl) {
+            controls.push({ winner_icon: o.winnerSlotControl });
+        } else if (rw) {
+            const tex = GS.Items ? GS.Items.bedrockTexture({ item: rw.item }) : null;
+            if (tex) controls.push({ icon: { type: 'image', texture: tex, size: ['68%', '68%'], layer: 3, bilinear: false } });
+        }
+        return controls;
+    }
+
     function bedrockElement(el, slot, layer, texOf, stripOf) {
         const pos = { anchor_from: 'top_left', anchor_to: 'top_left', offset: [el.x, el.y], size: [el.w, el.h], layer };
         // animated picture: every frame stacked in one texture, played with a flip_book anim
         const strip = stripOf ? stripOf(el) : null;
         const pic = (tex) => strip ? { texture: strip.texture, uv_size: strip.uvSize, uv: strip.uv } : { texture: tex };
         if (el.type === 'image') {
-            return { type: 'image', ...pic(texOf(el.image)), ...pos };
+            return { type: 'image', ...pic(texOf(el.image)), keep_ratio: false, ...pos };
         }
         if (M().isPlayer(el)) return bedrockPlayer(el, pos);
+        if (el.type === 'roulette') {
+            const rewards = Array.isArray(el.rewards) && el.rewards.length ? el.rewards : [{ name: 'Prize', item: 'minecraft:diamond', color: '#3b82f6' }];
+            const style = ['csgo', 'tease', 'slot_v', 'flash', 'flip'].includes(el.spinStyle) ? el.spinStyle : 'csgo';
+            const slotW = Math.max(12, M().int(el.slotSize, 44));
+            const gap = Math.max(0, M().int(el.slotGap, 6));
+            const step = slotW + gap;
+            const reels = M().clamp(M().int(el.reels, 3), 1, 5);
+            const cardCount = M().clamp(M().int(el.cardCount, 5), 3, 9);
+            const needleCol = hexToRgb(el.pointerColor || '#ff4d4f');
+            const cards = [];
+            let showVertNeedle = false;
+            let showHorizNeedle = false;
+
+            if (style === 'flash' || style === 'flip') {
+                const boxes = rouletteGridBoxes(el, cardCount, slotW, gap);
+                boxes.forEach((b, idx) => {
+                    const rw = rewards[idx % rewards.length];
+                    cards.push({
+                        ['rc_' + idx]: {
+                            type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
+                            offset: [b.x, b.y], size: [b.size, b.size], layer: 1,
+                            controls: rouletteStaticCard(rw, { mystery: style === 'flip', accent: style === 'flip' ? (el.borderColor || '#e5a43a') : rw.color })
+                        }
+                    });
+                });
+            } else if (style === 'slot_v') {
+                showHorizNeedle = true;
+                const availW = Math.max(20, el.w - 12 - (reels - 1) * gap);
+                const cardW = Math.max(12, Math.min(slotW, Math.floor(availW / reels)));
+                const cardH = Math.max(12, Math.min(slotW, Math.floor((el.h - 8) * 0.52)));
+                const stepV = cardH + gap;
+                const totalW = reels * cardW + (reels - 1) * gap;
+                const startX = Math.round((el.w - totalW) * 0.5);
+                for (let r = 0; r < reels; r++) {
+                    const lx = Math.round(startX + r * (cardW + gap));
+                    if (r > 0) {
+                        cards.push({
+                            ['sep_' + r]: {
+                                type: 'image', texture: 'textures/ui/white_background',
+                                anchor_from: 'top_left', anchor_to: 'top_left',
+                                offset: [Math.round(lx - gap * 0.5), 4], size: [1, Math.max(4, el.h - 8)],
+                                color: [1, 1, 1], alpha: 0.14, keep_ratio: false, layer: 2
+                            }
+                        });
+                    }
+                    for (let row = 0; row < 4; row++) {
+                        const rw = rewards[(row + r) % rewards.length];
+                        const cy = Math.round((el.h - cardH) * 0.5 + (row - 1) * stepV);
+                        cards.push({
+                            [`rc_${r}_${row}`]: {
+                                type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
+                                offset: [lx, cy], size: [cardW, cardH], layer: 1,
+                                controls: rouletteStaticCard(rw)
+                            }
+                        });
+                    }
+                }
+            } else {
+                showVertNeedle = true;
+                const cardH = Math.max(10, Math.min(el.h - 6, slotW));
+                const cy = Math.round((el.h - cardH) * 0.5);
+                for (let idx = 0; idx < 8; idx++) {
+                    const rw = rewards[idx % rewards.length];
+                    const cx = Math.round((el.w - slotW) * 0.5 + (idx - 2) * step);
+                    cards.push({
+                        ['rc_' + idx]: {
+                            type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
+                            offset: [cx, cy], size: [slotW, cardH], layer: 1,
+                            controls: rouletteStaticCard(rw)
+                        }
+                    });
+                }
+            }
+            const rc = [
+                { bg: { type: 'image', texture: 'textures/ui/white_background', size: ['100%', '100%'], keep_ratio: false, color: hexToRgb(el.bgColor || '#0d111a'), alpha: 0.92, layer: 0 } },
+                ...cards
+            ];
+            if (showVertNeedle) {
+                rc.push({ needle: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_middle', anchor_to: 'top_middle', size: [2, '100%'], keep_ratio: false, color: needleCol, layer: 6 } });
+            }
+            if (showHorizNeedle) {
+                rc.push({ needle: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'left_middle', anchor_to: 'left_middle', size: ['100%', 2], keep_ratio: false, color: needleCol, layer: 6 } });
+            }
+            return { type: 'panel', ...pos, clips_children: true, controls: rc };
+        }
         if (el.type === 'item') {
-            // the game's own texture of the item (Java-only items: an empty panel)
+            if (slot != null) {
+                return {
+                    type: 'panel', ...pos,
+                    bindings: [COLLECTION_TEXT, showIfSlot(slot)],
+                    controls: [{
+                        icon: {
+                            type: 'image',
+                            size: ['100%', '100%'],
+                            layer: 1,
+                            bilinear: false,
+                            bindings: [
+                                { binding_type: 'collection', binding_collection_name: 'form_buttons', binding_name: '#form_button_texture', binding_name_override: '#texture' },
+                                { binding_type: 'collection', binding_collection_name: 'form_buttons', binding_name: '#form_button_texture_file_system', binding_name_override: '#texture_file_system' },
+                                { binding_type: 'collection', binding_collection_name: 'form_buttons', binding_name: '#form_button_texture' },
+                                { binding_type: 'view', source_property_name: "(not (#form_button_texture = ''))", target_property_name: '#visible' }
+                            ]
+                        }
+                    }]
+                };
+            }
+            // static item texture from pack or vanilla mapping
             const tex = GS.Items ? GS.Items.bedrockTexture(el) : null;
             return tex ? { type: 'image', texture: tex, ...pos } : { type: 'panel', ...pos };
+        }
+        if (el.type === 'custom_model') {
+            const tex = String(el.bedrockTexture || '').trim() || (GS.Items && GS.Items.customBedrockPath ? GS.Items.customBedrockPath(el.modelId) : null);
+            return tex ? { type: 'image', texture: tex, ...pos } : { type: 'panel', ...pos };
+        }
+        if (el.type === 'input') {
+            const bgHex = hexToRgb(el.bgColor || '#161b26');
+            const brHex = hexToRgb(el.borderColor || '#52a0f0');
+            const face = (bgTint, brAlpha) => ({
+                type: 'panel', size: ['100%', '100%'],
+                controls: [
+                    { bg: { type: 'image', texture: 'textures/ui/white_background', size: ['100%', '100%'], color: bgTint, alpha: 0.88 } },
+                    { border_t: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_left', anchor_to: 'top_left', size: ['100%', 1], color: brHex, alpha: brAlpha } },
+                    { border_b: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'bottom_left', anchor_to: 'bottom_left', size: ['100%', 1], color: brHex, alpha: brAlpha } }
+                ]
+            });
+            return {
+                type: 'button', ...pos,
+                default_control: 'default', hover_control: 'hover', pressed_control: 'pressed',
+                sound_name: 'random.click', sound_volume: 1.0,
+                button_mappings: [
+                    { from_button_id: 'button.menu_select', to_button_id: 'button.form_button_click', mapping_type: 'pressed' },
+                    { from_button_id: 'button.menu_ok', to_button_id: 'button.form_button_click', mapping_type: 'focused' }
+                ],
+                bindings: [{ binding_type: 'collection_details', binding_collection_name: 'form_buttons' }, COLLECTION_TEXT, showIfSlot(slot)],
+                controls: [
+                    { default: face(bgHex, 0.9) },
+                    { hover: face(bgHex.map(c => Math.min(1, c + 0.12)), 1.0) },
+                    { pressed: face(bgHex.map(c => Math.max(0, c - 0.08)), 1.0) },
+                    {
+                        label: {
+                            type: 'label', layer: 2,
+                            text: '#kz_text',
+                            localize: false,
+                            bindings: [COLLECTION_TEXT, textOfSlot(slot)],
+                            color: hexToRgb(el.textColor || '#ffffff'),
+                            shadow: el.shadow !== false,
+                            font_scale_factor: Math.max(0.25, M().num(el.scale, 1)),
+                            text_alignment: el.align === 'left' ? 'left' : el.align === 'right' ? 'right' : 'center'
+                        }
+                    }
+                ]
+            };
         }
         if (el.type === 'text') {
             return {
                 type: 'label', ...pos,
                 text: '#kz_text',
+                localize: false,
                 bindings: [COLLECTION_TEXT, textOfSlot(slot), showIfSlot(slot)],
                 color: hexToRgb(el.color),
                 shadow: !!el.shadow,
@@ -263,7 +506,7 @@
         const img = el.image ? texOf(el.image) : null;
         const hov = el.hoverImage ? texOf(el.hoverImage) : img;
         const face = (tex, tint) => tex
-            ? { type: 'image', ...(tex === img ? pic(tex) : { texture: tex }), size: ['100%', '100%'], ...(tint ? { color: tint } : {}) }
+            ? { type: 'image', ...(tex === img ? pic(tex) : { texture: tex }), size: ['100%', '100%'], keep_ratio: false, ...(tint ? { color: tint } : {}) }
             : { type: 'image', texture: 'textures/ui/white_background', size: ['100%', '100%'], alpha: tint ? 0.18 : 0.0 };
         return {
             type: 'button', ...pos,
@@ -285,6 +528,7 @@
                     label: {
                         type: 'label', layer: 2,
                         text: '#kz_text',
+                        localize: false,
                         bindings: [COLLECTION_TEXT, textOfSlot(slot)],
                         color: hexToRgb(el.labelColor),
                         shadow: el.labelShadow !== false,
@@ -305,6 +549,31 @@
     function bedrockPlayer(el, pos) {
         const head = el.type === 'player_head';
         if (M().showsViewer(el)) {
+            if (!head) {
+                const useLive = el.bedrockRenderer === 'live'
+                    || (el.bedrockRenderer !== 'doll' && el.outfit !== 'none' && !['drag', 'mouse'].includes(el.turn));
+                if (useLive) {
+                    const k = Math.min(el.w / 52, el.h / 70);
+                    const r1 = (v) => Math.round(v * 10) / 10;
+                    const sz = el.dollSize || [r1(30 * k), r1(30 * k)];
+                    const off = el.dollOffset || [0, r1(-14 * k)];
+                    return {
+                        type: 'panel', ...pos, clips_children: false,
+                        controls: [{
+                            live_player: {
+                                type: 'custom',
+                                renderer: 'live_player_renderer',
+                                size: sz,
+                                offset: off,
+                                anchor_from: 'center',
+                                anchor_to: 'center',
+                                layer: 2,
+                                property_bag: { '#look_at_cursor': el.turn !== 'spin' }
+                            }
+                        }]
+                    };
+                }
+            }
             const box = M().dollBox(el);
             const doll = { type: 'custom', renderer: 'paper_doll_renderer', size: box.size, offset: box.offset, layer: 1 };
             if (!head) {
@@ -354,13 +623,19 @@
         };
     }
 
-    /** Which elements become form buttons (slots) on Bedrock, in order: buttons first, then texts */
+    function isDynamicBedrockItem(e) {
+        return !!e && e.type === 'item' && !String(e.bedrockTexture || '').trim() && GS.Items && GS.Items.isDynamic(e.item);
+    }
+
+    /** Which elements become form buttons (slots) on Bedrock: buttons, texts, inputs, dynamic items */
     function bedrockSlots(menu) {
         const els = menu.elements.filter(e => !e.hidden);
         const slots = new Map();
         let n = 0;
         els.filter(e => e.type === 'button').forEach(e => slots.set(e.id, n++));
         els.filter(e => e.type === 'text').forEach(e => slots.set(e.id, n++));
+        els.filter(e => e.type === 'input').forEach(e => slots.set(e.id, n++));
+        els.filter(e => isDynamicBedrockItem(e)).forEach(e => slots.set(e.id, n++));
         return slots;
     }
 
@@ -463,6 +738,11 @@
             e.w = Math.max(1, x2 - e.x); e.h = Math.max(1, y2 - e.y);
             if (e.labelScale != null) e.labelScale = M().num(e.labelScale, 1) * k;
             if (e.scale != null) e.scale = M().num(e.scale, 1) * k;
+            if (e.slotSize != null) e.slotSize = Math.max(12, r(e.slotSize));
+            if (e.slotGap != null) e.slotGap = r(e.slotGap);
+            if (e.contentW != null) e.contentW = Math.max(e.w, r(e.contentW));
+            if (e.contentH != null) e.contentH = Math.max(e.h, r(e.contentH));
+            if (e.stepPx != null) e.stepPx = Math.max(4, r(e.stepPx));
             ['dollSize', 'dollOffset'].forEach(f => { if (Array.isArray(e[f])) e[f] = e[f].map(v => Math.round(v * k * 10) / 10); });
         });
         return m;
@@ -502,21 +782,25 @@
             const menu = kB < 1 ? scaledMenu(menu0, kB) : menu0;
             const slots = bedrockSlots(menu);
             const marker = bedrockMarker(ns, menu.id);
-            const shown = menu.elements.filter(e => !e.hidden && !(e.type === 'image' && !p.images[e.image]) && !(e.type === 'item' && !String(e.item || '').trim()));
+            const shown = menu.elements.filter(e => !e.hidden && !(e.type === 'image' && !p.images[e.image]) && !(e.type === 'item' && !String(e.item || '').trim()) && !(e.type === 'custom_model' && !String(e.modelId || '').trim()));
             // pictures: placed straight in the menu panel
             const controls = [];
-            // buttons + texts: one factory item per form button; each item holds every slot
-            // element and shows only the one its marker names
             const slotControls = [];
+            const rouletteControlMap = new Map();
+            const scrollAreas = new Map();
+            shown.filter(e => e.type === 'scroll_area').forEach(a => scrollAreas.set(a.id, { area: a, controls: [], slotControls: [] }));
             const clips = scaledClips(GS.Motion.resolve(menu0), kB);
             shown.forEach((e, i) => {
+                if (e.type === 'scroll_area') return; // emitted below with its children inside
+                const scEntry = e.scrollGroup ? scrollAreas.get(e.scrollGroup) : null;
+                const relEl = scEntry ? Object.assign({}, e, { x: e.x - scEntry.area.x, y: e.y - scEntry.area.y }) : e;
                 const key = `${e.type}_${M().slug(e.id, 'el')}`;
-                const def = bedrockElement(e, slots.get(e.id), i + 1, texOf, stripOf);
+                const def = bedrockElement(relEl, slots.get(e.id), i + 1, texOf, stripOf);
                 const cl = clips.elements[e.id] || {};
                 const steps = [];
                 if (cl.intro) steps.push({ clip: cl.intro, start: 0 });
                 if (cl.loop) steps.push({ clip: cl.loop, start: cl.loop.delay || 0 });
-                const mo = steps.length ? bedrockMotion(`${ns}_mo_${menu.id}_${M().slug(e.id, 'el')}`, { x: e.x, y: e.y, w: e.w, h: e.h }, steps) : null;
+                const mo = steps.length ? bedrockMotion(`${ns}_mo_${menu.id}_${M().slug(e.id, 'el')}`, { x: relEl.x, y: relEl.y, w: relEl.w, h: relEl.h }, steps) : null;
                 let c;
                 if (mo && Object.keys(mo.props).length) {
                     Object.assign(root, mo.defs);
@@ -524,20 +808,68 @@
                     const inner = Object.assign({}, def, { offset: [0, 0], size: ['100%', '100%'], layer: 1 });
                     const wrap = {
                         type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
-                        offset: mo.props.offset || [e.x, e.y], size: mo.props.size || [e.w, e.h], layer: i + 1,
+                        offset: mo.props.offset || [relEl.x, relEl.y], size: mo.props.size || [relEl.w, relEl.h], layer: i + 1,
                         controls: [{ [key]: inner }]
                     };
                     if (mo.props.alpha) { wrap.propagate_alpha = true; wrap.alpha = mo.props.alpha; }
                     if (slots.has(e.id)) wrap.bindings = [COLLECTION_TEXT, showIfSlot(slots.get(e.id))];
                     c = { [`mo_${key}`]: wrap };
                 } else c = { [key]: def };
-                (slots.has(e.id) ? slotControls : controls).push(c);
+                if (e.type === 'roulette') rouletteControlMap.set(e.id, { c, layer: i + 1, scEntry, relEl });
+                if (scEntry) (slots.has(e.id) ? scEntry.slotControls : scEntry.controls).push(c);
+                else (slots.has(e.id) ? slotControls : controls).push(c);
             });
+            // Emit scrollable / 2D map viewports using Bedrock common.scrolling_panel + scoped form_buttons factory
+            for (const [aid, entry] of scrollAreas.entries()) {
+                const a = entry.area;
+                const aslug = M().slug(aid, 's');
+                const slotDefName = `${ns}_scslot_${menu.id}_${aslug}`;
+                const contentDefName = `${ns}_sc_${menu.id}_${aslug}`;
+                root[slotDefName] = {
+                    type: 'panel', size: [0, 0], anchor_from: 'top_left', anchor_to: 'top_left',
+                    controls: entry.slotControls
+                };
+                const scKids = entry.controls.slice();
+                scKids.push({
+                    slots: {
+                        type: 'stack_panel', orientation: 'vertical',
+                        size: ['100%', '100%'], anchor_from: 'top_left', anchor_to: 'top_left',
+                        factory: { name: 'buttons', control_name: `server_form.${slotDefName}` },
+                        collection_name: 'form_buttons',
+                        bindings: [{ binding_name: '#form_button_length', binding_name_override: '#collection_length' }]
+                    }
+                });
+                root[contentDefName] = {
+                    type: 'panel',
+                    size: [Math.max(a.w, a.contentW || a.w), Math.max(a.h, a.contentH || a.h)],
+                    anchor_from: 'top_left', anchor_to: 'top_left',
+                    controls: scKids
+                };
+                const aLayer = shown.indexOf(a) + 1;
+                controls.push({
+                    [`scroll_${aslug}`]: {
+                        type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
+                        offset: [a.x, a.y], size: [a.w, a.h], layer: aLayer, clips_children: true,
+                        controls: [
+                            { bg: { type: 'image', texture: 'textures/ui/white_background', size: ['100%', '100%'], color: hexToRgb(a.bgColor || '#0e131f'), alpha: 0.85, layer: 0 } },
+                            {
+                                [`sv@common.scrolling_panel`]: {
+                                    size: ['100%', '100%'], layer: 1,
+                                    '$scrolling_pane_size': ['100%', '100%'],
+                                    '$scroll_size': a.showScrollbar !== false ? [4, '100%'] : [0, 0],
+                                    '$show_background': false,
+                                    '$scrolling_content': `server_form.${contentDefName}`
+                                }
+                            }
+                        ]
+                    }
+                });
+            }
             root[`${ns}_slot_${menu.id}`] = {
                 type: 'panel', size: [0, 0], anchor_from: 'top_left', anchor_to: 'top_left',
                 controls: slotControls
             };
-            controls.push({
+            const slotsFactoryCtrl = {
                 slots: {
                     type: 'stack_panel', orientation: 'vertical',
                     size: ['100%', '100%'], anchor_from: 'top_left', anchor_to: 'top_left',
@@ -545,7 +877,425 @@
                     collection_name: 'form_buttons',
                     bindings: [{ binding_name: '#form_button_length', binding_name_override: '#collection_length' }]
                 }
-            });
+            };
+            const baseControls = controls.slice();
+            controls.push(slotsFactoryCtrl);
+
+            // In-place Bedrock Animated Spin overlays on the same menu page (supports csgo, tease, slot_v, flash, flip)
+            const winSlotIdx = slots.size;
+            for (const el of shown.filter(x => x.type === 'roulette')) {
+                const rslug = M().slug(el.id, 'r');
+                const rewards = Array.isArray(el.rewards) && el.rewards.length ? el.rewards : [{ name: 'Prize', item: 'minecraft:diamond', color: '#3b82f6' }];
+                const style = ['csgo', 'tease', 'slot_v', 'flash', 'flip'].includes(el.spinStyle) ? el.spinStyle : 'csgo';
+                const slotW = Math.max(12, M().int(el.slotSize, 44));
+                const gap = Math.max(0, M().int(el.slotGap, 6));
+                const step = slotW + gap;
+                const reels = M().clamp(M().int(el.reels, 3), 1, 5);
+                const cardCount = M().clamp(M().int(el.cardCount, 5), 3, 9);
+                const dur = M().clamp(M().num(el.durationSec, 4.2), 1, 15);
+                const animPrefix = `${ns}_sp_${menu.id}_${rslug}`;
+
+                const makeWinSlotFactory = (iconW, iconH) => {
+                    const winSlotDef = `${ns}_winicon_${menu.id}_${rslug}`;
+                    root[winSlotDef] = {
+                        type: 'panel', size: [0, 0], anchor_from: 'top_left', anchor_to: 'top_left',
+                        controls: [{
+                            icon: {
+                                type: 'image', anchor_from: 'top_left', anchor_to: 'top_left',
+                                offset: [-Math.round(iconW * 0.5), -Math.round(iconH * 0.5)],
+                                size: [iconW, iconH], layer: 1, bilinear: false,
+                                bindings: [
+                                    COLLECTION_TEXT,
+                                    showIfSlot(winSlotIdx),
+                                    { binding_type: 'collection', binding_collection_name: 'form_buttons', binding_name: '#form_button_texture', binding_name_override: '#texture' },
+                                    { binding_type: 'collection', binding_collection_name: 'form_buttons', binding_name: '#form_button_texture_file_system', binding_name_override: '#texture_file_system' }
+                                ]
+                            }
+                        }]
+                    };
+                    return {
+                        type: 'stack_panel', orientation: 'vertical', size: [0, 0],
+                        anchor_from: 'center', anchor_to: 'center', layer: 4,
+                        factory: { name: 'buttons', control_name: `server_form.${winSlotDef}` },
+                        collection_name: 'form_buttons',
+                        bindings: [{ binding_name: '#form_button_length', binding_name_override: '#collection_length' }]
+                    };
+                };
+
+                const vpControls = [
+                    { bg: { type: 'image', texture: 'textures/ui/white_background', size: ['100%', '100%'], keep_ratio: false, color: hexToRgb(el.bgColor || '#0d111a'), alpha: 0.96, layer: 0 } }
+                ];
+                const brCol = hexToRgb(el.borderColor || '#e5a43a');
+                vpControls.push(
+                    { b_t: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_left', anchor_to: 'top_left', size: ['100%', 1], keep_ratio: false, color: brCol, alpha: 0.85, layer: 8 } },
+                    { b_b: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'bottom_left', anchor_to: 'bottom_left', size: ['100%', 1], keep_ratio: false, color: brCol, alpha: 0.85, layer: 8 } },
+                    { b_l: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_left', anchor_to: 'top_left', size: [1, '100%'], keep_ratio: false, color: brCol, alpha: 0.85, layer: 8 } },
+                    { b_r: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_right', anchor_to: 'top_right', size: [1, '100%'], keep_ratio: false, color: brCol, alpha: 0.85, layer: 8 } }
+                );
+
+                if (style === 'slot_v') {
+                    const availW = Math.max(20, el.w - 12 - (reels - 1) * gap);
+                    const cardW = Math.max(12, Math.min(slotW, Math.floor(availW / reels)));
+                    const cardH = Math.max(12, Math.min(slotW, Math.floor((el.h - 8) * 0.52)));
+                    const stepV = cardH + gap;
+                    const totalW = reels * cardW + (reels - 1) * gap;
+                    const startColX = Math.round((el.w - totalW) * 0.5);
+                    const CARD_COUNT = 24, WIN_IDX = 18;
+                    const startY = Math.round((el.h - cardH) * 0.5 - 2 * stepV);
+                    const endY = Math.round((el.h - cardH) * 0.5 - WIN_IDX * stepV);
+                    const iconSz = Math.max(8, Math.round(Math.min(cardW, cardH) * 0.68));
+                    const winnerSlotFactory = makeWinSlotFactory(iconSz, iconSz);
+
+                    for (let r = 0; r < reels; r++) {
+                        const lx = Math.round(startColX + r * (cardW + gap));
+                        if (r > 0) {
+                            vpControls.push({
+                                ['sep_' + r]: {
+                                    type: 'image', texture: 'textures/ui/white_background',
+                                    anchor_from: 'top_left', anchor_to: 'top_left',
+                                    offset: [Math.round(lx - gap * 0.5), 4], size: [1, Math.max(4, el.h - 8)],
+                                    keep_ratio: false, color: [1, 1, 1], alpha: 0.14, layer: 3
+                                }
+                            });
+                        }
+                        const reelDur = r3(dur * (reels === 1 ? 1 : (0.58 + 0.42 * r / (reels - 1))));
+                        const animName = `${animPrefix}_reel_${r}`;
+                        root[animName] = {
+                            anim_type: 'offset',
+                            easing: 'out_cubic',
+                            from: [0, startY],
+                            to: [0, endY],
+                            duration: Math.max(0.2, reelDur)
+                        };
+                        const rCards = [];
+                        for (let idx = 0; idx < CARD_COUNT; idx++) {
+                            const rw = rewards[(idx + r * 2) % rewards.length];
+                            const cy = idx * stepV;
+                            rCards.push({
+                                ['sc_' + idx]: {
+                                    type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
+                                    offset: [0, cy], size: [cardW, cardH], layer: 1,
+                                    controls: rouletteStaticCard(rw, {
+                                        accent: idx === WIN_IDX ? '#ffd24c' : rw.color,
+                                        winnerSlotControl: idx === WIN_IDX ? winnerSlotFactory : null
+                                    })
+                                }
+                            });
+                        }
+                        vpControls.push({
+                            ['reel_col_' + r]: {
+                                type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
+                                offset: [lx, 0], size: [cardW, el.h], clips_children: true, layer: 1,
+                                controls: [{
+                                    track: {
+                                        type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
+                                        offset: `@server_form.${animName}`, size: [cardW, CARD_COUNT * stepV], layer: 1,
+                                        controls: rCards
+                                    }
+                                }]
+                            }
+                        });
+                    }
+                    vpControls.push({ needle: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'left_middle', anchor_to: 'left_middle', size: ['100%', 2], keep_ratio: false, color: hexToRgb(el.pointerColor || '#ff4d4f'), layer: 7 } });
+                } else if (style === 'flash') {
+                    const boxes = rouletteGridBoxes(el, cardCount, slotW, gap);
+                    const winSlot = Math.floor(cardCount / 2);
+                    const iconSz = Math.max(8, Math.round((boxes[0] ? boxes[0].size : slotW) * 0.68));
+                    const winnerSlotFactory = makeWinSlotFactory(iconSz, iconSz);
+                    const HOPS = 14;
+                    const hopTimes = [];
+                    for (let k = 0; k <= HOPS; k++) {
+                        hopTimes.push(r3(dur * (1 - Math.pow(1 - k / HOPS, 1 / 2.2))));
+                    }
+                    const hopStart = ((winSlot - HOPS) % cardCount + cardCount) % cardCount;
+                    const activeAt = hopTimes.map((_, k) => k === HOPS ? winSlot : (hopStart + k) % cardCount);
+
+                    boxes.forEach((b, idx) => {
+                        const stages = 4;
+                        const iconControls = [];
+                        for (let st = 0; st < stages; st++) {
+                            const segT0 = r3(dur * st / stages);
+                            const segT1 = r3(dur * (st + 1) / stages);
+                            const activeLast = st === stages - 1;
+                            const isWinnerFinal = idx === winSlot && activeLast;
+                            const aSegs = [];
+                            if (segT0 > 0.01) aSegs.push({ from: 0, to: 0, dur: segT0 });
+                            aSegs.push({ from: 1, to: 1, dur: Math.max(0.05, (activeLast ? dur : segT1) - segT0) });
+                            if (!activeLast) aSegs.push({ from: 1, to: 0, dur: 0.02 });
+                            const iconAlpha = makeAnimChain(root, `${animPrefix}_fi_${idx}_${st}`, 'alpha', aSegs);
+                            const rw = rewards[(idx * 3 + st * 2) % rewards.length];
+                            if (isWinnerFinal) {
+                                iconControls.push({
+                                    ['ic_' + st]: {
+                                        type: 'panel', size: ['100%', '100%'], propagate_alpha: true,
+                                        alpha: iconAlpha, layer: 3 + st,
+                                        controls: [{ winner_icon: winnerSlotFactory }]
+                                    }
+                                });
+                            } else {
+                                const tex = GS.Items ? GS.Items.bedrockTexture({ item: rw.item }) : null;
+                                if (tex) {
+                                    iconControls.push({
+                                        ['ic_' + st]: {
+                                            type: 'image', texture: tex, size: ['68%', '68%'], bilinear: false,
+                                            alpha: iconAlpha, layer: 3 + st
+                                        }
+                                    });
+                                }
+                            }
+                        }
+
+                        const glowSegs = [];
+                        let curT = 0;
+                        for (let k = 0; k < hopTimes.length; k++) {
+                            const tNext = k + 1 < hopTimes.length ? hopTimes[k + 1] : dur + 0.05;
+                            const stepDur = Math.max(0.02, r3(tNext - curT));
+                            const on = activeAt[k] === idx ? 0.95 : 0.0;
+                            glowSegs.push({ from: on, to: on, dur: stepDur });
+                            curT = tNext;
+                        }
+                        const glowAlpha = makeAnimChain(root, `${animPrefix}_fg_${idx}`, 'alpha', glowSegs);
+                        const rwBase = rewards[idx % rewards.length];
+                        const gCol = [1.0, 0.82, 0.29];
+                        vpControls.push({
+                            ['fl_' + idx]: {
+                                type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
+                                offset: [b.x, b.y], size: [b.size, b.size], layer: 2,
+                                controls: [
+                                    { bg: { type: 'image', texture: 'textures/ui/white_background', size: ['100%', '100%'], keep_ratio: false, color: [0.1, 0.12, 0.18], alpha: 0.9, layer: 1 } },
+                                    { bar: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_left', anchor_to: 'top_left', size: ['100%', 2], keep_ratio: false, color: hexToRgb(idx === winSlot ? '#ffd24c' : (rwBase.color || '#3b82f6')), layer: 2 } },
+                                    ...iconControls,
+                                    {
+                                        glow: {
+                                            type: 'panel', size: ['100%', '100%'], propagate_alpha: true, alpha: glowAlpha, layer: 6,
+                                            controls: [
+                                                { gt: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_left', anchor_to: 'top_left', size: ['100%', 2], keep_ratio: false, color: gCol } },
+                                                { gb: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'bottom_left', anchor_to: 'bottom_left', size: ['100%', 2], keep_ratio: false, color: gCol } },
+                                                { gl: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_left', anchor_to: 'top_left', size: [2, '100%'], keep_ratio: false, color: gCol } },
+                                                { gr: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_right', anchor_to: 'top_right', size: [2, '100%'], keep_ratio: false, color: gCol } }
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        });
+                    });
+                } else if (style === 'flip') {
+                    const boxes = rouletteGridBoxes(el, cardCount, slotW, gap);
+                    const winSlot = Math.floor(cardCount / 2);
+                    const iconSz = Math.max(8, Math.round((boxes[winSlot] ? boxes[winSlot].size : slotW) * 0.72));
+                    const winnerSlotFactory = makeWinSlotFactory(iconSz, iconSz);
+                    const tPhase1 = r3(dur * 0.64);
+                    const tPhase2 = r3(dur * 0.84);
+                    const tWinMid = r3((tPhase1 + tPhase2) * 0.5);
+                    const tOtherMid = r3((tPhase2 + dur) * 0.5);
+                    const HOPS = 10;
+                    const hopTimes = [];
+                    for (let k = 0; k <= HOPS; k++) hopTimes.push(r3(tPhase1 * (1 - Math.pow(1 - k / HOPS, 1 / 2.2))));
+                    const hopStart = ((winSlot - HOPS) % cardCount + cardCount) % cardCount;
+                    const activeAt = hopTimes.map((_, k) => k === HOPS ? winSlot : (hopStart + k) % cardCount);
+                    const gCol = [1.0, 0.82, 0.29];
+
+                    boxes.forEach((b, idx) => {
+                        const isWin = idx === winSlot;
+                        const rw = rewards[idx % rewards.length];
+                        const sz = b.size;
+                        const winSz = Math.round(sz * 1.12);
+                        const flipStart = isWin ? tPhase1 : tPhase2;
+                        const flipMid = isWin ? tWinMid : tOtherMid;
+                        const flipEnd = isWin ? tPhase2 : dur;
+                        const halfFlip = Math.max(0.05, r3(flipMid - flipStart));
+
+                        const backSize = makeAnimChain(root, `${animPrefix}_fbs_${idx}`, 'size', [
+                            { from: [sz, sz], to: [sz, sz], dur: flipStart },
+                            { from: [sz, sz], to: [2, sz], dur: halfFlip, ease: 'in_quad' }
+                        ]);
+                        const backAlpha = makeAnimChain(root, `${animPrefix}_fba_${idx}`, 'alpha', [
+                            { from: 1, to: 1, dur: flipMid },
+                            { from: 1, to: 0, dur: 0.02 }
+                        ]);
+                        const frontSize = makeAnimChain(root, `${animPrefix}_ffs_${idx}`, 'size', [
+                            { from: [2, sz], to: [2, sz], dur: flipMid },
+                            { from: [2, sz], to: isWin ? [winSz, winSz] : [sz, sz], dur: Math.max(0.05, r3(flipEnd - flipMid)), ease: 'out_back' }
+                        ]);
+                        const targetAlpha = isWin ? 1.0 : 0.45;
+                        const frontAlpha = makeAnimChain(root, `${animPrefix}_ffa_${idx}`, 'alpha', [
+                            { from: 0, to: 0, dur: flipMid },
+                            { from: targetAlpha, to: targetAlpha, dur: 0.04 }
+                        ]);
+
+                        const glowSegs = [];
+                        let curT = 0;
+                        for (let k = 0; k < hopTimes.length; k++) {
+                            const tNext = k + 1 < hopTimes.length ? hopTimes[k + 1] : tPhase1;
+                            const stepDur = Math.max(0.02, r3(tNext - curT));
+                            const on = activeAt[k] === idx ? 0.95 : 0.0;
+                            glowSegs.push({ from: on, to: on, dur: stepDur });
+                            curT = tNext;
+                        }
+                        glowSegs.push({ from: 0, to: 0, dur: Math.max(0.05, r3(dur - tPhase1)) });
+                        const glowAlpha = makeAnimChain(root, `${animPrefix}_fbg_${idx}`, 'alpha', glowSegs);
+
+                        const cellControls = [
+                            {
+                                back: {
+                                    type: 'panel', anchor_from: 'center', anchor_to: 'center',
+                                    size: backSize, propagate_alpha: true, alpha: backAlpha, clips_children: true, layer: 2,
+                                    controls: [
+                                        ...rouletteStaticCard(rw, { mystery: true, accent: el.borderColor || '#e5a43a' }),
+                                        {
+                                            glow: {
+                                                type: 'panel', size: ['100%', '100%'], propagate_alpha: true, alpha: glowAlpha, layer: 5,
+                                                controls: [
+                                                    { gt: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_left', anchor_to: 'top_left', size: ['100%', 2], keep_ratio: false, color: gCol } },
+                                                    { gb: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'bottom_left', anchor_to: 'bottom_left', size: ['100%', 2], keep_ratio: false, color: gCol } },
+                                                    { gl: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_left', anchor_to: 'top_left', size: [2, '100%'], keep_ratio: false, color: gCol } },
+                                                    { gr: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_right', anchor_to: 'top_right', size: [2, '100%'], keep_ratio: false, color: gCol } }
+                                                ]
+                                            }
+                                        }
+                                    ]
+                                }
+                            },
+                            {
+                                front: {
+                                    type: 'panel', anchor_from: 'center', anchor_to: 'center',
+                                    size: frontSize, propagate_alpha: true, alpha: frontAlpha, clips_children: true, layer: isWin ? 4 : 3,
+                                    controls: rouletteStaticCard(rw, {
+                                        accent: isWin ? '#ffd24c' : (rw.color || '#3b82f6'),
+                                        winnerSlotControl: isWin ? winnerSlotFactory : null
+                                    })
+                                }
+                            }
+                        ];
+
+                        vpControls.push({
+                            ['fp_' + idx]: {
+                                type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
+                                offset: [b.x, b.y], size: [sz, sz], layer: isWin ? 5 : 2,
+                                controls: cellControls
+                            }
+                        });
+                    });
+                } else {
+                    const cardH = Math.max(10, Math.min(el.h - 6, slotW));
+                    const cardY = Math.round((el.h - cardH) * 0.5);
+                    const WIN_IDX = 20, CARD_COUNT = 26;
+                    const startX = Math.round((el.w - slotW) * 0.5 - 2 * step);
+                    const endX = Math.round((el.w - slotW) * 0.5 - WIN_IDX * step);
+                    const iconSz = Math.max(8, Math.round(Math.min(slotW, cardH) * 0.68));
+                    const winnerSlotFactory = makeWinSlotFactory(iconSz, iconSz);
+                    const animName = `${animPrefix}_strip`;
+                    root[animName] = {
+                        anim_type: 'offset',
+                        easing: style === 'tease' ? 'out_back' : 'out_cubic',
+                        from: [startX, 0],
+                        to: [endX, 0],
+                        duration: dur
+                    };
+
+                    const cards = [];
+                    for (let idx = 0; idx < CARD_COUNT; idx++) {
+                        const rw = rewards[idx % rewards.length];
+                        const cx = idx * step;
+                        cards.push({
+                            ['sc_' + idx]: {
+                                type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
+                                offset: [cx, cardY], size: [slotW, cardH], layer: idx === WIN_IDX ? 3 : 1,
+                                controls: rouletteStaticCard(rw, {
+                                    accent: idx === WIN_IDX ? '#ffd24c' : rw.color,
+                                    winnerSlotControl: idx === WIN_IDX ? winnerSlotFactory : null
+                                })
+                            }
+                        });
+                    }
+                    vpControls.push(
+                        { track: { type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left', offset: `@server_form.${animName}`, size: [CARD_COUNT * step, el.h], layer: 1, controls: cards } },
+                        { needle: { type: 'image', texture: 'textures/ui/white_background', anchor_from: 'top_middle', anchor_to: 'top_middle', size: [2, '100%'], keep_ratio: false, color: hexToRgb(el.pointerColor || '#ff4d4f'), layer: 6 } }
+                    );
+                }
+
+                // Delayed winner badge: stays hidden during spin, fades in smoothly once the spin lands
+                const claimAlpha = makeAnimChain(root, `${animPrefix}_claim_a`, 'alpha', [
+                    { from: 0, to: 0, dur: Math.max(0.2, dur) },
+                    { from: 0, to: 1, dur: 0.25, ease: 'out_quad' }
+                ]);
+                const claimW = Math.min(Math.max(100, el.w), 140);
+                const claimX = Math.max(2, Math.min(menu.width - claimW - 2, Math.round(el.x + (el.w - claimW) * 0.5)));
+                const claimY = el.y + el.h + 24 <= menu.height
+                    ? Math.round(el.y + el.h + 4)
+                    : Math.max(2, el.y - 22);
+                const claimBtnName = `${ns}_spinclaim_${menu.id}_${rslug}`;
+                root[claimBtnName] = {
+                    type: 'panel', size: [0, 0], anchor_from: 'top_left', anchor_to: 'top_left',
+                    controls: [{
+                        claim_btn: {
+                            type: 'button', anchor_from: 'top_left', anchor_to: 'top_left',
+                            offset: [claimX, claimY], size: [claimW, 20], layer: 18,
+                            propagate_alpha: true, alpha: claimAlpha,
+                            default_control: 'default', hover_control: 'hover', pressed_control: 'pressed',
+                            sound_name: 'random.click', sound_volume: 1.0,
+                            button_mappings: [
+                                { from_button_id: 'button.menu_select', to_button_id: 'button.form_button_click', mapping_type: 'pressed' },
+                                { from_button_id: 'button.menu_ok', to_button_id: 'button.form_button_click', mapping_type: 'focused' }
+                            ],
+                            bindings: [{ binding_type: 'collection_details', binding_collection_name: 'form_buttons' }, COLLECTION_TEXT, showIfSlot(winSlotIdx)],
+                            controls: [
+                                { default: { type: 'image', texture: 'textures/ui/white_background', size: ['100%', '100%'], keep_ratio: false, color: [0.16, 0.44, 0.28], alpha: 0.94 } },
+                                { hover: { type: 'image', texture: 'textures/ui/white_background', size: ['100%', '100%'], keep_ratio: false, color: [0.22, 0.56, 0.36], alpha: 0.98 } },
+                                { pressed: { type: 'image', texture: 'textures/ui/white_background', size: ['100%', '100%'], keep_ratio: false, color: [0.12, 0.34, 0.22], alpha: 0.98 } },
+                                { label: { type: 'label', layer: 2, text: '#kz_text', localize: false, bindings: [COLLECTION_TEXT, textOfSlot(winSlotIdx)], color: [1, 1, 1], shadow: true, text_alignment: 'center' } }
+                            ]
+                        }
+                    }]
+                };
+
+                const idleEntry = rouletteControlMap.get(el.id);
+                const spinMenuControls = baseControls.filter(item => !idleEntry || item !== idleEntry.c);
+                spinMenuControls.push(
+                    {
+                        [`spin_vp_${rslug}`]: {
+                            type: 'panel', anchor_from: 'top_left', anchor_to: 'top_left',
+                            offset: [el.x, el.y], size: [el.w, el.h], clips_children: true,
+                            layer: (idleEntry ? idleEntry.layer : 4) + 1,
+                            controls: vpControls
+                        }
+                    },
+                    slotsFactoryCtrl,
+                    {
+                        [`claim_slots_${rslug}`]: {
+                            type: 'stack_panel', orientation: 'vertical', size: ['100%', '100%'],
+                            anchor_from: 'top_left', anchor_to: 'top_left', layer: 20,
+                            factory: { name: 'buttons', control_name: `server_form.${claimBtnName}` },
+                            collection_name: 'form_buttons',
+                            bindings: [{ binding_name: '#form_button_length', binding_name_override: '#collection_length' }]
+                        }
+                    }
+                );
+
+                const spinPanelName = `${ns}_spinpanel_${menu.id}_${rslug}`;
+                root[spinPanelName] = {
+                    type: 'panel', size: [menu.width, menu.height], anchor_from: 'center', anchor_to: 'center',
+                    controls: spinMenuControls
+                };
+                const spinMarker = `kz:${ns}:spin:${menu.id}:${el.id}|`;
+                wrapperControls.push({
+                    [`${ns}_show_spin_${menu.id}_${rslug}`]: {
+                        type: 'panel', size: ['100%', '100%'],
+                        bindings: [{ binding_name: '#title_text' }, { binding_type: 'view', source_property_name: `(not ((#title_text - '${spinMarker}') = #title_text))`, target_property_name: '#visible' }],
+                        controls: [
+                            ...(menu.fullscreen && menu.bedrockBackdrop ? [{
+                                backdrop: {
+                                    type: 'image', texture: 'textures/ui/white_background', size: ['400%', '400%'], keep_ratio: false, layer: 0,
+                                    anchor_from: 'center', anchor_to: 'center',
+                                    color: hexToRgb(menu.backdrop || '#000000'), alpha: M().clamp(M().num(menu.backdropAlpha, 0.6), 0, 1)
+                                }
+                            }] : []),
+                            { [`spin@server_form.${spinPanelName}`]: { layer: 1 } }
+                        ]
+                    }
+                });
+            }
             const menuPanel = {
                 type: 'panel',
                 size: [menu.width, menu.height],
@@ -634,7 +1384,7 @@
         if (menu.nextPage) L.push(`next-page: ${q(menu.nextPage)}`);
         if (clips.open) L.push(`motion: ${flow({ open: clips.open })}`);
         L.push('elements:');
-        const visible = menu.elements.filter(e => !e.hidden && !(e.type === 'image' && !p.images[e.image]) && !(e.type === 'item' && !String(e.item || '').trim()));
+        const visible = menu.elements.filter(e => !e.hidden && !(e.type === 'image' && !p.images[e.image]) && !(e.type === 'item' && !String(e.item || '').trim()) && !(e.type === 'custom_model' && !String(e.modelId || '').trim()) && !(e.type === 'input' && !String(e.varName || '').trim()));
         if (!visible.length) L[L.length - 1] = 'elements: []';
         visible.forEach(e => {
             L.push(`  - id: ${q(e.id)}`);
@@ -644,6 +1394,7 @@
             L.push(`    y: ${M().int(e.y, 0)}`);
             L.push(`    w: ${M().int(e.w, 1)}`);
             L.push(`    h: ${M().int(e.h, 1)}`);
+            if (e.scrollGroup) L.push(`    scroll-group: ${q(e.scrollGroup)}`);
             const pictureYaml = (imageId, key) => {
                 const ts = tilesOf(imageId, M().int(e.w, 1), M().int(e.h, 1), e.detail || 1);
                 if (ts.length === 1) {
@@ -701,6 +1452,62 @@
                 L.push(`    glint: ${!!e.glint}`);
                 L.push(`    look: ${q(e.look === '3d' ? '3d' : 'flat')}`);
                 L.push(`    spin: ${!!e.spin}`);
+                if (slots.has(e.id)) L.push(`    bedrock-slot: ${slots.get(e.id)}`);
+            }
+            if (e.type === 'roulette') {
+                L.push(`    slot-size: ${M().int(e.slotSize, 44)}`);
+                L.push(`    slot-gap: ${M().int(e.slotGap, 6)}`);
+                L.push(`    duration: ${M().num(e.durationSec, 4.2)}`);
+                L.push(`    spin-style: ${q(e.spinStyle || 'csgo')}`);
+                L.push(`    reels: ${M().clamp(M().int(e.reels, 3), 1, 5)}`);
+                L.push(`    card-count: ${M().clamp(M().int(e.cardCount, 5), 3, 9)}`);
+                L.push(`    bg-color: ${q(e.bgColor || '#0d111a')}`);
+                L.push(`    border-color: ${q(e.borderColor || '#e5a43a')}`);
+                L.push(`    pointer-color: ${q(e.pointerColor || '#ff4d4f')}`);
+                L.push(`    tick-sound: ${q(e.tickSound || '')}`);
+                L.push(`    win-sound: ${q(e.winSound || '')}`);
+                L.push(`    rewards: ${flow(Array.isArray(e.rewards) ? e.rewards : [])}`);
+            }
+            if (e.type === 'scroll_area') {
+                L.push(`    scroll-mode: ${q(e.scrollMode || 'pan2d')}`);
+                L.push(`    content-w: ${Math.max(e.w, M().int(e.contentW, e.w))}`);
+                L.push(`    content-h: ${Math.max(e.h, M().int(e.contentH, e.h))}`);
+                L.push(`    step-px: ${M().clamp(M().int(e.stepPx, 28), 4, 200)}`);
+                L.push(`    bg-color: ${q(e.bgColor || '#0e131f')}`);
+                L.push(`    border-color: ${q(e.borderColor || '#3a8ee6')}`);
+                L.push(`    show-scrollbar: ${e.showScrollbar !== false}`);
+            }
+            if (e.type === 'custom_model') {
+                L.push(`    model-id: ${q(e.modelId || '')}`);
+                L.push(`    animation: ${q(e.animation || 'idle')}`);
+                L.push(`    scale-3d: ${M().num(e.scale3d, 1)}`);
+                L.push(`    angle: ${M().num(e.angle, 20)}`);
+                L.push(`    spin: ${!!e.spin}`);
+                L.push(`    spin-speed: ${M().num(e.spinSpeed, 45)}`);
+                L.push(`    hitbox-w: ${M().num(e.hitboxW, 1)}`);
+                L.push(`    hitbox-h: ${M().num(e.hitboxH, 2)}`);
+            }
+            if (e.type === 'input') {
+                L.push(`    var-name: ${q(e.varName || 'qty')}`);
+                L.push(`    input-type: ${q(e.inputType || 'number')}`);
+                L.push(`    default-value: ${q(e.defaultValue == null ? '1' : e.defaultValue)}`);
+                L.push(`    min: ${M().num(e.min, 1)}`);
+                L.push(`    max: ${M().num(e.max, 64)}`);
+                L.push(`    step: ${M().num(e.step, 1)}`);
+                L.push(`    prefix: ${q(e.prefix == null ? '' : e.prefix)}`);
+                L.push(`    suffix: ${q(e.suffix == null ? '' : e.suffix)}`);
+                L.push(`    prompt-title: ${q(e.promptTitle || 'Enter value')}`);
+                L.push(`    placeholder: ${q(e.placeholder || 'Type value...')}`);
+                L.push(`    text-color: ${q(e.textColor || '#ffffff')}`);
+                L.push(`    bg-color: ${q(e.bgColor || '#161b26')}`);
+                L.push(`    border-color: ${q(e.borderColor || '#52a0f0')}`);
+                L.push(`    scale: ${M().num(e.scale, 1)}`);
+                L.push(`    shadow: ${e.shadow !== false}`);
+                L.push(`    align: ${q(e.align || 'center')}`);
+                L.push(`    bedrock-slot: ${slots.get(e.id)}`);
+                const acts = (e.actions || []).map(a => String(a).trim()).filter(Boolean);
+                if (acts.length) { L.push('    actions:'); acts.forEach(a => L.push(`      - ${q(a)}`)); }
+                else L.push('    actions: []');
             }
             if (e.type === 'text') {
                 L.push(`    text: ${q(e.text || '')}`);
@@ -766,7 +1573,7 @@ ${javaLine}
 
 Install
 -------
-1. Put KaizerUI-1.0.0.jar in plugins/ (from plugins/KaizerUI/target).
+1. Put KaizerUI-1.2.0.jar in plugins/ (from plugins/KaizerUI/target).
    Needed: Paper / Purpur / Folia 1.21+.
    Recommended: PacketEvents (locks the camera so the mouse moves a cursor),
                 PlaceholderAPI (placeholders in texts and labels),
@@ -857,6 +1664,70 @@ ${creditText}`;
 
         /* Bedrock pack */
         const bedrockPack = [];
+        // Pre-render and pack PNG icons for custom plugin items, 3D models, and cached vanilla textures
+        const customIconEntries = new Map();
+        const vanillaIconEntries = new Map();
+        let hasDynamicItem = false;
+        if (GS.Items) {
+            if (GS.CustomAssets) await GS.CustomAssets.ensureLoaded();
+            const collectCustom = async (cid) => {
+                if (!cid || !GS.CustomAssets || !GS.CustomAssets.isCustomId(cid)) return;
+                const canonical = GS.CustomAssets.findItem(cid);
+                let iconUrl = GS.CustomAssets.iconUrl(cid);
+                if (!iconUrl && canonical && canonical.hasModel && GS.BbModel) {
+                    const mod = await GS.CustomAssets.getModel(canonical.id);
+                    if (mod) {
+                        iconUrl = await GS.BbModel.renderThumbnail(mod, 64);
+                        if (iconUrl) canonical.iconDataUrl = iconUrl;
+                    }
+                }
+                const bpath = GS.Items.customBedrockPath(cid);
+                if (iconUrl && bpath && !customIconEntries.has(bpath)) {
+                    customIconEntries.set(bpath, iconUrl);
+                }
+            };
+            for (const m of p.menus) {
+                for (const el of m.elements) {
+                    if (el.hidden) continue;
+                    if (isDynamicBedrockItem(el)) hasDynamicItem = true;
+                    if (el.type === 'item' && !el.bedrockTexture) {
+                        const vp = GS.Items.vanillaPackPath(el.item);
+                        const vu = vp ? GS.Items.url(el.item) : null;
+                        if (vp && vu && !vanillaIconEntries.has(vp)) vanillaIconEntries.set(vp, vu);
+                    }
+                    const cid = el.type === 'custom_model' ? el.modelId : (el.type === 'item' ? el.item : '');
+                    if (!el.bedrockTexture) await collectCustom(cid);
+                    if (el.type === 'roulette' && Array.isArray(el.rewards)) {
+                        for (const rw of el.rewards) {
+                            const rvp = GS.Items.vanillaPackPath(rw.item);
+                            const rvu = rvp ? GS.Items.url(rw.item) : null;
+                            if (rvp && rvu && !vanillaIconEntries.has(rvp)) vanillaIconEntries.set(rvp, rvu);
+                            await collectCustom(rw.item);
+                        }
+                    }
+                    // Also inspect parameterized open:... actions (e.g. open:confirm?item_id=ia:...)
+                    for (const act of (el.actions || [])) {
+                        const qm = /\?([^#\s]+)/.exec(String(act));
+                        if (!qm) continue;
+                        for (const pair of qm[1].split('&')) {
+                            const eq = pair.indexOf('=');
+                            if (eq > 0) await collectCustom(decodeURIComponent(pair.slice(eq + 1).trim()));
+                        }
+                    }
+                }
+            }
+            if (hasDynamicItem && GS.CustomAssets) {
+                for (const it of GS.CustomAssets.list({ kind: 'item' }).slice(0, 250)) {
+                    await collectCustom(it.id);
+                }
+            }
+        }
+        for (const [bpath, dataUrl] of customIconEntries) {
+            bedrockPack.push({ path: `${bpath}.png`, base64: await renderPng(dataUrl, 64, 64) });
+        }
+        for (const [vpath, dataUrl] of vanillaIconEntries) {
+            bedrockPack.push({ path: `${vpath}.png`, base64: await renderPng(dataUrl, 32, 32) });
+        }
         const texDir = `${ns}_gui`;
         const usedTex = new Set();
         const texOf = (imageId) => { usedTex.add(imageId); return `textures/${texDir}/${imageId}`; };

@@ -36,7 +36,8 @@
         nether_wart: 'nether_wart', sugar_cane: 'reeds', minecart: 'minecart_normal', chest_minecart: 'minecart_chest', oak_boat: 'boat_oak', armor_stand: 'wooden_armorstand',
         glow_item_frame: 'glow_item_frame', item_frame: 'item_frame', oak_door: 'door_wood', iron_door: 'door_iron', cake: 'cake', flower_pot: 'flower_pot',
         leather_horse_armor: 'leather_horse_armor', iron_horse_armor: 'iron_horse_armor', golden_horse_armor: 'gold_horse_armor', diamond_horse_armor: 'diamond_horse_armor',
-        music_disc_cat: 'record_cat', spyglass: 'spyglass', turtle_helmet: 'turtle_helmet', phantom_membrane: 'phantom_membrane', heart_of_the_sea: 'heartofthesea_closed'
+        music_disc_cat: 'record_cat', spyglass: 'spyglass', turtle_helmet: 'turtle_helmet', phantom_membrane: 'phantom_membrane', heart_of_the_sea: 'heartofthesea_closed',
+        lingering_potion: 'potion_bottle_lingering', tipped_arrow: 'arrow', netherite_helmet: 'netherite_helmet', chainmail_helmet: 'chainmail_helmet'
     };
 
     // icons: every item drawn like the inventory (blocks in 3D), kinds: id → 'item' | 'block',
@@ -71,8 +72,22 @@
 
     function isSlot(id) { return /^slot:/i.test(String(id || '').trim()); }
 
+    function isDynamic(id) {
+        const s = String(id || '').trim();
+        return isSlot(s) || s.includes('{') || s.includes('%');
+    }
+
+    function vanillaPackPath(id) {
+        const n = vanillaName(id);
+        if (!n) return null;
+        return url(id) ? ('textures/kaizerui/vanilla/' + n) : null;
+    }
+
     /** Data URL of the item's picture for the editor, or null */
     function url(id) {
+        if (GS.CustomAssets && GS.CustomAssets.isCustomId(id)) {
+            return GS.CustomAssets.iconUrl(id);
+        }
         restore();
         const n = vanillaName(id);
         if (!n) return null;
@@ -83,10 +98,23 @@
             || state.blocks[n.replace(/_(slab|stairs|wall|fence)$/, '')] || state.blocks[n.replace(/s$/, '')] || null;
     }
 
-    /** Texture path of the item in the Bedrock game's own pack, or null if it cannot be shown there */
+    function customBedrockPath(id) {
+        if (!GS.CustomAssets || !GS.CustomAssets.isCustomId(id)) return null;
+        const ic = GS.CustomAssets.iconUrl(id);
+        if (!ic) return null;
+        const slug = String(id).trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+        return slug ? ('textures/kaizerui/custom/' + slug) : null;
+    }
+
+    /** Texture path of the item in the Bedrock game's own pack, or null if dynamic / unavailable */
     function bedrockTexture(el) {
         const over = String(el.bedrockTexture || '').trim();
         if (over) return over.replace(/\.png$/i, '');
+        if (isDynamic(el.item)) return null;
+        const vPack = vanillaPackPath(el.item);
+        if (vPack) return vPack;
+        const cPack = customBedrockPath(el.item);
+        if (cPack) return cPack;
         const n = vanillaName(el.item);
         if (!n) return null;
         restore();
@@ -370,66 +398,116 @@
     }
 
     const cell = (n) => `<button class="gsi-cell" data-item="minecraft:${n}" title="minecraft:${n}"><img src="${url(n)}" alt="" loading="lazy"><span>${esc(n)}</span></button>`;
+    const customCell = (it) => {
+        const u = url(it.id);
+        const badge = it.provider === 'itemsadder' ? 'IA' : it.provider === 'nexo' ? 'Nexo' : it.provider === 'oraxen' ? 'Oraxen' : it.provider === 'bettermodel' ? 'BM' : it.provider === 'modelengine' ? 'MEG' : 'Pack';
+        return `<button class="gsi-cell custom" data-item="${esc(it.id)}" title="${esc(it.id)} (${badge})">${u ? `<img src="${u}" alt="" loading="lazy">` : `<span class="gsi-ph">${badge}</span>`}<span>${esc(it.name || it.id)}</span></button>`;
+    };
 
     /** Grid of every item (no limit), filtered by the search text and the tab */
     function gridHtml(q, tab) {
-        const s = String(q || '').trim().toLowerCase().replace(/^minecraft:/, '').replace(/\s+/g, '_');
+        const rawQ = String(q || '').trim().toLowerCase();
+        const s = rawQ.replace(/^minecraft:/, '').replace(/\s+/g, '_');
         const cat = catalog();
         const hit = (n) => !s || n.includes(s);
         const its = cat.items.filter(hit), bls = cat.blocks.filter(hit);
         const slots = SLOTS.filter(([id, l]) => !s || id.includes(s) || l.toLowerCase().includes(s));
         const t = tab || 'all';
+        const customAll = GS.CustomAssets ? GS.CustomAssets.list({ q: rawQ }) : [];
+        const customIa = customAll.filter(x => x.provider === 'itemsadder');
+        const customNexo = customAll.filter(x => x.provider === 'nexo' || x.provider === 'oraxen');
+        const customModels = customAll.filter(x => x.kind === 'custom_model' || x.provider === 'modelengine' || x.provider === 'bettermodel');
+        const customItems = customAll.filter(x => x.kind !== 'custom_model');
         let h = '';
+        if (t === 'itemsadder') {
+            if (customIa.length) h += `<div class="gsi-head">ItemsAdder <em>${customIa.length}</em></div>` + customIa.map(customCell).join('');
+            else h += '<div class="gs-hint gsi-empty">No ItemsAdder items imported yet. Click <b>Plugin Packs…</b> above and select your <code>ItemsAdder/contents</code> folder or resource pack zip.</div>';
+            return h;
+        }
+        if (t === 'nexo') {
+            if (customNexo.length) h += `<div class="gsi-head">Nexo / Oraxen <em>${customNexo.length}</em></div>` + customNexo.map(customCell).join('');
+            else h += '<div class="gs-hint gsi-empty">No Nexo / Oraxen items imported yet. Click <b>Plugin Packs…</b> above and select your <code>plugins/Nexo</code> (or Oraxen) folder.</div>';
+            return h;
+        }
+        if (t === 'models') {
+            if (customModels.length) h += `<div class="gsi-head">3D Models (ModelEngine / BetterModel) <em>${customModels.length}</em></div>` + customModels.map(customCell).join('');
+            else h += '<div class="gs-hint gsi-empty">No 3D models imported yet. Click <b>Plugin Packs…</b> above and select a <code>.bbmodel</code> file or your <code>ModelEngine/blueprints</code> / <code>BetterModel/models</code> folder.</div>';
+            return h;
+        }
         if ((t === 'all' || t === 'worn') && slots.length) {
             h += `<div class="gsi-head">What the player wears / holds <em>Java only</em></div>`;
             h += slots.map(([id, l]) => `<button class="gsi-cell slot" data-item="${id}" title="${esc(l)} — Java only"><span>${esc(l)}</span></button>`).join('');
         }
+        if (t === 'all' && customItems.length) h += `<div class="gsi-head">Plugin Custom Items <em>${customItems.length}</em></div>` + customItems.map(customCell).join('');
+        if (t === 'all' && customModels.length) h += `<div class="gsi-head">3D Models (MEG / BM) <em>${customModels.length}</em></div>` + customModels.map(customCell).join('');
         if ((t === 'all' || t === 'items') && its.length) h += `<div class="gsi-head">Items <em>${its.length}</em></div>` + its.map(cell).join('');
         if ((t === 'all' || t === 'blocks') && bls.length) h += `<div class="gsi-head">Blocks <em>${bls.length}</em></div>` + bls.map(cell).join('');
-        if (!cat.items.length && !cat.blocks.length) {
-            h += '<div class="gs-hint gsi-empty">No item pictures yet. Press <b>Download Minecraft assets</b> (from Mojang, ~40 MB once), or load them from your Minecraft client <code>.jar</code> (<code>%APPDATA%\\.minecraft\\versions\\&lt;version&gt;\\&lt;version&gt;.jar</code>) or a resource pack — they stay on this computer. You can still type an id below.</div>';
+        if (!cat.items.length && !cat.blocks.length && !customAll.length) {
+            h += '<div class="gs-hint gsi-empty">No item pictures yet. Press <b>Download Minecraft assets</b> (from Mojang, ~40 MB once), <b>Load from .jar / .zip…</b>, or <b>Plugin Packs…</b> for ItemsAdder / Nexo / ModelEngine / BetterModel. You can still type an id below.</div>';
         } else if (!h) h = `<div class="gs-hint gsi-empty">Nothing matches "${esc(q)}".</div>`;
         return h;
     }
 
     function srcText() {
-        if (!count()) return 'Pictures: none loaded';
+        const cCount = GS.CustomAssets ? GS.CustomAssets.count() : 0;
+        const cNote = cCount ? ` · ${cCount} plugin items/models` : '';
+        if (!count()) return cCount ? `Vanilla: none loaded${cNote}` : 'Pictures: none loaded';
         const flat = !Object.keys(state.icons).length && Object.keys(state.blocks).length;
         const stale = Object.keys(state.icons).length && GS.McRender && state.iconVer !== GS.McRender.VERSION;
-        return `${count()} pictures · from ${state.source}` + (flat ? ' · blocks are flat: press Download Minecraft assets again to get them in 3D like the inventory'
+        return `${count()} vanilla pictures · from ${state.source}${cNote}` + (flat ? ' · blocks are flat: press Download Minecraft assets again to get them in 3D like the inventory'
             : stale ? ' · drawn by an older version: press Download Minecraft assets again to draw them right' : '');
     }
 
     /** Opens the item picker; resolves to an item id or null */
-    function pick(current) {
-        return GS.modal('Choose an item', `
+    function pick(current, opts) {
+        const defaultTab = (opts && opts.tab) || 'all';
+        return GS.modal((opts && opts.title) || 'Choose an item or custom model', `
             <div class="gsi">
               <div class="gsi-top">
-                <input type="text" class="gsi-search" placeholder="Search (diamond, sword, apple…)" spellcheck="false">
-                <div class="gsi-tabs"><button class="active" data-tab="all">All</button><button data-tab="items">Items</button><button data-tab="blocks">Blocks</button><button data-tab="worn">Worn</button></div>
+                <input type="text" class="gsi-search" placeholder="Search (diamond, sword, itemsadder, dragon…)" spellcheck="false">
+                <div class="gsi-tabs">
+                  <button class="${defaultTab === 'all' ? 'active' : ''}" data-tab="all">All</button>
+                  <button class="${defaultTab === 'items' ? 'active' : ''}" data-tab="items">Items</button>
+                  <button class="${defaultTab === 'blocks' ? 'active' : ''}" data-tab="blocks">Blocks</button>
+                  <button class="${defaultTab === 'worn' ? 'active' : ''}" data-tab="worn">Worn</button>
+                  <button class="${defaultTab === 'itemsadder' ? 'active' : ''}" data-tab="itemsadder">ItemsAdder</button>
+                  <button class="${defaultTab === 'nexo' ? 'active' : ''}" data-tab="nexo">Nexo</button>
+                  <button class="${defaultTab === 'models' ? 'active' : ''}" data-tab="models">3D Models</button>
+                </div>
                 <button class="primary-btn" data-load="mojang">Download Minecraft assets</button>
                 <button class="ghost-btn" data-load="file">Load from .jar / .zip…</button>
                 <button class="ghost-btn" data-load="dir">From pack folder…</button>
+                <button class="ghost-btn" data-load="custom">Plugin Packs…</button>
               </div>
               <div class="gs-hint gsi-src">${esc(srcText())}</div>
-              <div class="gsi-grid">${gridHtml('', 'all')}</div>
-              <div class="gs-field wide"><label>Or type an id</label><input type="text" class="gsi-id" value="${esc(current || '')}" placeholder="minecraft:diamond_sword · itemsadder:namespace:id · nexo:id" spellcheck="false"></div>
+              <div class="gsi-grid">${gridHtml('', defaultTab)}</div>
+              <div class="gs-field wide"><label>Or type an id</label><input type="text" class="gsi-id" value="${esc(current || '')}" placeholder="minecraft:diamond_sword · itemsadder:ns:id · nexo:id · meg:id · bm:id" spellcheck="false"></div>
               <input type="file" class="gsi-file" accept=".jar,.zip" hidden><input type="file" class="gsi-dir" webkitdirectory hidden>
             </div>`, [['cancel', 'Cancel'], ['ok', 'Use this id', 'primary']], {
             cls: 'xwide',
             onOpen: (root, done) => {
                 const search = root.querySelector('.gsi-search'), grid = root.querySelector('.gsi-grid');
-                let tab = 'all';
+                let tab = defaultTab;
+                const refresh = () => {
+                    if (!document.body.contains(root)) return;
+                    grid.innerHTML = gridHtml(search.value, tab);
+                    root.querySelector('.gsi-src').textContent = srcText();
+                };
+                const unsub = GS.CustomAssets ? GS.CustomAssets.onUpdate(refresh) : null;
+                if (GS.CustomAssets) GS.CustomAssets.ensureLoaded().then(refresh);
                 root.querySelector('.gsi-tabs').addEventListener('click', (e) => {
                     const b = e.target.closest('[data-tab]');
                     if (!b) return;
                     tab = b.dataset.tab;
                     root.querySelectorAll('.gsi-tabs [data-tab]').forEach(x => x.classList.toggle('active', x === b));
                     refresh();
+                    grid.scrollTop = 0;
                 });
-                const refresh = () => { grid.innerHTML = gridHtml(search.value, tab); grid.scrollTop = 0; root.querySelector('.gsi-src').textContent = srcText(); };
-                search.addEventListener('input', refresh);
-                grid.addEventListener('click', (e) => { const b = e.target.closest('[data-item]'); if (b) done({ button: 'pick', id: b.dataset.item }); });
+                search.addEventListener('input', () => { refresh(); grid.scrollTop = 0; });
+                grid.addEventListener('click', (e) => {
+                    const b = e.target.closest('[data-item]');
+                    if (b) { if (unsub) unsub(); done({ button: 'pick', id: b.dataset.item }); }
+                });
                 const load = async (input, label) => {
                     try {
                         const src = root.querySelector('.gsi-src');
@@ -444,6 +522,9 @@
                 di.addEventListener('change', () => load(di, di.files[0] && String(di.files[0].webkitRelativePath).split('/')[0]));
                 root.querySelector('[data-load="file"]').addEventListener('click', () => { fi.value = ''; fi.click(); });
                 root.querySelector('[data-load="dir"]').addEventListener('click', () => { di.value = ''; di.click(); });
+                root.querySelector('[data-load="custom"]').addEventListener('click', () => {
+                    if (GS.CustomAssets) GS.CustomAssets.openManagerDialog(refresh);
+                });
                 root.querySelector('[data-load="mojang"]').addEventListener('click', async () => {
                     const src = root.querySelector('.gsi-src');
                     try {
@@ -462,5 +543,5 @@
         });
     }
 
-    GS.Items = { SLOTS, BEDROCK_NAMES, catalog, url, bedrockTexture, vanillaName, isSlot, count, loadFiles, clear, pick, zipEntries, downloadVanilla, downloadDialog, skinArt, skinImage, drawPlayer, source: () => (restore(), state.source) };
+    GS.Items = { SLOTS, BEDROCK_NAMES, catalog, url, bedrockTexture, customBedrockPath, vanillaPackPath, vanillaName, isSlot, isDynamic, count, loadFiles, clear, pick, zipEntries, downloadVanilla, downloadDialog, skinArt, skinImage, drawPlayer, source: () => (restore(), state.source) };
 })();

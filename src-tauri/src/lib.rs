@@ -1,18 +1,20 @@
 mod codegen;
+mod custom_assets;
 mod export;
 mod guistudio;
 mod javaexport;
 mod javahud;
 mod js;
+mod mcp_bridge;
 mod overrides;
 mod storage;
 mod updater;
 
 use serde_json::{json, Value};
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use storage::Storage;
-use tauri::{Manager, State};
+use tauri::{Manager, RunEvent, State};
 use tauri_plugin_dialog::DialogExt;
 
 struct AppState {
@@ -202,6 +204,9 @@ pub fn run() {
             app.manage(AppState { storage: Mutex::new(storage) });
             // GUI Studio (gui.html) keeps its projects apart from HUD projects
             app.manage(guistudio::GuiState::new(data_dir.join("gui_projects")).map_err(|e| Box::<dyn std::error::Error>::from(e))?);
+            app.manage(custom_assets::CustomAssetsState::new(data_dir.join("custom_assets")).map_err(|e| Box::<dyn std::error::Error>::from(e))?);
+            let bridge = mcp_bridge::start_bridge(app.handle().clone(), data_dir).map_err(|e| Box::<dyn std::error::Error>::from(e))?;
+            app.manage(bridge);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -229,8 +234,24 @@ pub fn run() {
             updater::get_app_version,
             updater::check_app_update,
             updater::download_app_update,
-            updater::install_app_update
+            updater::install_app_update,
+            mcp_bridge::mcp_bridge_hello,
+            mcp_bridge::mcp_bridge_reply,
+            mcp_bridge::mcp_bridge_info,
+            custom_assets::custom_assets_list,
+            custom_assets::custom_assets_get_model,
+            custom_assets::custom_assets_save_icon,
+            custom_assets::custom_assets_scan_path,
+            custom_assets::custom_assets_pick_and_import,
+            custom_assets::custom_assets_remove_source
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running KaizerHUD Studio");
+        .build(tauri::generate_context!())
+        .expect("error while building KaizerHUD Studio")
+        .run(|app_handle, event| {
+            if let RunEvent::Exit = event {
+                if let Some(bridge) = app_handle.try_state::<Arc<mcp_bridge::McpBridgeState>>() {
+                    bridge.cleanup_bridge();
+                }
+            }
+        });
 }

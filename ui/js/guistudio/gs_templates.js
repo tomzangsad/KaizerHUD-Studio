@@ -1169,21 +1169,36 @@
         return out;
     }
 
-    /** Draws a built page on a canvas at `scale` (images pixel-sharp) */
+    /** Draws a built page (or project menu w/ images map) on a canvas at `scale` */
     async function renderPreview(page, scale, hoverIndex) {
         const c = document.createElement('canvas');
         c.width = page.width * scale; c.height = page.height * scale;
         const g = c.getContext('2d');
         g.imageSmoothingEnabled = false;
+        const imgs = page.images || {};
+        const imgOf = (id) => (id && imgs[id] && imgs[id].data) || null;
         let bi = -1;
-        for (const e of page.elements) {
+        for (const e of (page.elements || [])) {
+            if (e.hidden) continue;
             if (e.type === 'image' || e.type === 'button') {
                 if (e.type === 'button') bi++;
-                const src = e.type === 'button' && bi === hoverIndex ? e.hoverPng : e.png;
-                const img = await new Promise(res => { const im = new Image(); im.onload = () => res(im); im.src = src; });
-                g.imageSmoothingEnabled = (e.detail || 1) > 1;
-                g.drawImage(img, e.x * scale, e.y * scale, e.w * scale, e.h * scale);
-                g.imageSmoothingEnabled = false;
+                const isHov = e.type === 'button' && bi === hoverIndex;
+                const hovSrc = isHov ? (e.hoverPng || imgOf(e.hoverImage)) : null;
+                const normSrc = e.png || imgOf(e.image);
+                const src = hovSrc || normSrc;
+                if (src) {
+                    const img = await new Promise(res => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
+                    if (img) {
+                        g.imageSmoothingEnabled = (e.detail || 1) > 1;
+                        g.drawImage(img, e.x * scale, e.y * scale, e.w * scale, e.h * scale);
+                        g.imageSmoothingEnabled = false;
+                    }
+                } else if (e.type === 'button') {
+                    g.fillStyle = isHov ? 'rgba(255,255,255,.22)' : 'rgba(255,255,255,.08)';
+                    g.fillRect(e.x * scale, e.y * scale, e.w * scale, e.h * scale);
+                    g.strokeStyle = 'rgba(255,255,255,.25)';
+                    g.strokeRect(e.x * scale + 0.5, e.y * scale + 0.5, e.w * scale - 1, e.h * scale - 1);
+                }
                 if (e.type === 'button' && e.label) drawText(g, e.label, e.labelColor, e.x, e.y, e.w, e.h, 'center', scale, e.labelScale || 1);
             } else if (e.type === 'item') {
                 const src = GS.Items && GS.Items.url(e.item);
@@ -1194,6 +1209,24 @@
                     g.strokeStyle = 'rgba(120,200,255,.6)'; g.setLineDash([2, 2]);
                     g.strokeRect(e.x * scale + 0.5, e.y * scale + 0.5, e.w * scale - 1, e.h * scale - 1); g.setLineDash([]);
                 }
+            } else if (e.type === 'custom_model') {
+                const src = GS.CustomAssets && GS.CustomAssets.iconUrl(e.modelId);
+                if (src) {
+                    const img = await new Promise(res => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
+                    if (img) g.drawImage(img, e.x * scale, e.y * scale, e.w * scale, e.h * scale);
+                } else {
+                    g.fillStyle = 'rgba(145,115,255,.12)';
+                    g.fillRect(e.x * scale, e.y * scale, e.w * scale, e.h * scale);
+                    g.strokeStyle = 'rgba(170,130,255,.65)'; g.setLineDash([2, 2]);
+                    g.strokeRect(e.x * scale + 0.5, e.y * scale + 0.5, e.w * scale - 1, e.h * scale - 1); g.setLineDash([]);
+                }
+            } else if (e.type === 'input') {
+                g.fillStyle = e.bgColor || '#161b26';
+                g.fillRect(e.x * scale, e.y * scale, e.w * scale, e.h * scale);
+                g.strokeStyle = e.borderColor || '#52a0f0';
+                g.strokeRect(e.x * scale + 0.5, e.y * scale + 0.5, e.w * scale - 1, e.h * scale - 1);
+                const disp = `${e.prefix || ''}${e.defaultValue == null ? '1' : e.defaultValue}${e.suffix || ''}`;
+                drawText(g, disp, e.textColor || '#ffffff', e.x, e.y, e.w, e.h, e.align || 'center', scale, e.scale || 1);
             } else if (e.type === 'player_head' || e.type === 'player_model') {
                 // the same stand-in pictures GUI Studio shows on the canvas
                 const src = (GS.Items && GS.Items.skinArt(e.type, e.angle)) || (e.type === 'player_head' ? 'img/player_head.png' : 'img/player_model.png');

@@ -64,7 +64,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class JavaSession {
 
     private static final double TEXT_PX = 0.025;      // blocks per text pixel at scale 1
-    private static final double LAYER = 0.0025;       // gap between layers, towards the camera
+    private static final double LAYER = 0.0006;       // gap between layers, towards the camera
     private static final double CAMERA_FORWARD = 0.4; // camera sits in front of the head model
 
     final KaizerUIPlugin plugin;
@@ -78,7 +78,8 @@ final class JavaSession {
     private final float yaw0;
     private final Vector f, r, u, cam;
     private Vector center;
-    private double s;            // blocks per GUI pixel
+    private double s;            // blocks per GUI pixel at menu plane (depth 0)
+    private double menuDist = 1.2;
     private double pxPerDeg;
     private double cx, cy;       // cursor, GUI pixels
     /** Where the cursor may go (GUI px): the menu, or with Full screen the whole visible screen */
@@ -109,7 +110,17 @@ final class JavaSession {
     private final Map<String, String> skinNames = new HashMap<>();
     /** Player Model in 3D (Mannequin) and Item displays, with the task that turns them */
     private final Map<String, ModelPart> models = new HashMap<>();
+    private final Map<String, CustomModelPart> customModels = new HashMap<>();
     private final Map<String, ItemDisplay> items = new HashMap<>();
+    private final Map<String, TextDisplay> inputLabels = new HashMap<>();
+    private final Map<String, RoulettePart> roulettes = new HashMap<>();
+    private record ScrollNode(Entity entity, double ox, double oy, double depth, float yaw, float pitch, MenuDef.Element el, MenuDef.Element area) {}
+    private final List<ScrollNode> scrollNodes = new ArrayList<>();
+    private final Map<String, double[]> scrollOffsets = new HashMap<>();
+    private volatile String panGrabbed;
+    private float panLastYaw, panLastPitch;
+    private boolean panKnown;
+    private final java.util.concurrent.ConcurrentHashMap<String, double[]> panPending = new java.util.concurrent.ConcurrentHashMap<>();
     private ScheduledTask turnTask;
     private long turnTick;
     /**
@@ -141,13 +152,14 @@ final class JavaSession {
     private TextDisplay backdrop;
     private Color backdropColor;
 
-    /** One display of an element: its entity origin in GUI px and its base scale */
+    /** One display of an element: its entity origin in GUI px, base scale, and depth-adjusted GUI scale */
     private static final class Part {
         final TextDisplay d;
         final double ox, oy;
         final float k;
+        final double sd;
         int opacity = 255;
-        Part(TextDisplay d, double ox, double oy, float k) { this.d = d; this.ox = ox; this.oy = oy; this.k = k; }
+        Part(TextDisplay d, double ox, double oy, float k, double sd) { this.d = d; this.ox = ox; this.oy = oy; this.k = k; this.sd = sd; }
     }
 
     /** Motion state of one element */
@@ -237,6 +249,16 @@ final class JavaSession {
 
     void close(MenuCloseEvent.Reason reason) {
         if (closed) return;
+        teardown(reason, true);
+    }
+
+    /** Closes the hologram temporarily for private chat input without clearing navHistory or sessionVars. */
+    void closeForInput() {
+        if (closed) return;
+        teardown(MenuCloseEvent.Reason.API, false);
+    }
+
+    private void teardown(MenuCloseEvent.Reason reason, boolean clearSessionData) {
         closed = true;
         closing = true;
         if (rotationTask != null) { rotationTask.cancel(); rotationTask = null; }
@@ -249,9 +271,12 @@ final class JavaSession {
             camera = null;
         }
         if (locked && player.isOnline()) CameraHook.showHud(player);
-        plugin.fireCloseEvent(player, menu.id, reason, false);
-        plugin.clearHistory(player.getUniqueId());
-        plugin.clearPlayerOverrides(player.getUniqueId());
+        if (clearSessionData) {
+            plugin.fireCloseEvent(player, menu.id, reason, false);
+            plugin.clearHistory(player.getUniqueId());
+            plugin.clearSessionVars(player.getUniqueId());
+            plugin.clearPlayerOverrides(player.getUniqueId());
+        }
         if (vehicle != null) {
             vehicle.removePassenger(player);
             vehicle.remove();
@@ -304,9 +329,18 @@ final class JavaSession {
         if (turnTask != null) { turnTask.cancel(); turnTask = null; }
         restoreFakeLights();
         grabbed = null;
+        panGrabbed = null;
+        panPending.clear();
         setCursorGrabbing(false);
         models.clear();
+        for (CustomModelPart cmp : customModels.values()) cmp.destroy();
+        customModels.clear();
+        for (RoulettePart rp : roulettes.values()) rp.destroy();
+        roulettes.clear();
+        scrollNodes.clear();
+        scrollOffsets.clear();
         items.clear();
+        inputLabels.clear();
         dragYaw.clear();
         dragShown.clear();
         anims.clear();
@@ -331,6 +365,7 @@ final class JavaSession {
 
     private void build(MenuDef m) {
         double d = studio.distance;
+        menuDist = Math.max(0.25, d);
         double fov = Math.max(30, Math.min(110, plugin.fovOf(player)));
         double visH = 2 * d * Math.tan(Math.toRadians(fov / 2));
         double visW = visH * 16.0 / 9.0;
@@ -369,6 +404,7 @@ final class JavaSession {
         for (MenuDef.Element e : m.elements) {
             double depth = layer++ * LAYER;
             Anim a = animById.get(e.id);
+            int startIdx = menuEntities.size();
             switch (e.type) {
                 case IMAGE -> {
                     if (!e.tiles.isEmpty()) pictures.put(e.id, picture(a, e.tiles, e.x, e.y, depth));
@@ -394,9 +430,32 @@ final class JavaSession {
                     else playerPart(a, e, depth);
                 }
                 case ITEM -> itemPart(e, depth, !deferVisuals);
+                case CUSTOM_MODEL -> customModelPart(e, depth, !deferVisuals);
+                case INPUT -> inputPart(a, e, depth);
+                case ROULETTE -> roulettes.put(e.id, new RoulettePart(this, e, depth));
+                case SCROLL_AREA -> {
+                    scrollOffsets.putIfAbsent(e.id, new double[]{0, 0});
+                    scrollAreaPart(e, depth);
+                }
+            }
+            if (!e.scrollGroup.isEmpty() && menuEntities.size() > startIdx) {
+                MenuDef.Element area = scrollAreaOf(m, e);
+                if (area != null) {
+                    for (int ei = startIdx; ei < menuEntities.size(); ei++) {
+                        Entity ent = menuEntities.get(ei);
+                        if (ent instanceof Display disp) disp.setTeleportDuration(1);
+                        Vector rel = ent.getLocation().toVector().subtract(center);
+                        double eDepth = -rel.dot(f);
+                        double sd = sAt(eDepth);
+                        double ox = rel.dot(r) / sd + m.width / 2.0;
+                        double oy = m.height / 2.0 - rel.dot(u) / sd;
+                        scrollNodes.add(new ScrollNode(ent, ox, oy, eDepth, ent.getLocation().getYaw(), ent.getLocation().getPitch(), e, area));
+                    }
+                }
             }
         }
-        if (!models.isEmpty() || items.keySet().stream().anyMatch(id -> elementById(m, id).spin)) {
+        applyAllScrolls();
+        if (!models.isEmpty() || !customModels.isEmpty() || items.keySet().stream().anyMatch(id -> elementById(m, id).spin)) {
             turnTick = 0;
             turnTask = Sched.entityRepeat(plugin, player, 1, this::turn);
         }
@@ -411,7 +470,8 @@ final class JavaSession {
             if (!cursorPlaced) { cx = m.width / 2.0; cy = m.height / 2.0; cursorPlaced = true; }
             cx = clamp(cx, minX, maxX);
             cy = clamp(cy, minY, maxY);
-            cursor = spawnText(cursorOrigin(), glyphComponent(studio.cursorGlyph), (float) (s / TEXT_PX), false);
+            double cursorDepth = (menu.elements.size() + 3) * LAYER;
+            cursor = spawnText(cursorOrigin(), glyphComponent(studio.cursorGlyph), (float) (sAt(cursorDepth) / TEXT_PX), false);
             cursor.setTeleportDuration(1);
             cursorYaw = cursor.getLocation().getYaw();
             cursorEntityId = cursor.getEntityId();
@@ -424,8 +484,9 @@ final class JavaSession {
 
     private static boolean hasPlaceholders(MenuDef m) {
         for (MenuDef.Element e : m.elements) {
-            if (e.type == MenuDef.Type.TEXT && e.text.indexOf('%') >= 0) return true;
-            if (e.type == MenuDef.Type.BUTTON && e.label.indexOf('%') >= 0) return true;
+            if (e.type == MenuDef.Type.TEXT && (e.text.indexOf('%') >= 0 || e.text.indexOf('{') >= 0)) return true;
+            if (e.type == MenuDef.Type.BUTTON && (e.label.indexOf('%') >= 0 || e.label.indexOf('{') >= 0)) return true;
+            if (e.type == MenuDef.Type.INPUT) return true;
             if (e.isPlayer() && e.player.indexOf('%') >= 0 && !isViewer(e)) return true;
             if (e.type == MenuDef.Type.ITEM && Items.dynamic(e.item)) return true;
             if (e.type == MenuDef.Type.PLAYER_MODEL && e.outfit) return true;
@@ -454,13 +515,20 @@ final class JavaSession {
                 if (t != null && (dyn != null || raw.indexOf('%') >= 0 || raw.indexOf('{') >= 0)) {
                     t.text(Texts.component(plugin.resolveText(player, raw), e == hovered && !e.hasHover() ? plugin.labelHoverColor() : e.labelColor));
                 }
+            } else if (e.type == MenuDef.Type.INPUT) {
+                TextDisplay t = inputLabels.get(e.id);
+                if (t != null) {
+                    String curVal = plugin.getSessionVar(player.getUniqueId(), e.varName, e.defaultValue);
+                    String disp = (e.prefix != null ? e.prefix : "") + curVal + (e.suffix != null ? e.suffix : "") + " &7✎";
+                    t.text(Texts.component(plugin.resolveText(player, disp), e.textColor));
+                }
             } else if (e.type == MenuDef.Type.PLAYER_MODEL && models.containsKey(e.id)) {
                 models.get(e.id).refreshOutfit(player);
             } else if (e.type == MenuDef.Type.ITEM && items.containsKey(e.id)) {
                 ItemStack dyn = plugin.dynamicItem(player, e.id);
                 if (dyn != null || Items.dynamic(e.item)) {
                     ItemDisplay d = items.get(e.id);
-                    if (d.isValid()) d.setItemStack(dyn != null ? dyn : Items.resolve(player, e.item, e.glint));
+                    if (d.isValid()) d.setItemStack(dyn != null ? dyn : Items.resolve(plugin, player, e.item, e.glint));
                 }
             } else if (e.isPlayer() && skinParts.containsKey(e.id)) {
                 // e.g. a leaderboard: the name behind the placeholder changed → show the new skin
@@ -523,9 +591,12 @@ final class JavaSession {
      * feet on its bottom, a little in front of the menu so the background never cuts it.
      */
     private void model3d(MenuDef.Element e, double depth, boolean showNow) {
-        double k = Math.min(e.w * s / ModelPart.MODEL_W, e.h * s / ModelPart.MODEL_H);
-        double bottom = e.y + (e.h + ModelPart.MODEL_H * k / s) / 2.0;
-        Vector feet = world(e.x + e.w / 2.0, bottom, depth + LAYER + 0.16 * k);
+        double k0 = Math.min(e.w * s / ModelPart.MODEL_W, e.h * s / ModelPart.MODEL_H);
+        double modelDepth = depth + LAYER + 0.16 * k0;
+        double sd = sAt(modelDepth);
+        double k = Math.min(e.w * sd / ModelPart.MODEL_W, e.h * sd / ModelPart.MODEL_H);
+        double bottom = e.y + (e.h + ModelPart.MODEL_H * k / sd) / 2.0;
+        Vector feet = world(e.x + e.w / 2.0, bottom, modelDepth);
         float yaw = facingYaw() + (float) e.angle;
         Location feetLoc = new Location(world, feet.getX(), feet.getY(), feet.getZ());
         ModelPart mp = new ModelPart(plugin, player, world, feetLoc, k, yaw,
@@ -569,9 +640,11 @@ final class JavaSession {
      */
     private void itemPart(MenuDef.Element e, double depth, boolean showNow) {
         ItemStack dyn = plugin.dynamicItem(player, e.id);
-        ItemStack stack = dyn != null ? dyn : Items.resolve(player, e.item, e.glint);
-        float k = (float) (Math.min(e.w, e.h) * s);
-        Vector pos = world(e.x + e.w / 2.0, e.y + e.h / 2.0, depth + LAYER / 2 + (e.item3d ? k * 0.5 : 0));
+        ItemStack stack = dyn != null ? dyn : Items.resolve(plugin, player, e.item, e.glint);
+        double baseDepth = depth + LAYER / 2;
+        double dEff = baseDepth + (e.item3d ? Math.min(e.w, e.h) * sAt(baseDepth) * 0.5 : 0);
+        float k = (float) (Math.min(e.w, e.h) * sAt(dEff));
+        Vector pos = world(e.x + e.w / 2.0, e.y + e.h / 2.0, dEff);
         float yaw = facingYaw() + (plugin.itemFlip() ? 180f : 0f);
         ItemDisplay d = world.spawn(new Location(world, pos.getX(), pos.getY(), pos.getZ(), yaw, 0f), ItemDisplay.class, x -> {
             x.setVisibleByDefault(false);
@@ -586,6 +659,269 @@ final class JavaSession {
         else deferredVisuals.add(d);
         menuEntities.add(d);
         items.put(e.id, d);
+    }
+
+    private void customModelPart(MenuDef.Element e, double depth, boolean showNow) {
+        String resolvedId = plugin.resolveText(player, e.modelId);
+        double worldScale = Math.max(0.12, Math.min(e.w, e.h) * sAt(depth + LAYER) * 0.55 * e.scale3d);
+        Vector feet = world(e.x + e.w / 2.0, e.y + e.h * 0.85, depth + LAYER);
+        float yaw = facingYaw() + (float) e.angle;
+        CustomModelPart cmp = CustomModelPart.spawn(plugin, player, new Location(world, feet.getX(), feet.getY(), feet.getZ(), yaw, 0f), e, resolvedId, worldScale, showNow);
+        if (cmp == null) return;
+        if (!showNow) deferredVisuals.add(cmp.host);
+        menuEntities.add(cmp.host);
+        customModels.put(e.id, cmp);
+        if (plugin.light3dModels()) {
+            placeFakeLight(cmp.host.getLocation());
+        }
+    }
+
+    private void inputPart(Anim a, MenuDef.Element e, double depth) {
+        Color bgCol = parseArgb(e.bgColor, 220);
+        Color brCol = parseArgb(e.borderColor, 240);
+        // Box fill (using stretched space background quad 5x11 px)
+        double sd = sAt(depth);
+        double boxW = Math.max(2, e.w) * sd;
+        double boxH = Math.max(2, e.h) * sd;
+        float sx = (float) (boxW / (5 * TEXT_PX)), sy = (float) (boxH / (11 * TEXT_PX));
+        Vector origin = world(e.x + e.w / 2.0, e.y + e.h / 2.0, depth)
+                .subtract(r.clone().multiply(0.5 * TEXT_PX * sx))
+                .subtract(u.clone().multiply(5.5 * TEXT_PX * sy));
+        TextDisplay box = world.spawn(toLocation(origin), TextDisplay.class, x -> {
+            x.setVisibleByDefault(false);
+            x.setPersistent(false);
+            x.text(Component.text(" "));
+            x.setBillboard(Display.Billboard.FIXED);
+            x.setDefaultBackground(false);
+            x.setBackgroundColor(bgCol);
+            x.setShadowed(false);
+            x.setSeeThrough(false);
+            x.setBrightness(new Display.Brightness(15, 15));
+            x.setTransformation(new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(sx, sy, 1f), new AxisAngle4f()));
+        });
+        player.showEntity(plugin, box);
+        menuEntities.add(box);
+
+        // Bottom accent bar
+        double sdBar = sAt(depth + LAYER * 0.25);
+        float barSx = (float) ((Math.max(2, e.w) * sdBar) / (5 * TEXT_PX));
+        float barH = (float) ((1.5 * sdBar) / (11 * TEXT_PX));
+        Vector barOrigin = world(e.x + e.w / 2.0, e.y + e.h - 0.75, depth + LAYER * 0.25)
+                .subtract(r.clone().multiply(0.5 * TEXT_PX * barSx))
+                .subtract(u.clone().multiply(5.5 * TEXT_PX * barH));
+        TextDisplay bar = world.spawn(toLocation(barOrigin), TextDisplay.class, x -> {
+            x.setVisibleByDefault(false);
+            x.setPersistent(false);
+            x.text(Component.text(" "));
+            x.setBillboard(Display.Billboard.FIXED);
+            x.setDefaultBackground(false);
+            x.setBackgroundColor(brCol);
+            x.setShadowed(false);
+            x.setSeeThrough(false);
+            x.setBrightness(new Display.Brightness(15, 15));
+            x.setTransformation(new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(barSx, barH, 1f), new AxisAngle4f()));
+        });
+        player.showEntity(plugin, bar);
+        menuEntities.add(bar);
+
+        String curVal = plugin.getSessionVar(player.getUniqueId(), e.varName, e.defaultValue);
+        String disp = (e.prefix != null ? e.prefix : "") + curVal + (e.suffix != null ? e.suffix : "") + " &7✎";
+        inputLabels.put(e.id, text(a, plugin.resolveText(player, disp), e.textColor, e.scale, e.shadow, e.align, e.x, e.y, e.w, e.h, depth + LAYER / 2));
+    }
+
+    private void scrollAreaPart(MenuDef.Element e, double depth) {
+        if (e.bgColor == null || e.bgColor.isBlank()) return;
+        Color bgCol = parseArgb(e.bgColor, 85);
+        double sd = sAt(depth);
+        double boxW = Math.max(2, e.w) * sd, boxH = Math.max(2, e.h) * sd;
+        float sx = (float) (boxW / (5 * TEXT_PX)), sy = (float) (boxH / (11 * TEXT_PX));
+        Vector origin = world(e.x + e.w / 2.0, e.y + e.h / 2.0, depth)
+                .subtract(r.clone().multiply(0.5 * TEXT_PX * sx))
+                .subtract(u.clone().multiply(5.5 * TEXT_PX * sy));
+        TextDisplay box = world.spawn(toLocation(origin), TextDisplay.class, x -> {
+            x.setVisibleByDefault(false);
+            x.setPersistent(false);
+            x.text(Component.text(" "));
+            x.setBillboard(Display.Billboard.FIXED);
+            x.setDefaultBackground(false);
+            x.setBackgroundColor(bgCol);
+            x.setShadowed(false);
+            x.setSeeThrough(false);
+            x.setBrightness(new Display.Brightness(15, 15));
+            x.setTransformation(new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(sx, sy, 1f), new AxisAngle4f()));
+        });
+        player.showEntity(plugin, box);
+        menuEntities.add(box);
+    }
+
+    double guiScale() { return s; }
+    double guiScaleAt(double depth) { return sAt(depth); }
+    private double depthFactor(double depth) { return Math.max(0.15, (menuDist - depth) / menuDist); }
+    private double sAt(double depth) { return s * depthFactor(depth); }
+    Vector worldCenter(double px, double py, double depth) { return world(px, py, depth); }
+    Vector rightVec() { return r.clone(); }
+    Vector upVec() { return u.clone(); }
+    Location facingLoc(Vector v) { return toLocation(v); }
+    Location itemFacingLoc(Vector v) {
+        float yaw = facingYaw() + (plugin.itemFlip() ? 180f : 0f);
+        return new Location(world, v.getX(), v.getY(), v.getZ(), yaw, 0f);
+    }
+
+    void spinRoulette(String id) {
+        if (closed || roulettes.isEmpty()) return;
+        RoulettePart rp = id != null && !id.isBlank() ? roulettes.get(id.trim()) : null;
+        if (rp == null) rp = roulettes.values().iterator().next();
+        if (rp != null) rp.startSpin();
+    }
+
+    void scrollByAction(String arg) {
+        if (closed || arg == null || arg.isBlank()) return;
+        String[] parts = arg.trim().split(":");
+        MenuDef.Element area = null;
+        double dx = 0, dy = 0;
+        if (parts.length >= 3) {
+            area = findScrollArea(parts[0].trim());
+            dx = parseDouble(parts[1], 0);
+            dy = parseDouble(parts[2], 0);
+        } else if (parts.length == 2) {
+            area = findScrollArea(parts[0].trim());
+            if (area != null) {
+                if ("reset".equalsIgnoreCase(parts[1].trim())) {
+                    scrollOffsets.put(area.id, new double[]{0, 0});
+                    applyScroll(area);
+                    updateHover();
+                    return;
+                }
+                dy = parseDouble(parts[1], 0);
+            } else {
+                area = findScrollArea("");
+                dx = parseDouble(parts[0], 0);
+                dy = parseDouble(parts[1], 0);
+            }
+        } else {
+            area = findScrollArea("");
+            dy = parseDouble(parts[0], 0);
+        }
+        if (area != null) {
+            panAreaBy(area, dx, dy);
+            updateHover();
+        }
+    }
+
+    private static double parseDouble(String sVal, double def) {
+        try { return Double.parseDouble(sVal.trim()); }
+        catch (NumberFormatException ex) { return def; }
+    }
+
+    private MenuDef.Element findScrollArea(String id) {
+        if (menu == null) return null;
+        for (MenuDef.Element el : menu.elements) {
+            if (el.type == MenuDef.Type.SCROLL_AREA && (id.isEmpty() || el.id.equals(id))) return el;
+        }
+        return null;
+    }
+
+    private MenuDef.Element scrollAreaOf(MenuDef m, MenuDef.Element e) {
+        if (m == null || e == null || e.scrollGroup == null || e.scrollGroup.isEmpty()) return null;
+        for (MenuDef.Element el : m.elements) {
+            if (el.type == MenuDef.Type.SCROLL_AREA && e.scrollGroup.equals(el.id)) return el;
+        }
+        return null;
+    }
+
+    private void panAreaBy(MenuDef.Element area, double dx, double dy) {
+        double maxSx = "vertical".equals(area.scrollMode) ? 0 : Math.max(0, area.contentW - area.w);
+        double maxSy = "horizontal".equals(area.scrollMode) ? 0 : Math.max(0, area.contentH - area.h);
+        double[] off = scrollOffsets.computeIfAbsent(area.id, k -> new double[]{0, 0});
+        double nx = clamp(off[0] + dx, 0, maxSx);
+        double ny = clamp(off[1] + dy, 0, maxSy);
+        if (nx != off[0] || ny != off[1]) {
+            off[0] = nx;
+            off[1] = ny;
+            applyScroll(area);
+        }
+    }
+
+    private void applyAllScrolls() {
+        if (menu == null || scrollNodes.isEmpty()) return;
+        for (MenuDef.Element el : menu.elements) {
+            if (el.type == MenuDef.Type.SCROLL_AREA) applyScroll(el);
+        }
+    }
+
+    private void applyScroll(MenuDef.Element area) {
+        double[] off = scrollOffsets.getOrDefault(area.id, new double[]{0, 0});
+        for (ScrollNode n : scrollNodes) {
+            if (!area.id.equals(n.area.id) || !n.entity.isValid()) continue;
+            Vector p = world(n.ox - off[0], n.oy - off[1], n.depth);
+            n.entity.teleportAsync(new Location(world, p.getX(), p.getY(), p.getZ(), n.yaw, n.pitch));
+            boolean vis = isVisibleInArea(n.el, area, off[0], off[1]);
+            if (!vis) {
+                player.hideEntity(plugin, n.entity);
+            } else if (visualsShown || !deferredVisuals.contains(n.entity)) {
+                player.showEntity(plugin, n.entity);
+            }
+        }
+    }
+
+    private static boolean isVisibleInArea(MenuDef.Element el, MenuDef.Element area, double sx, double sy) {
+        double cxEl = el.x - sx + el.w / 2.0;
+        double cyEl = el.y - sy + el.h / 2.0;
+        return cxEl >= area.x && cxEl <= area.x + area.w && cyEl >= area.y && cyEl <= area.y + area.h;
+    }
+
+    private boolean isClippedOut(Entity ent) {
+        for (ScrollNode n : scrollNodes) {
+            if (n.entity == ent) {
+                double[] off = scrollOffsets.getOrDefault(n.area.id, new double[]{0, 0});
+                return !isVisibleInArea(n.el, n.area, off[0], off[1]);
+            }
+        }
+        return false;
+    }
+
+    private boolean containsEffective(MenuDef.Element e, double px, double py) {
+        MenuDef.Element area = scrollAreaOf(menu, e);
+        if (area == null) return e.contains(px, py);
+        if (!area.contains(px, py)) return false;
+        double[] off = scrollOffsets.getOrDefault(area.id, new double[]{0, 0});
+        return e.contains(px + off[0], py + off[1]);
+    }
+
+    private MenuDef.Element hoveredButtonAt(double px, double py) {
+        for (int i = menu.elements.size() - 1; i >= 0; i--) {
+            MenuDef.Element e = menu.elements.get(i);
+            if ((e.type == MenuDef.Type.BUTTON || e.type == MenuDef.Type.INPUT) && containsEffective(e, px, py)) return e;
+        }
+        return null;
+    }
+
+    private MenuDef.Element hoveredTooltipAt(double px, double py) {
+        for (int i = menu.elements.size() - 1; i >= 0; i--) {
+            MenuDef.Element e = menu.elements.get(i);
+            if (!e.tooltip.isBlank() && containsEffective(e, px, py)) return e;
+        }
+        return null;
+    }
+
+    private void flushPan() {
+        if (closed || panPending.isEmpty()) return;
+        for (var en : panPending.entrySet()) {
+            double[] delta = panPending.remove(en.getKey());
+            if (delta == null) continue;
+            MenuDef.Element area = findScrollArea(en.getKey());
+            if (area != null) panAreaBy(area, delta[0], delta[1]);
+        }
+        updateHover();
+    }
+
+    private static Color parseArgb(String hex, int alpha) {
+        try {
+            int rgb = Integer.parseInt(String.valueOf(hex).replace("#", "").trim(), 16);
+            return Color.fromARGB(alpha, (rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255);
+        } catch (NumberFormatException ex) {
+            return Color.fromARGB(alpha, 22, 27, 38);
+        }
     }
 
     /** Every tick while something turns: spinning models / items, heads following the cursor */
@@ -637,6 +973,13 @@ final class JavaSession {
                 d.setInterpolationDuration(2);
                 d.setTransformation(new Transformation(old.getTranslation(), new AxisAngle4f(ang, 0, 1, 0), old.getScale(), new AxisAngle4f()));
             }
+            for (Map.Entry<String, CustomModelPart> en : customModels.entrySet()) {
+                MenuDef.Element e = elementById(menu, en.getKey());
+                CustomModelPart cmp = en.getValue();
+                if (!e.spin) continue;
+                float yaw = cmp.baseYaw + (float) (e.spinSpeed * t / 20.0);
+                cmp.look(yaw);
+            }
         }
     }
 
@@ -651,20 +994,22 @@ final class JavaSession {
         }));
     }
 
-    /** World position of a point of the menu (GUI px from its top-left), {@code depth} blocks towards the camera */
+    /** World position of a point of the menu (GUI px from its top-left), {@code depth} blocks towards the camera (perspective-compensated) */
     private Vector world(double px, double py, double depth) {
+        double sd = sAt(depth);
         return center.clone()
-                .add(r.clone().multiply((px - menu.width / 2.0) * s))
-                .add(u.clone().multiply((menu.height / 2.0 - py) * s))
+                .add(r.clone().multiply((px - menu.width / 2.0) * sd))
+                .add(u.clone().multiply((menu.height / 2.0 - py) * sd))
                 .subtract(f.clone().multiply(depth));
     }
 
     /** Entity origin that puts the centre of a w×h glyph (ascent a) at the given GUI point */
     private Vector glyphOrigin(double centreX, double centreY, int h, int ascent, double depth) {
+        double sd = sAt(depth);
         double up = 3 + ascent - h / 2.0 - plugin.offsetY();
         return world(centreX, centreY, depth)
-                .subtract(r.clone().multiply(0.5 * s))
-                .subtract(u.clone().multiply(up * s));
+                .subtract(r.clone().multiply(0.5 * sd))
+                .subtract(u.clone().multiply(up * sd));
     }
 
     private Vector cursorOrigin() {
@@ -689,7 +1034,9 @@ final class JavaSession {
 
     /** Spawns one display of an element, already in the element's first animation state */
     private Part spawnPart(Anim a, double ox, double oy, double depth, Component text, float k, boolean shadow) {
-        Part part = new Part(null, ox, oy, k);
+        double sd = sAt(depth);
+        float kd = (float) (k * depthFactor(depth));
+        Part part = new Part(null, ox, oy, kd, sd);
         Transformation tf;
         int op = 255;
         if (a != null) {
@@ -698,9 +1045,9 @@ final class JavaSession {
             op = opacity(es, menuState);
             a.last = es;
         } else {
-            tf = new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(k, k, k), new AxisAngle4f());
+            tf = new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(kd, kd, kd), new AxisAngle4f());
         }
-        Part real = new Part(spawnText(world(ox, oy, depth), text, tf, (byte) op, shadow), ox, oy, k);
+        Part real = new Part(spawnText(world(ox, oy, depth), text, tf, (byte) op, shadow), ox, oy, kd, sd);
         real.opacity = op;
         menuEntities.add(real.d);
         if (a != null) a.parts.add(real);
@@ -832,7 +1179,7 @@ final class JavaSession {
         if (!visualsShown && !deferredVisuals.isEmpty() && (ms[Motion.ALPHA] >= 45.0 || tick >= ANIM_LEAD + 5)) {
             visualsShown = true;
             for (Entity ent : deferredVisuals) {
-                if (ent.isValid()) player.showEntity(plugin, ent);
+                if (ent.isValid() && !isClippedOut(ent)) player.showEntity(plugin, ent);
             }
             deferredVisuals.clear();
         }
@@ -900,15 +1247,15 @@ final class JavaSession {
         double epy = e.y + e.h * (e.intro != null ? e.intro.py : 0.5);
         double mpx = menu.width * (openClip != null ? openClip.px : 0.5);
         double mpy = menu.height * (openClip != null ? openClip.py : 0.5);
-        double pex = (epx - p.ox) * s, pey = (p.oy - epy) * s;     // element pivot
-        double cx0 = (mpx - p.ox) * s, cy0 = (p.oy - mpy) * s;     // menu pivot
+        double pex = (epx - p.ox) * p.sd, pey = (p.oy - epy) * p.sd;     // element pivot
+        double cx0 = (mpx - p.ox) * p.sd, cy0 = (p.oy - mpy) * p.sd;     // menu pivot
         double[] ae = linear(es), am = linear(ms);
         double[] a = {am[0] * ae[0] + am[1] * ae[2], am[0] * ae[1] + am[1] * ae[3], am[2] * ae[0] + am[3] * ae[2], am[2] * ae[1] + am[3] * ae[3]};
         // point → C + Am (Pe + Ae (v - Pe) + de - C) + dm
-        double vx = pex - (ae[0] * pex + ae[1] * pey) + es[Motion.X] * s - cx0;
-        double vy = pey - (ae[2] * pex + ae[3] * pey) - es[Motion.Y] * s - cy0;
-        double tx = cx0 + am[0] * vx + am[1] * vy + ms[Motion.X] * s;
-        double ty = cy0 + am[2] * vx + am[3] * vy - ms[Motion.Y] * s;
+        double vx = pex - (ae[0] * pex + ae[1] * pey) + es[Motion.X] * p.sd - cx0;
+        double vy = pey - (ae[2] * pex + ae[3] * pey) - es[Motion.Y] * p.sd - cy0;
+        double tx = cx0 + am[0] * vx + am[1] * vy + ms[Motion.X] * p.sd;
+        double ty = cy0 + am[2] * vx + am[3] * vy - ms[Motion.Y] * p.sd;
         // 2×2 SVD: a = R(phi) · diag(s1, s2) · R(theta)
         double E = (a[0] + a[3]) / 2, F = (a[0] - a[3]) / 2, G = (a[2] + a[1]) / 2, H = (a[2] - a[1]) / 2;
         double Q = Math.hypot(E, H), R = Math.hypot(F, G);
@@ -935,6 +1282,23 @@ final class JavaSession {
         if (closed || !locked) return;
         Vector pos = null;
         synchronized (inputLock) {
+            String pg = panGrabbed;
+            if (pg != null) {
+                if (!panKnown) { panLastYaw = yaw; panLastPitch = pitch; panKnown = true; }
+                float dy = wrap(yaw - panLastYaw);
+                float dp = pitch - panLastPitch;
+                panLastYaw = yaw; panLastPitch = pitch;
+                lastYaw = yaw; lastPitch = pitch; rotationKnown = true;
+                if (dy != 0 || dp != 0) {
+                    panPending.compute(pg, (k, v) -> {
+                        if (v == null) return new double[]{-dy * pxPerDeg, -dp * pxPerDeg};
+                        v[0] -= dy * pxPerDeg; v[1] -= dp * pxPerDeg;
+                        return v;
+                    });
+                    Sched.entity(plugin, player, this::flushPan);
+                }
+                return;
+            }
             String g = grabbed;
             if (g != null) {
                 if (!grabKnown) { grabLastYaw = yaw; grabKnown = true; }
@@ -973,6 +1337,19 @@ final class JavaSession {
     void onRotate(float yaw, float pitch) {
         if (closed) return;
         synchronized (inputLock) {
+            String pg = panGrabbed;
+            if (pg != null) {
+                if (!panKnown) { panLastYaw = yaw; panLastPitch = pitch; panKnown = true; }
+                float dy = wrap(yaw - panLastYaw);
+                float dp = pitch - panLastPitch;
+                panLastYaw = yaw; panLastPitch = pitch;
+                if (locked) { lastYaw = yaw; lastPitch = pitch; rotationKnown = true; }
+                if (dy != 0 || dp != 0) {
+                    MenuDef.Element area = findScrollArea(pg);
+                    if (area != null) panAreaBy(area, -dy * pxPerDeg, -dp * pxPerDeg);
+                }
+                return;
+            }
             String g = grabbed;
             if (g != null) {
                 if (!grabKnown) { grabLastYaw = yaw; grabKnown = true; }
@@ -1014,6 +1391,23 @@ final class JavaSession {
     void onScroll(int dir) {
         if (closed || dir == 0) return;
         long now = System.currentTimeMillis();
+        // Scroll area under cursor captures mouse wheel before page-turning
+        for (int i = menu.elements.size() - 1; i >= 0; i--) {
+            MenuDef.Element el = menu.elements.get(i);
+            if (el.type == MenuDef.Type.SCROLL_AREA && el.contains(cx, cy)) {
+                double maxSx = "vertical".equals(el.scrollMode) ? 0 : Math.max(0, el.contentW - el.w);
+                double maxSy = "horizontal".equals(el.scrollMode) ? 0 : Math.max(0, el.contentH - el.h);
+                if (maxSx > 0 || maxSy > 0) {
+                    if (now - lastScrollMs < 40) return;
+                    lastScrollMs = now;
+                    if ("horizontal".equals(el.scrollMode)) panAreaBy(el, dir * el.stepPx, 0);
+                    else panAreaBy(el, 0, dir * el.stepPx);
+                    updateHover();
+                    updateTooltipPosition();
+                    return;
+                }
+            }
+        }
         if (now - lastScrollMs < 200) return;
         lastScrollMs = now;
         String target = dir > 0 ? menu.nextPage : menu.prevPage;
@@ -1025,7 +1419,7 @@ final class JavaSession {
     }
 
     private void updateHover() {
-        MenuDef.Element now = menu.buttonAt(cx, cy);
+        MenuDef.Element now = hoveredButtonAt(cx, cy);
         if (now != hovered) {
             if (hovered != null) setHover(hovered, false);
             hovered = now;
@@ -1035,7 +1429,7 @@ final class JavaSession {
                 Actions.playSound(player, snd);
             }
         }
-        MenuDef.Element tip = menu.tooltipAt(cx, cy);
+        MenuDef.Element tip = hoveredTooltipAt(cx, cy);
         if (tip != tooltipEl) {
             tooltipEl = tip;
             if (tip == null) {
@@ -1043,7 +1437,7 @@ final class JavaSession {
             } else {
                 Component txt = Texts.component(plugin.resolveText(player, tip.tooltip));
                 if (tooltipDisplay == null || !tooltipDisplay.isValid()) {
-                    float scale = (float) (s * 0.85 / TEXT_PX);
+                    float scale = (float) (sAt((menu.elements.size() + 2) * LAYER) * 0.85 / TEXT_PX);
                     Vector pos = tooltipWorldPos();
                     tooltipDisplay = world.spawn(toLocation(pos), TextDisplay.class, d -> {
                         d.setVisibleByDefault(false);
@@ -1112,6 +1506,12 @@ final class JavaSession {
         long now = System.currentTimeMillis();
         if (now - lastClick < plugin.clickCooldownMs()) return;
         lastClick = now;
+        if (panGrabbed != null) {
+            panGrabbed = null;
+            setCursorGrabbing(false);
+            Actions.playSound(player, studio.clickSound);
+            return;
+        }
         if (grabbed != null) {
             grabbed = null;
             setCursorGrabbing(false);
@@ -1123,9 +1523,16 @@ final class JavaSession {
             // a click on any 3D Player Model grabs it so moving the mouse turns it
             for (int i = menu.elements.size() - 1; i >= 0; i--) {
                 MenuDef.Element e = menu.elements.get(i);
-                if (e.type == MenuDef.Type.PLAYER_MODEL && models.containsKey(e.id) && !"spin".equals(e.turn) && e.contains(cx, cy)) {
+                if (e.type == MenuDef.Type.PLAYER_MODEL && models.containsKey(e.id) && !"spin".equals(e.turn) && containsEffective(e, cx, cy)) {
                     grabKnown = false;
                     grabbed = e.id;
+                    setCursorGrabbing(true);
+                    Actions.playSound(player, studio.clickSound);
+                    return;
+                }
+                if (e.type == MenuDef.Type.SCROLL_AREA && ("pan2d".equals(e.scrollMode) || "both".equals(e.scrollMode)) && e.contains(cx, cy)) {
+                    panKnown = false;
+                    panGrabbed = e.id;
                     setCursorGrabbing(true);
                     Actions.playSound(player, studio.clickSound);
                     return;
@@ -1136,6 +1543,10 @@ final class JavaSession {
         Anim a = animById.get(b.id);
         if (a != null && b.press != null) a.pressAt = now();
         Actions.playSound(player, studio.clickSound);
+        if (b.type == MenuDef.Type.INPUT) {
+            plugin.beginJavaChatInput(player, menu, b);
+            return;
+        }
         Actions.After after = Actions.run(plugin, player, menu, b, false);
         if (after == Actions.After.CLOSE) plugin.java().close(player, MenuCloseEvent.Reason.BUTTON_CLOSE);
         else if (after == Actions.After.STAY) {

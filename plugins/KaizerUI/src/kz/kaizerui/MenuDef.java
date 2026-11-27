@@ -15,7 +15,9 @@ import java.util.Map;
  */
 public final class MenuDef {
 
-    public enum Type { IMAGE, BUTTON, TEXT, PLAYER_HEAD, PLAYER_MODEL, ITEM }
+    public enum Type { IMAGE, BUTTON, TEXT, PLAYER_HEAD, PLAYER_MODEL, ITEM, CUSTOM_MODEL, INPUT, ROULETTE, SCROLL_AREA }
+
+    public record Reward(String id, String name, String item, String color, double weight, List<String> actions) {}
 
     /**
      * One glyph of a picture. Pictures bigger than 256 px are split into tiles because the
@@ -76,6 +78,21 @@ public final class MenuDef {
         // item: id (minecraft:x, itemsadder:ns:id, nexo:id, slot:head…), glint, flat / 3d, spin
         public final String item;
         public final boolean glint, item3d, spin;
+        // custom_model: meg:<id> or bm:<id>
+        public final String modelId, animation;
+        public final double scale3d, hitboxW, hitboxH;
+        // input: interactive field (Java chat prompt, Bedrock Cumulus CustomForm)
+        public final String varName, inputType, defaultValue, prefix, suffix, promptTitle, placeholder, textColor, bgColor, borderColor;
+        public final double inputMin, inputMax, inputStep;
+        // scroll_area container & membership
+        public final String scrollGroup, scrollMode;
+        public final int contentW, contentH, stepPx;
+        public final boolean showScrollbar;
+        // roulette: CS:GO crate roller
+        public final int slotSize, slotGap, reels, cardCount;
+        public final double durationSec;
+        public final String spinStyle, pointerColor, tickSound, winSound;
+        public final List<Reward> rewards;
         /** Index of this element among the Bedrock form buttons (-1 = not a form button) */
         public final int bedrockSlot;
         /** Optional hover tooltip text (Java) */
@@ -95,6 +112,10 @@ public final class MenuDef {
                 case "player_head" -> Type.PLAYER_HEAD;
                 case "player_model" -> Type.PLAYER_MODEL;
                 case "item" -> Type.ITEM;
+                case "custom_model" -> Type.CUSTOM_MODEL;
+                case "input" -> Type.INPUT;
+                case "roulette" -> Type.ROULETTE;
+                case "scroll_area" -> Type.SCROLL_AREA;
                 default -> Type.IMAGE;
             };
             this.name = str(m.get("name"), id);
@@ -132,6 +153,57 @@ public final class MenuDef {
             this.glint = bool(m.get("glint"), false);
             this.item3d = "3d".equalsIgnoreCase(str(m.get("look"), "flat"));
             this.spin = bool(m.get("spin"), false);
+            this.modelId = str(m.get("model-id"), "");
+            this.animation = str(m.get("animation"), "idle");
+            this.scale3d = Math.max(0.1, Math.min(10, dbl(m.get("scale-3d"), 1.0)));
+            this.hitboxW = Math.max(0.2, Math.min(8, dbl(m.get("hitbox-w"), 1.0)));
+            this.hitboxH = Math.max(0.2, Math.min(8, dbl(m.get("hitbox-h"), 2.0)));
+            this.varName = str(m.get("var-name"), "qty").trim();
+            this.inputType = str(m.get("input-type"), "number").toLowerCase(java.util.Locale.ROOT);
+            this.defaultValue = str(m.get("default-value"), "1");
+            this.inputMin = dbl(m.get("min"), 1);
+            this.inputMax = dbl(m.get("max"), 64);
+            this.inputStep = Math.max(0.01, dbl(m.get("step"), 1));
+            this.prefix = str(m.get("prefix"), "");
+            this.suffix = str(m.get("suffix"), "");
+            this.promptTitle = str(m.get("prompt-title"), "Enter value");
+            this.placeholder = str(m.get("placeholder"), "Type value...");
+            this.textColor = str(m.get("text-color"), "#ffffff");
+            this.bgColor = str(m.get("bg-color"), "#161b26");
+            this.borderColor = str(m.get("border-color"), "#52a0f0");
+            this.scrollGroup = str(m.get("scroll-group"), "").trim();
+            this.scrollMode = str(m.get("scroll-mode"), "pan2d").toLowerCase(java.util.Locale.ROOT);
+            this.contentW = Math.max(w, num(m.get("content-w"), w));
+            this.contentH = Math.max(h, num(m.get("content-h"), h));
+            this.stepPx = Math.max(4, Math.min(200, num(m.get("step-px"), 28)));
+            this.showScrollbar = bool(m.get("show-scrollbar"), true);
+            this.slotSize = Math.max(16, Math.min(128, num(m.get("slot-size"), 44)));
+            this.slotGap = Math.max(0, Math.min(32, num(m.get("slot-gap"), 6)));
+            this.durationSec = Math.max(1.0, Math.min(15.0, dbl(m.get("duration"), 4.2)));
+            this.spinStyle = str(m.get("spin-style"), "csgo").toLowerCase(java.util.Locale.ROOT);
+            this.reels = Math.max(1, Math.min(5, num(m.get("reels"), 3)));
+            this.cardCount = Math.max(3, Math.min(9, num(m.get("card-count"), 5)));
+            this.pointerColor = str(m.get("pointer-color"), "#ff4d4f");
+            this.tickSound = str(m.get("tick-sound"), "minecraft:block.note_block.hat;0.7;1.4");
+            this.winSound = str(m.get("win-sound"), "minecraft:entity.player.levelup;1.0;1.1");
+            List<Reward> rws = new ArrayList<>();
+            if (m.get("rewards") instanceof List<?> rList) {
+                int rIdx = 1;
+                for (Object ro : rList) {
+                    if (!(ro instanceof Map<?, ?> rm)) continue;
+                    String rid = str(rm.get("id"), "r" + rIdx++);
+                    String rname = str(rm.get("name"), "Prize");
+                    String ritem = str(rm.get("item"), "minecraft:diamond");
+                    String rcol = str(rm.get("color"), "#3b82f6");
+                    double rwt = Math.max(0.01, dbl(rm.get("weight"), 10));
+                    List<String> racts = new ArrayList<>();
+                    if (rm.get("actions") instanceof List<?> al) {
+                        for (Object ao : al) if (ao != null && !ao.toString().isBlank()) racts.add(ao.toString().trim());
+                    }
+                    rws.add(new Reward(rid, rname, ritem, rcol, rwt, Collections.unmodifiableList(racts)));
+                }
+            }
+            this.rewards = Collections.unmodifiableList(rws);
             this.bedrockSlot = num(m.get("bedrock-slot"), -1);
             this.tooltip = str(m.get("tooltip"), "");
             List<List<Tile>> fr = new ArrayList<>();
@@ -208,11 +280,11 @@ public final class MenuDef {
         return new MenuDef(y, fallback);
     }
 
-    /** Topmost button under (px, py), or null */
+    /** Topmost button or input box under (px, py), or null */
     public Element buttonAt(double px, double py) {
         for (int i = elements.size() - 1; i >= 0; i--) {
             Element e = elements.get(i);
-            if (e.type == Type.BUTTON && e.contains(px, py)) return e;
+            if ((e.type == Type.BUTTON || e.type == Type.INPUT) && e.contains(px, py)) return e;
         }
         return null;
     }

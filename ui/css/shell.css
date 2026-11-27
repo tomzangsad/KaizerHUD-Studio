@@ -1823,3 +1823,80 @@ body[data-doc-view="split"] .code-tree { width: 180px; }
   border-color: #3fb950;
 }
 .kz-upd-restart-btn:hover { background: #3fb950; }
+
+/* ───────────── MCP Live Bridge UI ───────────── */
+.tb-mcp-pill {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 5px;
+  height: 22px;
+  margin-right: 6px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid #3f3f46;
+  background: #22252b;
+  color: var(--ink-dim);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color .15s, background .15s, color .15s;
+}
+.tb-mcp-pill:hover {
+  border-color: #3fb950;
+  color: #fff;
+  background: #262c34;
+}
+.tb-mcp-pill.busy {
+  border-color: var(--blue-hi);
+  background: rgba(58, 142, 230, 0.22);
+  color: #fff;
+}
+.kz-mcp-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3fb950;
+  box-shadow: 0 0 6px rgba(63, 185, 80, 0.65);
+  flex-shrink: 0;
+}
+.kz-mcp-dialog { width: 520px; }
+.kz-mcp-pre {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--s-1);
+  border: 1px solid var(--line-soft);
+  color: #b6d8ff;
+  font: 11px/1.45 Consolas, "Cascadia Mono", monospace;
+  overflow: auto;
+  user-select: all;
+}
+.kz-mcp-logs {
+  max-height: 150px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.kz-mcp-log-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  background: var(--s-1);
+  border-left: 2px solid #3fb950;
+  font-size: 11px;
+  color: var(--ink-dim);
+}
+.kz-mcp-log-row.err { border-left-color: #e5534b; }
+@keyframes kzMcpFlash {
+  0%   { outline: 2px solid #3fb950; box-shadow: 0 0 14px rgba(63, 185, 80, 0.9); }
+  100% { outline: 2px solid transparent; box-shadow: none; }
+}
+.kz-mcp-flash {
+  animation: kzMcpFlash 1.4s ease-out;
+}

@@ -4,7 +4,7 @@ export const ID_RE = /^[a-z0-9_]{1,32}$/;
 export const DEFAULT_W = 640;
 export const DEFAULT_H = 360;
 export const MAX_SIDE = 960;
-export const TYPES = ['image', 'button', 'text', 'player_head', 'player_model', 'item'];
+export const TYPES = ['image', 'button', 'text', 'player_head', 'player_model', 'item', 'custom_model', 'input', 'roulette', 'scroll_area'];
 
 export function slug(s, fallback = 'menu') {
   const out = String(s || '').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 32);
@@ -83,6 +83,7 @@ export function newElement(type, menu) {
     w: 32,
     h: 16,
     hidden: false,
+    scrollGroup: '',
     motion: { intro: 'auto', introDelay: 0, introMs: 0, loop: 'none', loopAmount: 1, loopMs: 0, ...(t === 'button' ? { hover: 'none', press: 'none' } : {}) },
   };
   if (t === 'image') {
@@ -98,9 +99,41 @@ export function newElement(type, menu) {
   } else if (t === 'player_head' || t === 'player_model') {
     const head = t === 'player_head';
     Object.assign(base, { w: head ? 32 : 48, h: head ? 32 : 96, player: '%player_name%', hat: true, dollSize: null, dollOffset: null, tooltip: '' });
-    if (!head) Object.assign(base, { java3d: true, outfit: 'own', pose: 'standing', turn: 'none', angle: 20, spinSpeed: 45 });
+    if (!head) Object.assign(base, { java3d: true, outfit: 'own', pose: 'standing', turn: 'none', angle: 20, spinSpeed: 45, bedrockRenderer: 'auto' });
   } else if (t === 'item') {
     Object.assign(base, { w: 24, h: 24, item: 'minecraft:diamond_sword', glint: false, look: 'flat', spin: false, bedrockTexture: '', tooltip: '' });
+  } else if (t === 'custom_model') {
+    Object.assign(base, {
+      w: 48, h: 64, modelId: 'meg:dragon', animation: 'idle',
+      scale3d: 1, angle: 20, spin: false, spinSpeed: 45,
+      hitboxW: 1, hitboxH: 2, bedrockTexture: '', tooltip: '',
+    });
+  } else if (t === 'input') {
+    Object.assign(base, {
+      w: 96, h: 20, varName: 'qty', inputType: 'number', defaultValue: '1',
+      min: 1, max: 64, step: 1, prefix: 'Qty: ', suffix: '',
+      promptTitle: 'Enter amount', placeholder: 'Type value...',
+      textColor: '#ffffff', bgColor: '#161b26', borderColor: '#52a0f0',
+      scale: 1, shadow: true, align: 'center', actions: [], tooltip: '',
+    });
+  } else if (t === 'roulette') {
+    Object.assign(base, {
+      w: 260, h: 56, slotSize: 44, slotGap: 6, durationSec: 4.2, spinStyle: 'csgo',
+      reels: 3, cardCount: 5,
+      bgColor: '#0d111a', borderColor: '#e5a43a', pointerColor: '#ff4d4f',
+      tickSound: 'minecraft:block.note_block.hat;0.7;1.4',
+      winSound: 'minecraft:entity.player.levelup;1.0;1.1',
+      tooltip: '',
+      rewards: [
+        { id: 'r1', name: 'Iron Ingot', item: 'minecraft:iron_ingot', color: '#9ca3af', weight: 45, actions: ['console:give %player_name% iron_ingot 16'] },
+        { id: 'r2', name: 'Diamond Sword', item: 'minecraft:diamond_sword', color: '#3b82f6', weight: 15, actions: ['console:give %player_name% diamond_sword 1'] },
+      ],
+    });
+  } else if (t === 'scroll_area') {
+    Object.assign(base, {
+      w: 360, h: 200, scrollMode: 'pan2d', contentW: 720, contentH: 480,
+      stepPx: 28, bgColor: '#0e131f', borderColor: '#3a8ee6', showScrollbar: true, tooltip: '',
+    });
   }
   if (menu) {
     base.x = Math.max(0, Math.round((menu.width - base.w) / 2));
@@ -136,7 +169,71 @@ export function normalizeProject(raw) {
       ee.w = Math.max(1, int(ee.w, 16));
       ee.h = Math.max(1, int(ee.h, 16));
       if (ee.type === 'button' && !Array.isArray(ee.actions)) ee.actions = [];
-      if (['button', 'item', 'player_head', 'player_model'].includes(ee.type)) ee.tooltip = String(ee.tooltip || '');
+      ee.scrollGroup = ee.type === 'scroll_area' ? '' : String(ee.scrollGroup || '');
+      if (['button', 'item', 'player_head', 'player_model', 'custom_model', 'input', 'roulette', 'scroll_area'].includes(ee.type)) ee.tooltip = String(ee.tooltip || '');
+      if (ee.type === 'player_model') {
+        ee.bedrockRenderer = ['auto', 'live', 'doll'].includes(ee.bedrockRenderer) ? ee.bedrockRenderer : 'auto';
+      }
+      if (ee.type === 'custom_model') {
+        ee.modelId = String(ee.modelId || '');
+        ee.animation = String(ee.animation || 'idle');
+        ee.scale3d = clamp(num(ee.scale3d, 1), 0.1, 10);
+        ee.angle = num(ee.angle, 20);
+        ee.spin = !!ee.spin;
+        ee.spinSpeed = clamp(num(ee.spinSpeed, 45), 1, 720);
+        ee.hitboxW = clamp(num(ee.hitboxW, 1), 0.2, 8);
+        ee.hitboxH = clamp(num(ee.hitboxH, 2), 0.2, 8);
+        ee.bedrockTexture = String(ee.bedrockTexture || '');
+      }
+      if (ee.type === 'input') {
+        ee.varName = String(ee.varName || 'qty').trim();
+        ee.inputType = ['number', 'text', 'slider'].includes(ee.inputType) ? ee.inputType : 'number';
+        ee.defaultValue = String(ee.defaultValue == null ? '1' : ee.defaultValue);
+        ee.min = num(ee.min, 1);
+        ee.max = num(ee.max, 64);
+        ee.step = Math.max(0.01, num(ee.step, 1));
+        ee.prefix = String(ee.prefix == null ? '' : ee.prefix);
+        ee.suffix = String(ee.suffix == null ? '' : ee.suffix);
+        ee.promptTitle = String(ee.promptTitle || 'Enter value');
+        ee.placeholder = String(ee.placeholder || 'Type value...');
+        ee.textColor = String(ee.textColor || '#ffffff');
+        ee.bgColor = String(ee.bgColor || '#161b26');
+        ee.borderColor = String(ee.borderColor || '#52a0f0');
+        ee.scale = Math.max(0.25, num(ee.scale, 1));
+        ee.shadow = ee.shadow !== false;
+        ee.align = ['left', 'center', 'right'].includes(ee.align) ? ee.align : 'center';
+        ee.actions = Array.isArray(ee.actions) ? ee.actions.filter(Boolean) : [];
+      }
+      if (ee.type === 'roulette') {
+        ee.slotSize = clamp(int(ee.slotSize, 44), 16, 128);
+        ee.slotGap = clamp(int(ee.slotGap, 6), 0, 32);
+        ee.durationSec = clamp(num(ee.durationSec, 4.2), 1.0, 15.0);
+        ee.spinStyle = ['csgo', 'tease', 'slot_v', 'flash', 'flip'].includes(ee.spinStyle) ? ee.spinStyle : 'csgo';
+        ee.reels = clamp(int(ee.reels, 3), 1, 5);
+        ee.cardCount = clamp(int(ee.cardCount, 5), 3, 9);
+        ee.bgColor = String(ee.bgColor || '#0d111a');
+        ee.borderColor = String(ee.borderColor || '#e5a43a');
+        ee.pointerColor = String(ee.pointerColor || '#ff4d4f');
+        ee.tickSound = String(ee.tickSound == null ? '' : ee.tickSound);
+        ee.winSound = String(ee.winSound == null ? '' : ee.winSound);
+        ee.rewards = (Array.isArray(ee.rewards) ? ee.rewards : []).map((r, ri) => ({
+          id: String((r && r.id) || ('r' + (ri + 1))),
+          name: String((r && r.name) || 'Prize'),
+          item: String((r && r.item) || 'minecraft:diamond'),
+          color: String((r && r.color) || '#3b82f6'),
+          weight: Math.max(0.01, num(r && r.weight, 10)),
+          actions: Array.isArray(r && r.actions) ? r.actions.filter(Boolean) : [],
+        }));
+      }
+      if (ee.type === 'scroll_area') {
+        ee.scrollMode = ['vertical', 'horizontal', 'pan2d', 'both'].includes(ee.scrollMode) ? ee.scrollMode : 'pan2d';
+        ee.contentW = Math.max(ee.w, int(ee.contentW, ee.w));
+        ee.contentH = Math.max(ee.h, int(ee.contentH, ee.h));
+        ee.stepPx = clamp(int(ee.stepPx, 28), 4, 200);
+        ee.bgColor = String(ee.bgColor || '#0e131f');
+        ee.borderColor = String(ee.borderColor || '#3a8ee6');
+        ee.showScrollbar = ee.showScrollbar !== false;
+      }
       if (ee.type === 'image' || ee.type === 'button') {
         ee.detail = [1, 2, 4, 8].includes(Number(ee.detail)) ? Number(ee.detail) : 1;
         ee.frames = Array.isArray(ee.frames) ? ee.frames.filter(Boolean) : [];
@@ -194,10 +291,10 @@ export function validateProject(p) {
     if (!m.elements.length) out.push({ level: 'warn', menu: m.id, msg: `Menu "${m.id}" is empty` });
     m.elements.forEach(e => {
       if (e.type === 'image' && !p.images[e.image]) out.push({ level: 'warn', menu: m.id, element: e.id, msg: `${m.id} > ${e.name || e.id}: missing image` });
-      if (e.type === 'button') {
+      if (e.type === 'button' || e.type === 'input') {
         (e.actions || []).forEach(a => {
-          const m2 = /^open:(.+)$/i.exec(String(a).trim());
-          if (m2 && !p.menus.some(mm => mm.id === m2[1].trim())) {
+          const m2 = /^open:([^?]+)/i.exec(String(a).trim());
+          if (m2 && !/\{[^}]+\}/.test(m2[1]) && !p.menus.some(mm => mm.id === m2[1].trim())) {
             out.push({ level: 'warn', menu: m.id, element: e.id, msg: `${m.id} > ${e.name || e.id}: opens missing menu "${m2[1].trim()}"` });
           }
         });
@@ -221,9 +318,9 @@ export function buildUiFlow(p) {
       if (ids.has(m.prevPage)) incoming.set(m.prevPage, (incoming.get(m.prevPage) || 0) + 1);
     }
     for (const e of m.elements) {
-      if (e.type !== 'button' || e.hidden) continue;
+      if ((e.type !== 'button' && e.type !== 'input') || e.hidden) continue;
       for (const a of (e.actions || [])) {
-        const match = /^open:(.+)$/i.exec(String(a).trim());
+        const match = /^open:([^?]+)/i.exec(String(a).trim());
         if (match) {
           const target = match[1].trim();
           edges.push({ from: m.id, to: target, kind: 'open', buttonId: e.id, buttonLabel: e.label || e.name, broken: !ids.has(target) });
@@ -308,6 +405,7 @@ export function exportPluginYaml(p) {
       L.push(`    y: ${int(e.y, 0)}`);
       L.push(`    w: ${int(e.w, 1)}`);
       L.push(`    h: ${int(e.h, 1)}`);
+      if (e.scrollGroup) L.push(`    scroll-group: ${q(e.scrollGroup)}`);
       if ((e.type === 'image' || e.type === 'button') && e.image && p.images[e.image]) {
         L.push(`    glyph: "\\u${(cp++).toString(16).toUpperCase().padStart(4, '0')}"`);
         L.push(`    glyph-ascent: ${Math.min(7, int(e.h, 1))}`);
@@ -345,6 +443,41 @@ export function exportPluginYaml(p) {
         L.push(`    glint: ${!!e.glint}`);
         L.push(`    look: ${q(e.look === '3d' ? '3d' : 'flat')}`);
         L.push(`    spin: ${!!e.spin}`);
+        if (/^(slot:)|[{%]/i.test(String(e.item || '').trim())) {
+          L.push(`    bedrock-slot: ${slot++}`);
+        }
+      }
+      if (e.type === 'custom_model') {
+        L.push(`    model-id: ${q(e.modelId || '')}`);
+        L.push(`    animation: ${q(e.animation || 'idle')}`);
+        L.push(`    scale-3d: ${num(e.scale3d, 1)}`);
+        L.push(`    angle: ${num(e.angle, 20)}`);
+        L.push(`    spin: ${!!e.spin}`);
+        L.push(`    spin-speed: ${num(e.spinSpeed, 45)}`);
+        L.push(`    hitbox-w: ${num(e.hitboxW, 1)}`);
+        L.push(`    hitbox-h: ${num(e.hitboxH, 2)}`);
+      }
+      if (e.type === 'input') {
+        L.push(`    var-name: ${q(e.varName || 'qty')}`);
+        L.push(`    input-type: ${q(e.inputType || 'number')}`);
+        L.push(`    default-value: ${q(e.defaultValue == null ? '1' : e.defaultValue)}`);
+        L.push(`    min: ${num(e.min, 1)}`);
+        L.push(`    max: ${num(e.max, 64)}`);
+        L.push(`    step: ${num(e.step, 1)}`);
+        L.push(`    prefix: ${q(e.prefix == null ? '' : e.prefix)}`);
+        L.push(`    suffix: ${q(e.suffix == null ? '' : e.suffix)}`);
+        L.push(`    prompt-title: ${q(e.promptTitle || 'Enter value')}`);
+        L.push(`    placeholder: ${q(e.placeholder || 'Type value...')}`);
+        L.push(`    text-color: ${q(e.textColor || '#ffffff')}`);
+        L.push(`    bg-color: ${q(e.bgColor || '#161b26')}`);
+        L.push(`    border-color: ${q(e.borderColor || '#52a0f0')}`);
+        L.push(`    scale: ${num(e.scale, 1)}`);
+        L.push(`    shadow: ${e.shadow !== false}`);
+        L.push(`    align: ${q(e.align || 'center')}`);
+        L.push(`    bedrock-slot: ${slot++}`);
+        const acts = (e.actions || []).map(a => String(a).trim()).filter(Boolean);
+        if (acts.length) { L.push('    actions:'); acts.forEach(a => L.push(`      - ${q(a)}`)); }
+        else L.push('    actions: []');
       }
       if (e.type === 'text') {
         L.push(`    text: ${q(e.text || '')}`);
@@ -353,6 +486,29 @@ export function exportPluginYaml(p) {
         L.push(`    shadow: ${!!e.shadow}`);
         L.push(`    align: ${q(e.align || 'center')}`);
         L.push(`    bedrock-slot: ${slot++}`);
+      }
+      if (e.type === 'roulette') {
+        L.push(`    slot-size: ${int(e.slotSize, 44)}`);
+        L.push(`    slot-gap: ${int(e.slotGap, 6)}`);
+        L.push(`    duration: ${num(e.durationSec, 4.2)}`);
+        L.push(`    spin-style: ${q(e.spinStyle || 'csgo')}`);
+        L.push(`    reels: ${clamp(int(e.reels, 3), 1, 5)}`);
+        L.push(`    card-count: ${clamp(int(e.cardCount, 5), 3, 9)}`);
+        L.push(`    bg-color: ${q(e.bgColor || '#0d111a')}`);
+        L.push(`    border-color: ${q(e.borderColor || '#e5a43a')}`);
+        L.push(`    pointer-color: ${q(e.pointerColor || '#ff4d4f')}`);
+        L.push(`    tick-sound: ${q(e.tickSound || '')}`);
+        L.push(`    win-sound: ${q(e.winSound || '')}`);
+        L.push(`    rewards: ${JSON.stringify(Array.isArray(e.rewards) ? e.rewards : [])}`);
+      }
+      if (e.type === 'scroll_area') {
+        L.push(`    scroll-mode: ${q(e.scrollMode || 'pan2d')}`);
+        L.push(`    content-w: ${Math.max(int(e.w, 1), int(e.contentW, e.w))}`);
+        L.push(`    content-h: ${Math.max(int(e.h, 1), int(e.contentH, e.h))}`);
+        L.push(`    step-px: ${clamp(int(e.stepPx, 28), 4, 200)}`);
+        L.push(`    bg-color: ${q(e.bgColor || '#0e131f')}`);
+        L.push(`    border-color: ${q(e.borderColor || '#3a8ee6')}`);
+        L.push(`    show-scrollbar: ${e.showScrollbar !== false}`);
       }
       if (e.tooltip && String(e.tooltip).trim()) L.push(`    tooltip: ${q(e.tooltip)}`);
     });

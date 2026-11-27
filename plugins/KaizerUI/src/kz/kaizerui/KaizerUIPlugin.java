@@ -19,6 +19,8 @@ import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.nio.charset.StandardCharsets;
@@ -33,6 +35,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * KaizerUI: cursor GUI menus made in KaizerHUD Studio (GUI Studio).
@@ -49,11 +53,17 @@ public final class KaizerUIPlugin extends JavaPlugin implements Listener {
     private final SensitivityTracker sensitivity = new SensitivityTracker();
     private final Map<UUID, Deque<String>> navHistory = new ConcurrentHashMap<>();
     private final Map<UUID, Map<String, String>> customPlaceholders = new ConcurrentHashMap<>();
+    private final Map<UUID, Map<String, String>> sessionVars = new ConcurrentHashMap<>();
+    private final Map<UUID, PendingChatInput> pendingChatInputs = new ConcurrentHashMap<>();
     private final Map<UUID, Map<String, String>> dynamicTexts = new ConcurrentHashMap<>();
     private final Map<UUID, Map<String, org.bukkit.inventory.ItemStack>> dynamicItems = new ConcurrentHashMap<>();
     private final Map<UUID, String> bedrockOpenMenu = new ConcurrentHashMap<>();
     private NamespacedKey fovKey, speedKey, hintKey;
     private UUID packId;
+
+    private static final Pattern MATH_EXPR = Pattern.compile("\\{([A-Za-z0-9_.\\-]+)\\s*([+\\-*/])\\s*([A-Za-z0-9_.\\-]+)\\}");
+    private static final Pattern VAR_TOKEN = Pattern.compile("\\{([A-Za-z0-9_.\\-]+)\\}");
+    private record PendingChatInput(MenuDef menu, MenuDef.Element element) {}
 
     @Override
     public void onEnable() {
@@ -100,6 +110,8 @@ public final class KaizerUIPlugin extends JavaPlugin implements Listener {
         CameraHook.shutdown();
         navHistory.clear();
         customPlaceholders.clear();
+        sessionVars.clear();
+        pendingChatInputs.clear();
         dynamicTexts.clear();
         dynamicItems.clear();
         bedrockOpenMenu.clear();
@@ -144,6 +156,8 @@ public final class KaizerUIPlugin extends JavaPlugin implements Listener {
 
     JavaMenus java() { return javaMenus; }
 
+    BedrockMenus bedrock() { return bedrock; }
+
     boolean isBedrock(Player p) { return bedrock != null && bedrock.isBedrock(p); }
 
     /** Opens a menu for the player (any thread). */
@@ -156,6 +170,7 @@ public final class KaizerUIPlugin extends JavaPlugin implements Listener {
     }
 
     void open(Player p, MenuDef menu, boolean resetHistory, Map<String, String> extraPlaceholders) {
+        pendingChatInputs.remove(p.getUniqueId());
         if (extraPlaceholders != null && !extraPlaceholders.isEmpty()) {
             Map<String, String> map = customPlaceholders.computeIfAbsent(p.getUniqueId(), k -> new ConcurrentHashMap<>());
             extraPlaceholders.forEach((k, v) -> {
@@ -165,12 +180,79 @@ public final class KaizerUIPlugin extends JavaPlugin implements Listener {
         Sched.entity(this, p, () -> {
             if (!p.isOnline()) return;
             if (resetHistory && !javaMenus.isOpen(p)) clearHistory(p.getUniqueId());
+            initMenuVarDefaults(p, menu);
             if (isBedrock(p)) {
                 if (getConfig().getBoolean("bedrock.enabled", true)) bedrock.open(p, menu);
             } else if (getConfig().getBoolean("java.enabled", true)) {
                 javaMenus.open(p, menu);
             }
         });
+    }
+
+    void initMenuVarDefaults(Player p, MenuDef m) {
+        if (p == null || m == null) return;
+        Map<String, String> vars = sessionVars.computeIfAbsent(p.getUniqueId(), k -> new ConcurrentHashMap<>());
+        for (MenuDef.Element e : m.elements) {
+            if (e.type == MenuDef.Type.INPUT && e.varName != null && !e.varName.isEmpty()) {
+                vars.putIfAbsent(e.varName, e.defaultValue != null ? e.defaultValue : "1");
+            }
+        }
+    }
+
+    void setSessionVar(UUID id, String key, String value) {
+        if (id == null || key == null || key.isBlank()) return;
+        Map<String, String> vars = sessionVars.computeIfAbsent(id, k -> new ConcurrentHashMap<>());
+        if (value == null) vars.remove(key.trim());
+        else vars.put(key.trim(), value);
+    }
+
+    String getSessionVar(UUID id, String key, String def) {
+        if (id == null || key == null || key.isBlank()) return def;
+        Map<String, String> vars = sessionVars.get(id);
+        if (vars == null) return def;
+        return vars.getOrDefault(key.trim(), def);
+    }
+
+    void clearSessionVars(UUID id) {
+        if (id != null) sessionVars.remove(id);
+    }
+
+    void openInputPrompt(Player p, MenuDef menu, MenuDef.Element inputEl) {
+        if (p == null || menu == null || inputEl == null) return;
+        if (isBedrock(p) && bedrock != null && bedrock.available()) {
+            bedrock.openInputForm(p, menu, inputEl);
+        } else {
+            beginJavaChatInput(p, menu, inputEl);
+        }
+    }
+
+    void beginJavaChatInput(Player p, MenuDef menu, MenuDef.Element inputEl) {
+        if (p == null || !p.isOnline() || menu == null || inputEl == null) return;
+        if (javaMenus != null) javaMenus.pauseForInput(p);
+        pendingChatInputs.put(p.getUniqueId(), new PendingChatInput(menu, inputEl));
+        String title = resolveText(p, inputEl.promptTitle != null && !inputEl.promptTitle.isBlank() ? inputEl.promptTitle : ("Enter " + inputEl.varName));
+        String hint = "text".equals(inputEl.inputType)
+                ? "&7(Type in chat, or &ccancel &7to go back)"
+                : "&7(" + formatNumber(inputEl.inputMin) + " - " + formatNumber(inputEl.inputMax) + ", or type &ccancel&7)";
+        p.sendMessage(Texts.component("&b[KaizerUI] &f" + title + " " + hint));
+    }
+
+    static String formatNumber(double v) {
+        if (Math.abs(v - Math.rint(v)) < 1e-9) return Long.toString(Math.round(v));
+        DecimalFormat df = new DecimalFormat("0.##", DecimalFormatSymbols.getInstance(Locale.US));
+        return df.format(v);
+    }
+
+    private static Double lookupNumber(String token, Map<String, String> vars, Map<String, String> ph) {
+        String s = null;
+        if (vars != null && vars.containsKey(token)) s = vars.get(token);
+        else if (ph != null && ph.containsKey(token)) s = ph.get(token);
+        if (s == null) s = token;
+        try {
+            return Double.parseDouble(s.trim().replace(",", ""));
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     boolean fireOpenEvent(Player p, MenuDef m, boolean isBedrock) {
@@ -187,15 +269,50 @@ public final class KaizerUIPlugin extends JavaPlugin implements Listener {
     String resolveText(Player p, String raw) {
         if (raw == null || raw.isEmpty()) return "";
         String out = raw;
-        Map<String, String> ph = customPlaceholders.get(p.getUniqueId());
-        if (ph != null && !ph.isEmpty()) {
-            for (Map.Entry<String, String> en : ph.entrySet()) {
-                String k = en.getKey();
-                String v = en.getValue();
-                if (k == null || v == null) continue;
-                out = out.replace(k, v);
-                if (!k.startsWith("%") && !k.endsWith("%")) out = out.replace("%" + k + "%", v);
-                if (!k.startsWith("{") && !k.endsWith("}")) out = out.replace("{" + k + "}", v);
+        Map<String, String> ph = p == null ? null : customPlaceholders.get(p.getUniqueId());
+        Map<String, String> vars = p == null ? null : sessionVars.get(p.getUniqueId());
+        for (int pass = 0; pass < 2; pass++) {
+            if (ph != null && !ph.isEmpty()) {
+                for (Map.Entry<String, String> en : ph.entrySet()) {
+                    String k = en.getKey(), v = en.getValue();
+                    if (k == null || v == null) continue;
+                    out = out.replace(k, v);
+                    if (!k.startsWith("%") && !k.endsWith("%")) out = out.replace("%" + k + "%", v);
+                    if (!k.startsWith("{") && !k.endsWith("}")) out = out.replace("{" + k + "}", v);
+                }
+            }
+            if (vars != null && !vars.isEmpty() && out.indexOf('{') >= 0) {
+                Matcher vm = VAR_TOKEN.matcher(out);
+                StringBuilder sb = new StringBuilder();
+                while (vm.find()) {
+                    String key = vm.group(1);
+                    String val = vars.get(key);
+                    vm.appendReplacement(sb, val != null ? Matcher.quoteReplacement(val) : Matcher.quoteReplacement(vm.group(0)));
+                }
+                vm.appendTail(sb);
+                out = sb.toString();
+            }
+            if (out.indexOf('{') >= 0) {
+                Matcher mm = MATH_EXPR.matcher(out);
+                StringBuilder sb = new StringBuilder();
+                while (mm.find()) {
+                    Double a = lookupNumber(mm.group(1), vars, ph);
+                    Double b = lookupNumber(mm.group(3), vars, ph);
+                    if (a != null && b != null) {
+                        double res = switch (mm.group(2)) {
+                            case "+" -> a + b;
+                            case "-" -> a - b;
+                            case "*" -> a * b;
+                            case "/" -> b == 0 ? 0 : a / b;
+                            default -> 0;
+                        };
+                        mm.appendReplacement(sb, Matcher.quoteReplacement(formatNumber(res)));
+                    } else {
+                        mm.appendReplacement(sb, Matcher.quoteReplacement(mm.group(0)));
+                    }
+                }
+                mm.appendTail(sb);
+                out = sb.toString();
             }
         }
         return Texts.papi(p, out);
@@ -222,6 +339,7 @@ public final class KaizerUIPlugin extends JavaPlugin implements Listener {
         if (id == null) return;
         bedrockOpenMenu.remove(id);
         clearHistory(id);
+        clearSessionVars(id);
         clearPlayerOverrides(id);
     }
 
@@ -358,11 +476,57 @@ public final class KaizerUIPlugin extends JavaPlugin implements Listener {
     @EventHandler
     public void onQuitCleanup(org.bukkit.event.player.PlayerQuitEvent e) {
         UUID id = e.getPlayer().getUniqueId();
+        pendingChatInputs.remove(id);
         sensitivity.forget(id);
         CameraHook.forget(id);
         clearHistory(id);
+        clearSessionVars(id);
         bedrockOpenMenu.remove(id);
         clearPlayerOverrides(id);
+    }
+
+    @SuppressWarnings("deprecation")
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onChatInput(org.bukkit.event.player.AsyncPlayerChatEvent e) {
+        Player p = e.getPlayer();
+        PendingChatInput pending = pendingChatInputs.get(p.getUniqueId());
+        if (pending == null) return;
+        e.setCancelled(true);
+        String msg = e.getMessage().trim();
+        Sched.entity(this, p, () -> {
+            if (!p.isOnline()) {
+                pendingChatInputs.remove(p.getUniqueId());
+                return;
+            }
+            PendingChatInput cur = pendingChatInputs.get(p.getUniqueId());
+            if (cur == null) return;
+            if ("cancel".equalsIgnoreCase(msg) || "-cancel".equalsIgnoreCase(msg)) {
+                pendingChatInputs.remove(p.getUniqueId());
+                open(p, cur.menu(), false);
+                return;
+            }
+            MenuDef.Element el = cur.element();
+            String finalVal = msg;
+            if (!"text".equals(el.inputType)) {
+                try {
+                    double n = Double.parseDouble(msg.replace(",", ""));
+                    n = Math.max(el.inputMin, Math.min(el.inputMax, n));
+                    finalVal = formatNumber(n);
+                } catch (NumberFormatException ex) {
+                    p.sendMessage(Texts.component("&cPlease enter a valid number (" + formatNumber(el.inputMin) + " - " + formatNumber(el.inputMax) + "), or type &fcancel&c."));
+                    return;
+                }
+            }
+            pendingChatInputs.remove(p.getUniqueId());
+            setSessionVar(p.getUniqueId(), el.varName, finalVal);
+            Actions.playSound(p, studio != null ? studio.clickSound : "");
+            if (el.actions != null && !el.actions.isEmpty()) {
+                Actions.After after = Actions.run(this, p, cur.menu(), el, false);
+                if (after == Actions.After.STAY) open(p, cur.menu(), false);
+            } else {
+                open(p, cur.menu(), false);
+            }
+        });
     }
 
     private final class ApiImpl implements KaizerUI {

@@ -303,6 +303,12 @@
         'add-head': () => E.add('player_head'),
         'add-model': () => E.add('player_model'),
         'add-item': () => E.add('item'),
+        'add-custom-model': () => E.add('custom_model'),
+        'add-input': () => E.add('input'),
+        'add-roulette': () => E.add('roulette'),
+        'add-scroll-area': () => E.add('scroll_area'),
+        'add-block': () => GS.Blocks && GS.Blocks.open(E),
+        'custom-assets': () => GS.CustomAssets && GS.CustomAssets.openManagerDialog(() => E.renderAll()),
         'mc-assets': () => GS.Items && GS.Items.downloadDialog().then(n => { if (n) E.renderAll(); }),
         'add-shape': () => E.openAssets('shapes'),
         'add-icon': () => E.openAssets('icons'),
@@ -322,6 +328,7 @@
         'fullscreen': () => appWindow ? appWindow.toggleMaximize() : null,
         'help': showHelp,
         'shortcuts': showShortcuts,
+        'mcp-connect': () => window.KZMcp && window.KZMcp.openConnectDialog(),
         'check-updates': () => window.KZUpdater && window.KZUpdater.checkManual()
     };
     function run(cmd) {
@@ -549,6 +556,8 @@
 
     GS.Doc = Doc;
     GS.save = save;
+    GS.loadById = loadById;
+    GS.newProject = newProject;
     GS.exportDialog = exportDialog;
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
     else start();

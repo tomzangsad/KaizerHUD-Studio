@@ -159,19 +159,32 @@ async function extractChanges(release) {
   }
 }
 
-function formatAssets(assets, releaseUrl) {
+function formatAssets(assets, releaseUrl, releaseBody) {
   const list = (Array.isArray(assets) ? assets : [])
     .filter(a => !/(\.sig|\.nsis\.zip|^latest\.json)$/i.test(String(a?.name || '')));
   if (!list.length) {
     return [`- [View Release Files](${releaseUrl})`];
   }
 
+  const body = String(releaseBody || '');
+  const mbUpdated = /KaizerMultiBar-[^`\]]+\.jar[^|\n]*Updated in/i.test(body);
+  const uiUpdated = /KaizerUI-[^`\]]+\.jar[^|\n]*Updated in/i.test(body);
+  const hasMarkers = mbUpdated || uiUpdated || /No changes since/i.test(body);
+
   const labelFor = (name) => {
     if (/-setup\.exe$/i.test(name)) return { rank: 1, label: 'Windows Installer (Recommended - In-App Auto-Updater)' };
-    if (/^KaizerMultiBar-.*\.jar$/i.test(name)) return { rank: 2, label: 'HUD Plugin' };
-    if (/^KaizerUI-.*\.jar$/i.test(name)) return { rank: 3, label: 'GUI Plugin (Update Required)' };
-    if (/portable.*\.exe$/i.test(name)) return { rank: 4, label: 'Windows Portable' };
-    return { rank: 5, label: '' };
+    if (/\.AppImage$/i.test(name)) return { rank: 2, label: 'Linux AppImage (Recommended - In-App Auto-Updater)' };
+    if (/\.deb$/i.test(name)) return { rank: 3, label: 'Linux Debian/Ubuntu Package' };
+    if (/^KaizerMultiBar-.*\.jar$/i.test(name)) {
+      const tag = hasMarkers ? (mbUpdated ? 'Updated!' : 'Unchanged') : 'Update Required';
+      return { rank: 4, label: `HUD Plugin (${tag})` };
+    }
+    if (/^KaizerUI-.*\.jar$/i.test(name)) {
+      const tag = hasMarkers ? (uiUpdated ? 'Updated!' : 'Unchanged') : 'Update Required';
+      return { rank: 5, label: `GUI Plugin (${tag})` };
+    }
+    if (/portable.*\.exe$/i.test(name)) return { rank: 6, label: 'Windows Portable' };
+    return { rank: 7, label: '' };
   };
 
   list.sort((a, b) => labelFor(a.name).rank - labelFor(b.name).rank);
@@ -202,7 +215,7 @@ function buildPayload(release, changes) {
     fields: [
       {
         name: 'Downloads',
-        value: clip(formatAssets(release.assets, releaseUrl).join('\n'), 1024),
+        value: clip(formatAssets(release.assets, releaseUrl, release.body).join('\n'), 1024),
         inline: false,
       },
     ],

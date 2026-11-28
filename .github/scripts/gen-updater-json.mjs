@@ -8,6 +8,9 @@ const REPO_ROOT = path.resolve(HERE, '../..');
 const CHANGELOG_PATH = path.join(REPO_ROOT, 'CHANGELOG.md');
 
 const DIST_DIR = path.resolve(process.env.DIST_DIR || 'dist-desktop');
+const OUT_FILE = process.env.OUT_FILE
+  ? path.resolve(process.env.OUT_FILE)
+  : path.join(DIST_DIR, 'latest.json');
 const TAG = (process.env.RELEASE_TAG || '').trim();
 const REPO = (process.env.GITHUB_REPOSITORY || 'tomzangsad/KaizerHUD-Studio').trim();
 
@@ -34,6 +37,25 @@ function readEnglishNotes(tag) {
   return scope || `Release ${tag}`;
 }
 
+function walkFiles(dir) {
+  const out = [];
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, ent.name);
+    if (ent.isDirectory()) out.push(...walkFiles(full));
+    else if (ent.isFile()) out.push(full);
+  }
+  return out;
+}
+
+function findSignedBundle(allFiles, patterns) {
+  const fileSet = new Set(allFiles);
+  for (const re of patterns) {
+    const match = allFiles.find(f => re.test(path.basename(f)) && fileSet.has(`${f}.sig`));
+    if (match) return match;
+  }
+  return null;
+}
+
 function main() {
   if (!TAG) {
     console.log('RELEASE_TAG not set — skipping latest.json generation.');
@@ -44,36 +66,45 @@ function main() {
     return;
   }
 
-  const files = fs.readdirSync(DIST_DIR);
-  const candidates = [
-    files.find(f => /-setup\.exe$/i.test(f) && files.includes(`${f}.sig`)),
-    files.find(f => /\.nsis\.zip$/i.test(f) && files.includes(`${f}.sig`)),
-  ].filter(Boolean);
+  const allFiles = walkFiles(DIST_DIR);
+  const dlPrefix = `https://github.com/${REPO}/releases/download/${encodeURIComponent(TAG)}`;
 
-  if (!candidates.length) {
+  const winArtifact = findSignedBundle(allFiles, [/-setup\.exe$/i, /\.nsis\.zip$/i]);
+  const linuxArtifact = findSignedBundle(allFiles, [/\.AppImage\.tar\.gz$/i, /\.AppImage$/i]);
+
+  const platforms = {};
+  if (winArtifact) {
+    const name = path.basename(winArtifact);
+    platforms['windows-x86_64'] = {
+      signature: fs.readFileSync(`${winArtifact}.sig`, 'utf8').trim(),
+      url: `${dlPrefix}/${encodeURIComponent(name)}`,
+    };
+  }
+  if (linuxArtifact) {
+    const name = path.basename(linuxArtifact);
+    platforms['linux-x86_64'] = {
+      signature: fs.readFileSync(`${linuxArtifact}.sig`, 'utf8').trim(),
+      url: `${dlPrefix}/${encodeURIComponent(name)}`,
+    };
+  }
+
+  const keys = Object.keys(platforms);
+  if (!keys.length) {
     console.log('No signed updater bundle (.sig) found — skipping latest.json generation (TAURI_SIGNING_PRIVATE_KEY may not be set).');
     return;
   }
 
-  const artifact = candidates[0];
-  const signature = fs.readFileSync(path.join(DIST_DIR, `${artifact}.sig`), 'utf8').trim();
   const version = TAG.replace(/^v/, '');
-
   const manifest = {
     version,
     notes: readEnglishNotes(TAG),
     pub_date: new Date().toISOString(),
-    platforms: {
-      'windows-x86_64': {
-        signature,
-        url: `https://github.com/${REPO}/releases/download/${encodeURIComponent(TAG)}/${encodeURIComponent(artifact)}`,
-      },
-    },
+    platforms,
   };
 
-  const outPath = path.join(DIST_DIR, 'latest.json');
-  fs.writeFileSync(outPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
-  console.log(`Generated updater manifest: ${outPath} (version=${version}, artifact=${artifact})`);
+  fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
+  fs.writeFileSync(OUT_FILE, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+  console.log(`Generated updater manifest: ${OUT_FILE} (version=${version}, platforms=${keys.join(',')})`);
 }
 
 main();

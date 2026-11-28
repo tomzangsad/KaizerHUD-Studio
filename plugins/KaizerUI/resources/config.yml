@@ -33,6 +33,9 @@ java:
   light-3d-models: true
   # Automatically normalize cursor speed from the player's Minecraft mouse sensitivity
   auto-sensitivity: true
+  # Draw Java menus using virtual PacketEvents display packets (0 server entities for displays — best TPS).
+  # Automatically falls back to Bukkit entities if PacketEvents is not installed.
+  packet-displays: true
   # Temporarily hide distracting HUD elements while a Java menu is open (requires PacketEvents)
   hide-hud:
     action-bar: true

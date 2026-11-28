@@ -778,8 +778,26 @@
                 if (e.type === 'item') {
                     const resolvedItem = this.resolvePreviewVars(e.item);
                     const url = GS.Items && GS.Items.url(resolvedItem);
-                    if (url) d.style.backgroundImage = `url("${url}")`;
-                    else {
+                    const isCustom = GS.CustomAssets && GS.CustomAssets.isCustomId(resolvedItem);
+                    const assetMeta = isCustom ? GS.CustomAssets.findItem(resolvedItem) : null;
+                    if (assetMeta && assetMeta.hasModel && GS.BbModel) {
+                        const cv = document.createElement('canvas');
+                        cv.className = 'gs-cmodel-cv';
+                        const k = Math.max(4, Math.min(10, Math.round(320 / Math.max(e.w, e.h))));
+                        cv.width = Math.max(32, Math.round(e.w * k));
+                        cv.height = Math.max(32, Math.round(e.h * k));
+                        d.appendChild(cv);
+                        GS.CustomAssets.getModel(resolvedItem).then(mod => {
+                            if (mod && d.isConnected) {
+                                GS.BbModel.drawToCanvas(mod, cv, { useGui: true, angle: e.look === '3d' ? 20 : 0 });
+                            } else if (url && d.isConnected) {
+                                cv.remove();
+                                d.style.backgroundImage = `url("${url}")`;
+                            }
+                        });
+                    } else if (url) {
+                        d.style.backgroundImage = `url("${url}")`;
+                    } else {
                         d.classList.add('no-item');
                         const t = document.createElement('span');
                         t.className = 'gs-item-id';
@@ -802,8 +820,9 @@
                         d.appendChild(cv);
                         GS.CustomAssets.getModel(mid).then(mod => {
                             if (mod && d.isConnected) {
-                                GS.BbModel.drawToCanvas(mod, cv, { angle: M.num(e.angle, 20) });
+                                GS.BbModel.drawToCanvas(mod, cv, { angle: M.num(e.angle, 20), pitch: 12 });
                             } else if (icon && d.isConnected) {
+                                cv.remove();
                                 d.style.backgroundImage = `url("${icon}")`;
                             }
                         });

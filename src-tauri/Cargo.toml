@@ -1,6 +1,6 @@
 [package]
 name = "kaizerhud"
-version = "1.0.6"
+version = "1.0.7"
 description = "KaizerMC HUD Maker - Bedrock JSON UI HUD generator"
 license = "GPL-3.0-only"
 edition = "2021"

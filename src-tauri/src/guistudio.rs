@@ -128,8 +128,7 @@ pub fn gui_delete_project(state: State<GuiState>, id: String) -> Result<Value, S
 #[tauri::command]
 pub fn gui_open_projects_folder(state: State<GuiState>) -> Result<(), String> {
     let dir = state.storage.lock().unwrap().dir().to_path_buf();
-    std::process::Command::new("explorer").arg(dir).spawn().map_err(|e| e.to_string())?;
-    Ok(())
+    crate::open_path_in_system(&dir)
 }
 
 /// Builds the export and asks where to save it. Returns the saved path, or `None` if cancelled.

@@ -41,7 +41,7 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: npx --yes @tauri-apps/cli@2 build
+        run: npx --yes @tauri-apps/cli@2 build --bundles nsis
       - name: Collect desktop artifacts
         shell: pwsh
         run: |
@@ -55,22 +55,71 @@ jobs:
           }
           Copy-Item "src-tauri/target/release/kaizerhud.exe" "dist-desktop/kz-kaizerhud-portable.exe"
           Get-ChildItem dist-desktop
-      - name: Generate updater manifest (latest.json)
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          DIST_DIR: dist-desktop
-          RELEASE_TAG: ${{ github.ref_name }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: node .github/scripts/gen-updater-json.mjs
-      - name: Remove standalone .sig after embedding in latest.json
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: pwsh
-        run: Remove-Item -ErrorAction SilentlyContinue dist-desktop/*.sig
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v4
         with:
           name: kaizerhud-windows
           path: dist-desktop/*
+
+  build-desktop-linux:
+    name: Build Linux Desktop App (.AppImage & .deb)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install Linux Tauri dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf build-essential curl wget file libxdo-dev libssl-dev
+      - name: Sync version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const ver = (process.env.TAG_NAME || "").replace(/^v/, "");
+            if (!/^\d+\.\d+\.\d+$/.test(ver)) process.exit(0);
+            const conf = fs.readFileSync("src-tauri/tauri.conf.json", "utf8")
+              .replace(/"version"\s*:\s*"[^"]+"/, `"version": "${ver}"`);
+            fs.writeFileSync("src-tauri/tauri.conf.json", conf, "utf8");
+            const cargo = fs.readFileSync("src-tauri/Cargo.toml", "utf8")
+              .replace(/^version\s*=\s*"[^"]+"/m, `version = "${ver}"`);
+            fs.writeFileSync("src-tauri/Cargo.toml", cargo, "utf8");
+            console.log("Synced app version to " + ver);
+          '
+      - name: Build AppImage and deb
+        working-directory: src-tauri
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx --yes @tauri-apps/cli@2 build --bundles appimage,deb
+      - name: Collect Linux artifacts
+        run: |
+          mkdir -p dist-linux
+          shopt -s nullglob
+          for f in src-tauri/target/release/bundle/appimage/*.AppImage* src-tauri/target/release/bundle/deb/*.deb; do
+            base="$(basename "$f")"
+            clean="${base// /-}"
+            cp "$f" "dist-linux/$clean"
+          done
+          if ! ls dist-linux/*.AppImage >/dev/null 2>&1; then
+            echo "AppImage bundle not found!" >&2
+            exit 1
+          fi
+          ls -la dist-linux/
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kaizerhud-linux
+          path: dist-linux/*
 
   build-plugins:
     name: Build Server Plugins
@@ -103,7 +152,7 @@ jobs:
 
   release:
     name: Publish GitHub Release
-    needs: [build-desktop, build-plugins]
+    needs: [build-desktop, build-desktop-linux, build-plugins]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
@@ -116,6 +165,15 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: dist
+      - name: Generate unified updater manifest (latest.json)
+        env:
+          DIST_DIR: dist
+          OUT_FILE: dist/latest.json
+          RELEASE_TAG: ${{ github.ref_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node .github/scripts/gen-updater-json.mjs
+      - name: Remove standalone .sig after embedding in latest.json
+        run: find dist -type f -name '*.sig' -delete
       - name: Prepare release notes
         env:
           RELEASE_TAG: ${{ github.ref_name }}
@@ -129,6 +187,8 @@ jobs:
           body_path: release-body.md
           files: |
             dist/kaizerhud-windows/*
+            dist/kaizerhud-linux/*
+            dist/latest.json
             dist/kaizer-plugins/**/*.jar
       - name: Notify Discord
         env:

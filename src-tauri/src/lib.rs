@@ -48,11 +48,46 @@ fn delete_project(state: State<AppState>, id: String) -> Result<Value, String> {
     state.storage.lock().unwrap().delete(&id)
 }
 
+pub(crate) fn open_path_in_system(path: &std::path::Path) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer").arg(path).spawn().map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open").arg(path).spawn().map_err(|e| e.to_string())?;
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open").arg(path).spawn().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+pub(crate) fn open_url_in_browser(url: &str) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("rundll32")
+            .arg("url.dll,FileProtocolHandler")
+            .arg(url)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open").arg(url).spawn().map_err(|e| e.to_string())?;
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open").arg(url).spawn().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn open_projects_folder(state: State<AppState>) -> Result<(), String> {
     let dir = state.storage.lock().unwrap().dir().to_path_buf();
-    std::process::Command::new("explorer").arg(dir).spawn().map_err(|e| e.to_string())?;
-    Ok(())
+    open_path_in_system(&dir)
 }
 
 #[tauri::command]
@@ -61,8 +96,7 @@ fn open_folder(path: String) -> Result<(), String> {
     if !p.is_dir() {
         return Err("Folder not found".into());
     }
-    std::process::Command::new("explorer").arg(p).spawn().map_err(|e| e.to_string())?;
-    Ok(())
+    open_path_in_system(&p)
 }
 
 /// Opens an http(s) link in the default browser.
@@ -72,12 +106,7 @@ fn open_external(url: String) -> Result<(), String> {
     if !(lower.starts_with("https://") || lower.starts_with("http://")) || url.contains('"') {
         return Err("Only http(s) links can be opened".into());
     }
-    std::process::Command::new("rundll32")
-        .arg("url.dll,FileProtocolHandler")
-        .arg(&url)
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    Ok(())
+    open_url_in_browser(&url)
 }
 
 /* ───────────── live code view + folder sync ───────────── */
@@ -243,6 +272,7 @@ pub fn run() {
             custom_assets::custom_assets_save_icon,
             custom_assets::custom_assets_scan_path,
             custom_assets::custom_assets_pick_and_import,
+            custom_assets::custom_assets_clear_model_icons,
             custom_assets::custom_assets_remove_source
         ])
         .build(tauri::generate_context!())

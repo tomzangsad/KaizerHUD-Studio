@@ -75,32 +75,77 @@ function readPomVersion(relPath, fallback) {
   }
 }
 
+function hasPluginChanges(prevTag, watchPaths) {
+  if (!prevTag) return true;
+  try {
+    const diff = git(['diff', '--name-only', `${prevTag}..HEAD`, '--', ...watchPaths]);
+    if (diff.length > 0) return true;
+    const dirty = git(['status', '--porcelain', '--', ...watchPaths]);
+    return dirty.length > 0;
+  } catch {
+    return true;
+  }
+}
+
 function buildBody() {
   const verMatch = /^v?(\d+\.\d+\.\d+)/.exec(TAG);
   const ver = verMatch ? verMatch[1] : '*';
+  const prev = readPrevTag(TAG);
   const mbVer = readPomVersion('plugins/KaizerMultiBar/pom.xml', '2.2.0');
   const uiVer = readPomVersion('plugins/KaizerUI/pom.xml', '1.2.0');
+  const mbChanged = hasPluginChanges(prev, ['plugins/KaizerMultiBar/src', 'plugins/KaizerMultiBar/pom.xml']);
+  const uiChanged = hasPluginChanges(prev, ['plugins/KaizerUI/src', 'plugins/KaizerUI/resources', 'plugins/KaizerUI/pom.xml']);
   const dlBase = `https://github.com/${REPO}/releases/download/${encodeURIComponent(TAG)}`;
 
   const setupFile = `KaizerHUD-Studio_${ver}_x64-setup.exe`;
+  const appImageFile = `KaizerHUD-Studio_${ver}_amd64.AppImage`;
+  const debFile = `KaizerHUD-Studio_${ver}_amd64.deb`;
   const mbFile = `KaizerMultiBar-${mbVer}.jar`;
   const uiFile = `KaizerUI-${uiVer}.jar`;
   const portableFile = 'kz-kaizerhud-portable.exe';
 
+  const updatedJars = [];
+  if (mbChanged) updatedJars.push(mbFile);
+  if (uiChanged) updatedJars.push(uiFile);
+
+  const pluginNoteEn = updatedJars.length
+    ? `Update server plugin${updatedJars.length > 1 ? 's' : ''} (${updatedJars.map(j => '**`' + j + '`**').join(' & ')}) to stay in sync.`
+    : 'No server plugin updates required in this release.';
+  const pluginNoteTh = updatedJars.length
+    ? `และอัปเดตปลั๊กอินเซิร์ฟเวอร์ (${updatedJars.map(j => '**`' + j + '`**').join(' และ ')}) ให้ตรงกันครับ`
+    : 'รอบนี้ไม่มีการแก้ไขปลั๊กอินเซิร์ฟเวอร์ (ใช้ไฟล์เดิมต่อได้เลย)';
+
+  const mbDescEn = mbChanged
+    ? `**Updated in ${TAG}!** — HUD Studio server plugin *(replace in \`plugins/\`)*`
+    : `HUD Studio server plugin *(No changes since ${prev} — keep existing)*`;
+  const mbDescTh = mbChanged
+    ? `**อัปเดตใหม่ใน ${TAG}!** — ควรโหลดไปลงทับใน \`plugins/\``
+    : `ปลั๊กอิน HUD Studio *(ไม่มีการแก้ไขจาก ${prev} — ไม่ต้องลงทับ)*`;
+
+  const uiDescEn = uiChanged
+    ? `**Updated in ${TAG}!** — GUI Studio server plugin *(replace in \`plugins/\`)*`
+    : `GUI Studio server plugin *(No changes since ${prev} — keep existing)*`;
+  const uiDescTh = uiChanged
+    ? `**อัปเดตใหม่ใน ${TAG}!** — ควรโหลดไปลงทับใน \`plugins/\``
+    : `ปลั๊กอิน GUI Studio *(ไม่มีการแก้ไขจาก ${prev} — ไม่ต้องลงทับ)*`;
+
   const table = [
     '> [!IMPORTANT]',
-    '> **Recommended Update (' + TAG + '):** Install this version using **`' + setupFile + '`** (Windows Installer) so future versions update automatically via the **In-App Auto-Updater**. Update server plugins (**`' + mbFile + '`** & **`' + uiFile + '`**) to stay in sync.',
-    '> **แนะนำให้อัปเดตเป็นเวอร์ชันนี้ (' + TAG + '):** ติดตั้งผ่าน **`' + setupFile + '`** เพื่อให้เวอร์ชันถัดไปกดอัปเดตในตัวโปรแกรมได้ทันที และอัปเดตปลั๊กอินเซิร์ฟเวอร์ (**`' + mbFile + '`** และ **`' + uiFile + '`**) ให้ตรงกันครับ',
+    '> **Recommended Update (' + TAG + '):** Install via **`' + setupFile + '`** (Windows) or **`' + appImageFile + '`** (Linux AppImage) so future versions update automatically via the **In-App Auto-Updater**. ' + pluginNoteEn,
+    '> **แนะนำให้อัปเดตเป็นเวอร์ชันนี้ (' + TAG + '):** ติดตั้งผ่าน **`' + setupFile + '`** (Windows) หรือ **`' + appImageFile + '`** (Linux) เพื่อให้เวอร์ชันถัดไปกดอัปเดตในตัวโปรแกรมได้ทันที ' + pluginNoteTh,
     '',
     '## Downloads / ลำดับไฟล์ดาวน์โหลด',
     '',
     '| # | File | English | ภาษาไทย |',
     '|---|---|---|---|',
     `| 1 | [\`${setupFile}\`](${dlBase}/${encodeURIComponent(setupFile)}) | **Windows Installer** *(Recommended — In-App Auto-Updater)* | **ตัวติดตั้ง Windows** *(แนะนำ — รองรับอัปเดตอัตโนมัติในแอป)* |`,
-    `| 2 | [\`${mbFile}\`](${dlBase}/${encodeURIComponent(mbFile)}) | **HUD Studio server plugin** *(Paper/Purpur/Folia \`plugins/\`)* | **ปลั๊กอินสำหรับ HUD Studio** *(ใส่ใน \`plugins/\`)* |`,
-    `| 3 | [\`${uiFile}\`](${dlBase}/${encodeURIComponent(uiFile)}) | **GUI Studio server plugin** *(updated for ${ver})* | **ปลั๊กอินสำหรับ GUI Studio** *(อัปเดตให้ตรงเวอร์ชัน ${ver})* |`,
-    `| 4 | [\`${portableFile}\`](${dlBase}/${encodeURIComponent(portableFile)}) | **Portable Windows app** *(run directly without installing)* | **ตัวโปรแกรมแบบพกพา** *(เปิดใช้ได้ทันที ไม่ต้องติดตั้ง)* |`,
+    `| 2 | [\`${appImageFile}\`](${dlBase}/${encodeURIComponent(appImageFile)}) | **Linux AppImage** *(Recommended for Linux — In-App Auto-Updater)* | **Linux AppImage** *(แนะนำสำหรับ Linux — อัปเดตในแอปได้)* |`,
+    `| 3 | [\`${debFile}\`](${dlBase}/${encodeURIComponent(debFile)}) | **Linux Debian/Ubuntu** *(\`.deb\` package)* | **ตัวติดตั้ง Debian/Ubuntu** *(แพ็กเกจ \`.deb\`)* |`,
+    `| 4 | [\`${mbFile}\`](${dlBase}/${encodeURIComponent(mbFile)}) | ${mbDescEn} | ${mbDescTh} |`,
+    `| 5 | [\`${uiFile}\`](${dlBase}/${encodeURIComponent(uiFile)}) | ${uiDescEn} | ${uiDescTh} |`,
+    `| 6 | [\`${portableFile}\`](${dlBase}/${encodeURIComponent(portableFile)}) | **Portable Windows app** *(run directly without installing)* | **ตัวโปรแกรมแบบพกพา (Windows)** *(เปิดใช้ได้ทันที)* |`,
     '',
+    '> **Linux Quick Run:** `chmod +x ' + appImageFile + ' && ./' + appImageFile + '` (if Ubuntu/Debian lacks FUSE2, install `libfuse2` or run with `--appimage-extract-and-run`).',
     '> **Other files (`latest.json`, `Source code`):** `latest.json` is used automatically by the In-App Auto-Updater, and `Source code (zip/tar.gz)` are for developers ([docs/DEVELOPMENT.md](https://github.com/' + REPO + '/blob/main/docs/DEVELOPMENT.md)).',
     '> **Docs / คู่มือ:** [User Guide (EN / TH)](https://github.com/' + REPO + '/blob/main/docs/USER_GUIDE.md) · [Plugin Setup (EN / TH)](https://github.com/' + REPO + '/blob/main/plugins/README.md) · [CHANGELOG](https://github.com/' + REPO + '/blob/main/CHANGELOG.md)',
     '',
@@ -112,7 +157,6 @@ function buildBody() {
 
   if (!changesText) return table + '\n';
 
-  const prev = readPrevTag(TAG);
   const compareFooter =
     fromChangelog && prev && !/\/compare\//i.test(fromChangelog)
       ? `\n\n**Full Changelog**: https://github.com/${REPO}/compare/${prev}...${TAG}`

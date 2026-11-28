@@ -1983,7 +1983,7 @@ ${javaLine}
 
 Install
 -------
-1. Put KaizerUI-1.2.0.jar in plugins/ (from plugins/KaizerUI/target).
+1. Put KaizerUI-1.2.2.jar in plugins/ (from plugins/KaizerUI/target).
    Needed: Paper / Purpur / Folia 1.21+.
    Recommended: PacketEvents (locks the camera so the mouse moves a cursor),
                 PlaceholderAPI (placeholders in texts and labels),

@@ -3,9 +3,7 @@ package kz.kaizerui;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Color;
-import org.bukkit.World;
-import org.bukkit.entity.Display;
-import org.bukkit.entity.Entity;
+import org.bukkit.Location;
 import org.bukkit.entity.ItemDisplay;
 import org.bukkit.entity.TextDisplay;
 import org.bukkit.inventory.ItemStack;
@@ -27,11 +25,11 @@ final class RoulettePart {
     private final JavaSession session;
     final MenuDef.Element el;
     private final double depth;
-    private final List<Entity> ownEntities = new ArrayList<>();
+    private final List<DisplayHandle> ownVisuals = new ArrayList<>();
     private final List<SlotView> pool = new ArrayList<>();
 
-    private TextDisplay bgDisplay;
-    private TextDisplay needleDisplay;
+    private DisplayHandle bgDisplay;
+    private DisplayHandle needleDisplay;
     private ScheduledTask spinTask;
     private boolean spinning;
     private final List<MenuDef.Reward> idleStrip = new ArrayList<>();
@@ -43,7 +41,7 @@ final class RoulettePart {
     static final MenuDef.Reward MISS_CARD = new MenuDef.Reward(
             "miss", "&c&lMISS!", "minecraft:barrier", "#ef4444", 1, List.of());
 
-    private record SlotView(TextDisplay cardBg, ItemDisplay item, TextDisplay label) {}
+    private record SlotView(DisplayHandle cardBg, DisplayHandle item, DisplayHandle label) {}
 
     RoulettePart(JavaSession session, MenuDef.Element el, double depth) {
         this.session = session;
@@ -62,7 +60,6 @@ final class RoulettePart {
     }
 
     private void buildIdle() {
-        World w = session.player.getWorld();
         double s = session.guiScaleAt(depth);
         double sNeedle = session.guiScaleAt(depth + 0.00048);
         double boxW = Math.max(16, el.w) * s;
@@ -70,111 +67,72 @@ final class RoulettePart {
         double TEXT_PX = 0.025;
         String style = style();
 
-        // Frame backdrop
-        float bgSx = (float) (boxW / (5 * TEXT_PX)), bgSy = (float) (boxH / (11 * TEXT_PX));
-        Vector bgPos = session.worldCenter(el.x + el.w / 2.0, el.y + el.h / 2.0, depth)
-                .subtract(session.rightVec().multiply(0.5 * TEXT_PX * bgSx))
-                .subtract(session.upVec().multiply(5.5 * TEXT_PX * bgSy));
-        bgDisplay = w.spawn(session.facingLoc(bgPos), TextDisplay.class, x -> {
-            x.setVisibleByDefault(false);
-            x.setPersistent(false);
-            x.text(Component.text(" "));
-            x.setBillboard(Display.Billboard.FIXED);
-            x.setDefaultBackground(false);
-            x.setBackgroundColor(parseArgb(el.bgColor, 235));
-            x.setShadowed(false);
-            x.setSeeThrough(false);
-            x.setBrightness(new Display.Brightness(15, 15));
-            x.setTransformation(new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(bgSx, bgSy, 1f), new AxisAngle4f()));
-        });
-        session.player.showEntity(session.plugin, bgDisplay);
-        ownEntities.add(bgDisplay);
+        PacketDisplays.beginBatch(session.player);
+        try {
+            // Frame backdrop
+            float bgSx = (float) (boxW / (5 * TEXT_PX)), bgSy = (float) (boxH / (11 * TEXT_PX));
+            Vector bgPos = session.worldCenter(el.x + el.w / 2.0, el.y + el.h / 2.0, depth)
+                    .subtract(session.rightVec().multiply(0.5 * TEXT_PX * bgSx))
+                    .subtract(session.upVec().multiply(5.5 * TEXT_PX * bgSy));
+            bgDisplay = PacketDisplays.spawnText(
+                    session.plugin, session.player, session.facingLoc(bgPos), Component.text(" "),
+                    new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(bgSx, bgSy, 1f), new AxisAngle4f()),
+                    (byte) -1, parseArgb(el.bgColor, 235), false, TextDisplay.TextAlignment.CENTER, 200, 0, true);
+            ownVisuals.add(bgDisplay);
 
-        // Pointer needle (vertical for horizontal modes, horizontal for slot_v, hidden for flash/flip)
-        if (!"flash".equals(style) && !"flip".equals(style)) {
-            boolean vert = "slot_v".equals(style);
-            float nSx = (float) ((vert ? Math.max(16, el.w) : 2.0) * sNeedle / (5 * TEXT_PX));
-            float nSy = (float) ((vert ? 2.0 : Math.max(16, el.h)) * sNeedle / (11 * TEXT_PX));
-            Vector nPos = session.worldCenter(el.x + el.w / 2.0, el.y + el.h / 2.0, depth + 0.00048)
-                    .subtract(session.rightVec().multiply(0.5 * TEXT_PX * nSx))
-                    .subtract(session.upVec().multiply(5.5 * TEXT_PX * nSy));
-            needleDisplay = w.spawn(session.facingLoc(nPos), TextDisplay.class, x -> {
-                x.setVisibleByDefault(false);
-                x.setPersistent(false);
-                x.text(Component.text(" "));
-                x.setBillboard(Display.Billboard.FIXED);
-                x.setDefaultBackground(false);
-                x.setBackgroundColor(parseArgb(el.pointerColor, 255));
-                x.setShadowed(false);
-                x.setSeeThrough(false);
-                x.setBrightness(new Display.Brightness(15, 15));
-                x.setTransformation(new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(nSx, nSy, 1f), new AxisAngle4f()));
-            });
-            session.player.showEntity(session.plugin, needleDisplay);
-            ownEntities.add(needleDisplay);
-        }
+            // Pointer needle (vertical for horizontal modes, horizontal for slot_v, hidden for flash/flip)
+            if (!"flash".equals(style) && !"flip".equals(style)) {
+                boolean vert = "slot_v".equals(style);
+                float nSx = (float) ((vert ? Math.max(16, el.w) : 2.0) * sNeedle / (5 * TEXT_PX));
+                float nSy = (float) ((vert ? 2.0 : Math.max(16, el.h)) * sNeedle / (11 * TEXT_PX));
+                Vector nPos = session.worldCenter(el.x + el.w / 2.0, el.y + el.h / 2.0, depth + 0.00048)
+                        .subtract(session.rightVec().multiply(0.5 * TEXT_PX * nSx))
+                        .subtract(session.upVec().multiply(5.5 * TEXT_PX * nSy));
+                needleDisplay = PacketDisplays.spawnText(
+                        session.plugin, session.player, session.facingLoc(nPos), Component.text(" "),
+                        new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(nSx, nSy, 1f), new AxisAngle4f()),
+                        (byte) -1, parseArgb(el.pointerColor, 255), false, TextDisplay.TextAlignment.CENTER, 200, 0, true);
+                ownVisuals.add(needleDisplay);
+            }
 
-        // Pool visible slots inside viewport
-        int visibleCount;
-        if ("slot_v".equals(style)) {
-            int reels = Math.max(1, Math.min(5, el.reels));
-            int cardH = Math.max(14, Math.min(el.slotSize, (int) Math.floor((el.h - 8) * 0.52)));
-            int stepV = cardH + Math.max(0, el.slotGap);
-            int perReel = Math.max(3, Math.min(5, (int) Math.ceil((double) el.h / stepV) + 2));
-            visibleCount = Math.min(25, reels * perReel);
-        } else if ("flash".equals(style) || "flip".equals(style)) {
-            visibleCount = Math.max(3, Math.min(9, el.cardCount));
-        } else {
-            int step = Math.max(16, el.slotSize) + Math.max(0, el.slotGap);
-            visibleCount = Math.max(4, Math.min(11, (int) Math.ceil((double) el.w / step) + 3));
-        }
-        for (int i = 0; i < visibleCount; i++) {
-            TextDisplay cBg = w.spawn(session.facingLoc(bgPos), TextDisplay.class, x -> {
-                x.setVisibleByDefault(false);
-                x.setPersistent(false);
-                x.text(Component.text(" "));
-                x.setBillboard(Display.Billboard.FIXED);
-                x.setDefaultBackground(false);
-                x.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
-                x.setShadowed(false);
-                x.setSeeThrough(false);
-                x.setBrightness(new Display.Brightness(15, 15));
-                x.setTeleportDuration(1);
-            });
-            ItemDisplay itemD = w.spawn(session.itemFacingLoc(bgPos), ItemDisplay.class, x -> {
-                x.setVisibleByDefault(false);
-                x.setPersistent(false);
-                x.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.GUI);
-                x.setBillboard(Display.Billboard.FIXED);
-                x.setBrightness(new Display.Brightness(15, 15));
-                x.setTeleportDuration(1);
-            });
-            TextDisplay labD = w.spawn(session.facingLoc(bgPos), TextDisplay.class, x -> {
-                x.setVisibleByDefault(false);
-                x.setPersistent(false);
-                x.text(Component.empty());
-                x.setBillboard(Display.Billboard.FIXED);
-                x.setDefaultBackground(false);
-                x.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
-                x.setShadowed(true);
-                x.setSeeThrough(false);
-                x.setLineWidth(120);
-                x.setBrightness(new Display.Brightness(15, 15));
-                x.setTeleportDuration(1);
-            });
-            session.player.showEntity(session.plugin, cBg);
-            session.player.showEntity(session.plugin, itemD);
-            session.player.showEntity(session.plugin, labD);
-            ownEntities.add(cBg);
-            ownEntities.add(itemD);
-            ownEntities.add(labD);
-            pool.add(new SlotView(cBg, itemD, labD));
-        }
+            // Pool visible slots inside viewport
+            int visibleCount;
+            if ("slot_v".equals(style)) {
+                int reels = Math.max(1, Math.min(5, el.reels));
+                int cardH = Math.max(14, Math.min(el.slotSize, (int) Math.floor((el.h - 8) * 0.52)));
+                int stepV = cardH + Math.max(0, el.slotGap);
+                int perReel = Math.max(3, Math.min(5, (int) Math.ceil((double) el.h / stepV) + 2));
+                visibleCount = Math.min(25, reels * perReel);
+            } else if ("flash".equals(style) || "flip".equals(style)) {
+                visibleCount = Math.max(3, Math.min(9, el.cardCount));
+            } else {
+                int step = Math.max(16, el.slotSize) + Math.max(0, el.slotGap);
+                visibleCount = Math.max(4, Math.min(11, (int) Math.ceil((double) el.w / step) + 3));
+            }
+            Color transparentBg = Color.fromARGB(0, 0, 0, 0);
+            for (int i = 0; i < visibleCount; i++) {
+                DisplayHandle cBg = PacketDisplays.spawnText(
+                        session.plugin, session.player, session.facingLoc(bgPos), Component.text(" "),
+                        DisplayHandle.IDENTITY_TF, (byte) -1, transparentBg, false, TextDisplay.TextAlignment.CENTER, 200, 1, true);
+                DisplayHandle itemD = PacketDisplays.spawnItem(
+                        session.plugin, session.player, session.itemFacingLoc(bgPos), null,
+                        ItemDisplay.ItemDisplayTransform.GUI, DisplayHandle.IDENTITY_TF, 1, true);
+                DisplayHandle labD = PacketDisplays.spawnText(
+                        session.plugin, session.player, session.facingLoc(bgPos), Component.empty(),
+                        DisplayHandle.IDENTITY_TF, (byte) -1, transparentBg, true, TextDisplay.TextAlignment.CENTER, 120, 1, true);
+                ownVisuals.add(cBg);
+                ownVisuals.add(itemD);
+                ownVisuals.add(labD);
+                pool.add(new SlotView(cBg, itemD, labD));
+            }
 
-        List<MenuDef.Reward> src = el.rewards;
-        if (src.isEmpty()) src = List.of(new MenuDef.Reward("r1", "Prize", "minecraft:diamond", "#3b82f6", 10, List.of()));
-        for (int i = 0; i < 24; i++) idleStrip.add(src.get(i % src.size()));
-        renderIdle();
+            List<MenuDef.Reward> src = el.rewards;
+            if (src.isEmpty()) src = List.of(new MenuDef.Reward("r1", "Prize", "minecraft:diamond", "#3b82f6", 10, List.of()));
+            for (int i = 0; i < 24; i++) idleStrip.add(src.get(i % src.size()));
+            renderIdle();
+        } finally {
+            PacketDisplays.endBatch(session.player);
+        }
     }
 
     private void renderIdle() {
@@ -481,22 +439,25 @@ final class RoulettePart {
                 .subtract(session.upVec().multiply(5.5 * TEXT_PX * cSy));
         sv.cardBg.setBackgroundColor(parseArgb(rw.color(), alpha));
         sv.cardBg.setTransformation(new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(cSx, cSy, 1f), new AxisAngle4f()));
-        sv.cardBg.teleportAsync(session.facingLoc(cPos));
+        Location cLoc = session.facingLoc(cPos);
+        sv.cardBg.teleport(cLoc.getX(), cLoc.getY(), cLoc.getZ(), cLoc.getYaw(), cLoc.getPitch());
 
         float itemScale = (float) (Math.min(cardW, cardH) * 0.56 * sItem);
         Vector iPos = session.worldCenter(cx, cy - Math.max(1.5, cardH * 0.07), dItem);
         ItemStack st = Items.resolve(session.plugin, session.player, rw.item(), false);
         sv.item.setItemStack(st);
         sv.item.setTransformation(new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(itemScale, itemScale, Math.max(0.005f, itemScale * 0.05f)), new AxisAngle4f()));
-        sv.item.teleportAsync(session.itemFacingLoc(iPos));
+        Location iLoc = session.itemFacingLoc(iPos);
+        sv.item.teleport(iLoc.getX(), iLoc.getY(), iLoc.getZ(), iLoc.getYaw(), iLoc.getPitch());
 
         double kLab = 0.52 * labelScaleMul;
         float lScale = (float) (sLab * kLab / TEXT_PX);
         Vector lPos = session.worldCenter(cx, cy + cardH * 0.34 + 4.5 * kLab, dLab);
-        sv.label.text(Texts.component(rw.name(), "#f1f5f9"));
+        sv.label.setText(Texts.component(rw.name(), "#f1f5f9"));
         sv.label.setTextOpacity(alpha < 100 ? (byte) 140 : (byte) -1);
         sv.label.setTransformation(new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(lScale, lScale, lScale), new AxisAngle4f()));
-        sv.label.teleportAsync(session.facingLoc(lPos));
+        Location lLoc = session.facingLoc(lPos);
+        sv.label.teleport(lLoc.getX(), lLoc.getY(), lLoc.getZ(), lLoc.getYaw(), lLoc.getPitch());
     }
 
     private void drawMysteryCard(SlotView sv, double cx, double cy, double cardW, double cardH, int alpha, boolean lit) {
@@ -513,17 +474,19 @@ final class RoulettePart {
                 .subtract(session.upVec().multiply(5.5 * TEXT_PX * cSy));
         sv.cardBg.setBackgroundColor(parseArgb(lit ? "#d97706" : "#252f4a", alpha));
         sv.cardBg.setTransformation(new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(cSx, cSy, 1f), new AxisAngle4f()));
-        sv.cardBg.teleportAsync(session.facingLoc(cPos));
+        Location cLoc = session.facingLoc(cPos);
+        sv.cardBg.teleport(cLoc.getX(), cLoc.getY(), cLoc.getZ(), cLoc.getYaw(), cLoc.getPitch());
 
         sv.item.setTransformation(new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(0.0001f, 0.0001f, 0.0001f), new AxisAngle4f()));
 
         double kQ = 1.45 * Math.min(1.0, cardW / 40.0);
         float qScale = (float) (sLab * kQ / TEXT_PX);
         Vector qPos = session.worldCenter(cx, cy + 5.0 * kQ, dLab);
-        sv.label.text(Texts.component("&l?", lit ? "#fde047" : "#f6c453"));
+        sv.label.setText(Texts.component("&l?", lit ? "#fde047" : "#f6c453"));
         sv.label.setTextOpacity(alpha < 100 ? (byte) 150 : (byte) -1);
         sv.label.setTransformation(new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(qScale, qScale, qScale), new AxisAngle4f()));
-        sv.label.teleportAsync(session.facingLoc(qPos));
+        Location qLoc = session.facingLoc(qPos);
+        sv.label.teleport(qLoc.getX(), qLoc.getY(), qLoc.getZ(), qLoc.getYaw(), qLoc.getPitch());
     }
 
     private void renderHorizontalStrip(List<MenuDef.Reward> strip, double offsetPx) {
@@ -531,14 +494,19 @@ final class RoulettePart {
         int baseCardH = Math.max(14, Math.min(el.h - 6, el.slotSize));
         double baseCy = el.y + el.h / 2.0;
 
-        int firstVisible = Math.max(0, (int) Math.floor((-offsetPx - step) / step));
-        for (int pIdx = 0; pIdx < pool.size(); pIdx++) {
-            SlotView sv = pool.get(pIdx);
-            int sIdx = firstVisible + pIdx;
-            if (sIdx < 0 || sIdx >= strip.size()) { hideSlot(sv); continue; }
-            double cx = el.x + offsetPx + sIdx * step + el.slotSize / 2.0;
-            if (cx < el.x + el.slotSize * 0.35 || cx > el.x + el.w - el.slotSize * 0.35) { hideSlot(sv); continue; }
-            drawCard(sv, strip.get(sIdx), cx, baseCy, el.slotSize, baseCardH, 145, 1.0);
+        PacketDisplays.beginBatch(session.player);
+        try {
+            int firstVisible = Math.max(0, (int) Math.floor((-offsetPx - step) / step));
+            for (int pIdx = 0; pIdx < pool.size(); pIdx++) {
+                SlotView sv = pool.get(pIdx);
+                int sIdx = firstVisible + pIdx;
+                if (sIdx < 0 || sIdx >= strip.size()) { hideSlot(sv); continue; }
+                double cx = el.x + offsetPx + sIdx * step + el.slotSize / 2.0;
+                if (cx < el.x + el.slotSize * 0.35 || cx > el.x + el.w - el.slotSize * 0.35) { hideSlot(sv); continue; }
+                drawCard(sv, strip.get(sIdx), cx, baseCy, el.slotSize, baseCardH, 145, 1.0);
+            }
+        } finally {
+            PacketDisplays.endBatch(session.player);
         }
     }
 
@@ -553,21 +521,26 @@ final class RoulettePart {
         double totalW = reels * cardW + (reels - 1) * gap;
         double startX = el.x + (el.w - totalW) * 0.5;
 
-        int pIdx = 0;
-        for (int r = 0; r < reels && pIdx < pool.size(); r++) {
-            List<MenuDef.Reward> strip = strips.get(r);
-            double offsetPy = offsetsPy[r];
-            double cx = startX + r * (cardW + gap) + cardW / 2.0;
-            int firstVisible = Math.max(0, (int) Math.floor((-offsetPy - stepV) / stepV));
-            for (int k = 0; k < 5 && pIdx < pool.size(); k++) {
-                int sIdx = firstVisible + k;
-                if (sIdx < 0 || sIdx >= strip.size()) continue;
-                double cy = el.y + offsetPy + sIdx * stepV + cardH / 2.0;
-                if (cy < el.y + cardH * 0.35 || cy > el.y + el.h - cardH * 0.35) continue;
-                drawCard(pool.get(pIdx++), strip.get(sIdx), cx, cy, cardW, cardH, 160, 0.95);
+        PacketDisplays.beginBatch(session.player);
+        try {
+            int pIdx = 0;
+            for (int r = 0; r < reels && pIdx < pool.size(); r++) {
+                List<MenuDef.Reward> strip = strips.get(r);
+                double offsetPy = offsetsPy[r];
+                double cx = startX + r * (cardW + gap) + cardW / 2.0;
+                int firstVisible = Math.max(0, (int) Math.floor((-offsetPy - stepV) / stepV));
+                for (int k = 0; k < 5 && pIdx < pool.size(); k++) {
+                    int sIdx = firstVisible + k;
+                    if (sIdx < 0 || sIdx >= strip.size()) continue;
+                    double cy = el.y + offsetPy + sIdx * stepV + cardH / 2.0;
+                    if (cy < el.y + cardH * 0.35 || cy > el.y + el.h - cardH * 0.35) continue;
+                    drawCard(pool.get(pIdx++), strip.get(sIdx), cx, cy, cardW, cardH, 160, 0.95);
+                }
             }
+            while (pIdx < pool.size()) hideSlot(pool.get(pIdx++));
+        } finally {
+            PacketDisplays.endBatch(session.player);
         }
-        while (pIdx < pool.size()) hideSlot(pool.get(pIdx++));
     }
 
     private double[] gridCardLayout(int count) {
@@ -589,19 +562,24 @@ final class RoulettePart {
         double gap = g[2], size = g[3];
         double totalH = rows * size + (rows - 1) * gap;
         double startY = el.y + (el.h - totalH) * 0.5;
-        for (int pIdx = 0; pIdx < pool.size(); pIdx++) {
-            SlotView sv = pool.get(pIdx);
-            if (pIdx >= count) { hideSlot(sv); continue; }
-            int row = pIdx < colsTop ? 0 : 1;
-            int rowCols = row == 0 ? colsTop : (count - colsTop);
-            int col = row == 0 ? pIdx : (pIdx - colsTop);
-            double rowW = rowCols * size + (rowCols - 1) * gap;
-            double startX = el.x + (el.w - rowW) * 0.5;
-            double cx = startX + col * (size + gap) + size * 0.5;
-            double cy = startY + row * (size + gap) + size * 0.5;
-            boolean lit = activeHighlight && pIdx == activeIdx;
-            double mul = lit ? 1.12 : 0.94;
-            drawCard(sv, board.get(pIdx), cx, cy, size * mul, size * mul, lit ? 230 : 85, lit ? 1.05 : 0.9);
+        PacketDisplays.beginBatch(session.player);
+        try {
+            for (int pIdx = 0; pIdx < pool.size(); pIdx++) {
+                SlotView sv = pool.get(pIdx);
+                if (pIdx >= count) { hideSlot(sv); continue; }
+                int row = pIdx < colsTop ? 0 : 1;
+                int rowCols = row == 0 ? colsTop : (count - colsTop);
+                int col = row == 0 ? pIdx : (pIdx - colsTop);
+                double rowW = rowCols * size + (rowCols - 1) * gap;
+                double startX = el.x + (el.w - rowW) * 0.5;
+                double cx = startX + col * (size + gap) + size * 0.5;
+                double cy = startY + row * (size + gap) + size * 0.5;
+                boolean lit = activeHighlight && pIdx == activeIdx;
+                double mul = lit ? 1.12 : 0.94;
+                drawCard(sv, board.get(pIdx), cx, cy, size * mul, size * mul, lit ? 230 : 85, lit ? 1.05 : 0.9);
+            }
+        } finally {
+            PacketDisplays.endBatch(session.player);
         }
     }
 
@@ -612,33 +590,38 @@ final class RoulettePart {
         double gap = g[2], size = g[3];
         double totalH = rows * size + (rows - 1) * gap;
         double startY = el.y + (el.h - totalH) * 0.5;
-        for (int pIdx = 0; pIdx < pool.size(); pIdx++) {
-            SlotView sv = pool.get(pIdx);
-            if (pIdx >= count) { hideSlot(sv); continue; }
-            int row = pIdx < colsTop ? 0 : 1;
-            int rowCols = row == 0 ? colsTop : (count - colsTop);
-            int col = row == 0 ? pIdx : (pIdx - colsTop);
-            double rowW = rowCols * size + (rowCols - 1) * gap;
-            double startX = el.x + (el.w - rowW) * 0.5;
-            double cx = startX + col * (size + gap) + size * 0.5;
-            double cy = startY + row * (size + gap) + size * 0.5;
-            boolean isFocus = pIdx == focusIdx;
-            if (isFocus) {
-                double sx = othersFlipping ? 1.0 : widthPulse;
-                if (focusRevealed) {
-                    drawCard(sv, board.get(pIdx), cx, cy, size * 1.10 * sx, size * 1.10, 230, 1.05);
+        PacketDisplays.beginBatch(session.player);
+        try {
+            for (int pIdx = 0; pIdx < pool.size(); pIdx++) {
+                SlotView sv = pool.get(pIdx);
+                if (pIdx >= count) { hideSlot(sv); continue; }
+                int row = pIdx < colsTop ? 0 : 1;
+                int rowCols = row == 0 ? colsTop : (count - colsTop);
+                int col = row == 0 ? pIdx : (pIdx - colsTop);
+                double rowW = rowCols * size + (rowCols - 1) * gap;
+                double startX = el.x + (el.w - rowW) * 0.5;
+                double cx = startX + col * (size + gap) + size * 0.5;
+                double cy = startY + row * (size + gap) + size * 0.5;
+                boolean isFocus = pIdx == focusIdx;
+                if (isFocus) {
+                    double sx = othersFlipping ? 1.0 : widthPulse;
+                    if (focusRevealed) {
+                        drawCard(sv, board.get(pIdx), cx, cy, size * 1.10 * sx, size * 1.10, 230, 1.05);
+                    } else {
+                        drawMysteryCard(sv, cx, cy, size * sx, size, 225, true);
+                    }
                 } else {
-                    drawMysteryCard(sv, cx, cy, size * sx, size, 225, true);
-                }
-            } else {
-                boolean dim = focusIdx >= 0;
-                double sx = othersFlipping ? widthPulse : 1.0;
-                if (othersRevealed) {
-                    drawCard(sv, board.get(pIdx), cx, cy, size * sx, size, 85, 0.9);
-                } else {
-                    drawMysteryCard(sv, cx, cy, size * sx, size, dim ? 105 : 185, false);
+                    boolean dim = focusIdx >= 0;
+                    double sx = othersFlipping ? widthPulse : 1.0;
+                    if (othersRevealed) {
+                        drawCard(sv, board.get(pIdx), cx, cy, size * sx, size, 85, 0.9);
+                    } else {
+                        drawMysteryCard(sv, cx, cy, size * sx, size, dim ? 105 : 185, false);
+                    }
                 }
             }
+        } finally {
+            PacketDisplays.endBatch(session.player);
         }
     }
 
@@ -687,12 +670,25 @@ final class RoulettePart {
         return a.id().equals(b.id()) || a.item().equalsIgnoreCase(b.item());
     }
 
-    void destroy() {
+    void collectAndDestroy(List<Integer> packetIds) {
         spinning = false;
         stopTask();
-        for (Entity e : ownEntities) if (e.isValid()) e.remove();
-        ownEntities.clear();
+        for (DisplayHandle h : ownVisuals) {
+            if (h.isPacket()) {
+                if (h.isSpawned()) packetIds.add(h.entityId());
+                h.markDestroyedQuietly();
+            } else {
+                h.destroy();
+            }
+        }
+        ownVisuals.clear();
         pool.clear();
+    }
+
+    void destroy() {
+        List<Integer> packetIds = new ArrayList<>();
+        collectAndDestroy(packetIds);
+        PacketDisplays.destroyBatch(session.player, packetIds);
     }
 
     private static Color parseArgb(String hex, int alpha) {

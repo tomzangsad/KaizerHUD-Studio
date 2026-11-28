@@ -114,7 +114,7 @@
         state.pendingIcons.add(it.id);
         getModel(it.id).then(async (model) => {
             if (!model) return;
-            const png = await GS.BbModel.renderThumbnail(model, 64);
+            const png = await GS.BbModel.renderThumbnail(model, 96);
             if (!png) return;
             it.iconDataUrl = png;
             try { await tauri().invoke('custom_assets_save_icon', { itemId: it.id, dataUrl: png }); } catch (e) { /* ignore */ }
@@ -183,6 +183,7 @@
                   <button class="primary-btn" data-import="folder">Import Plugin Folder…</button>
                   <button class="ghost-btn" data-import="file">Import .zip / .bbmodel…</button>
                   <button class="ghost-btn" data-import="meg">Import ModelEngine / BetterModel…</button>
+                  <button class="ghost-btn" data-rebuild-icons title="Re-render cached 3D icons with the WebGL renderer">Rebuild 3D Icons</button>
                 </div>
                 <div class="ca-path-row">
                   <input type="text" class="ca-path-in" placeholder="Or paste a folder / .zip / .bbmodel path on disk…" spellcheck="false">
@@ -232,11 +233,25 @@
                     const fBtn = root.querySelector('[data-import="folder"]');
                     const zBtn = root.querySelector('[data-import="file"]');
                     const mBtn = root.querySelector('[data-import="meg"]');
+                    const rBtn = root.querySelector('[data-rebuild-icons]');
                     const sBtn = root.querySelector('[data-scan-path]');
                     const pIn = root.querySelector('.ca-path-in');
                     if (fBtn) fBtn.onclick = () => runImport(true, null);
                     if (zBtn) zBtn.onclick = () => runImport(false, null);
                     if (mBtn) mBtn.onclick = () => runImport(true, 'modelengine');
+                    if (rBtn) rBtn.onclick = async () => {
+                        const T = tauri();
+                        if (!T) return;
+                        try {
+                            const res = await T.invoke('custom_assets_clear_model_icons');
+                            state.pendingIcons.clear();
+                            await refresh();
+                            GS.toast && GS.toast(`Cleared ${res && res.cleared ? res.cleared : 0} cached 3D icons — rebuilding…`, 'ok');
+                            if (typeof onChanged === 'function') onChanged();
+                        } catch (err) {
+                            GS.toast && GS.toast(err.message || String(err), 'error');
+                        }
+                    };
                     if (sBtn) sBtn.onclick = () => runPath(pIn && pIn.value.trim(), null);
                     root.querySelectorAll('[data-rescan]').forEach(b => {
                         b.onclick = () => runPath(b.dataset.rescan, b.dataset.hint);

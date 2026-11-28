@@ -24,6 +24,27 @@ jobs:
       - name: Check build
         run: cargo check
 
+  rust-check-linux:
+    name: Desktop App Linux (Rust tests & check)
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Install Linux Tauri dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf build-essential curl wget file libxdo-dev libssl-dev
+      - name: Run unit tests
+        run: cargo test --lib
+      - name: Check build
+        run: cargo check
+
   plugins-build:
     name: Server Plugins (Java 21 + Maven)
     runs-on: ubuntu-latest

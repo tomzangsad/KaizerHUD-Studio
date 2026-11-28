@@ -2,6 +2,20 @@
 
 > เริ่มไฟล์นี้ 2026-11-23 (ก่อนหน้านี้บันทึกอยู่ใน `HANDOFF.md` และ `docs/*.md`)
 
+## v1.0.7 (2026-11-28)
+
+### English
+- Update `KaizerUI-1.2.2.jar` to match `KaizerHUD Studio 1.0.7` (`KaizerMultiBar` remains `2.2.0` — unchanged)
+- **Packet-Only Virtual Displays (`KaizerUI 1.2.2`)**: replaced Bukkit `TextDisplay` and `ItemDisplay` server entities across Java hologram menus (panels, buttons, labels, tooltips, cursors, scroll areas, and Gacha/Slot roulette cards) with zero-server-entity PacketEvents packets featuring Netty write/flush batching, single bulk `DestroyEntities` teardown, metadata diff caching, exact `1.40625°` protocol yaw alignment (fixing half-clipped multi-tile button text), `java.packet-displays: true` toggle, and automatic Bukkit fallback when PacketEvents is absent
+- **WebGL 3D Model & Custom Assets Overhaul (GUI Studio)**: replaced the Canvas 2D painter renderer with an offscreen hardware Z-buffer WebGL renderer (`DEPTH_TEST` + shader alpha cutout `discard` + `gl.NEAREST`), fixed inverted backface winding, added Blockbench `.bbmodel` `outliner`/`groups` bone hierarchy & ModelEngine helper-bone filtering, applied Minecraft `display.gui` (`rotZ -> rotY -> rotX` + `rescale`) and `defaultMcUv`, cropped `.mcmeta` animation strips to Frame 0, added ItemsAdder 1.21.4+ `assets/<ns>/items/*.json` + `resource.textures`/`graphics.textures`/stem icon fallbacks, added live high-res WebGL rendering on the editor canvas, and added a **Rebuild 3D Icons** button in `Plugin Packs…`
+- **Linux `.AppImage` & `.deb` Support + Smart Release Versioning**: added cross-platform `xdg-open` folder/browser helpers, WebKitGTK NVIDIA+Wayland DMABUF guard, `ubuntu-22.04` CI checks and `.AppImage`/`.deb` release jobs, unified multi-platform `latest.json` (`windows-x86_64` + `linux-x86_64`), and smart per-plugin patch auto-bump with `Updated`/`Unchanged` release notes markers
+
+### ภาษาไทย
+- อัปเดตปลั๊กอิน **`KaizerUI-1.2.2.jar`** ให้ตรงกับ **KaizerHUD Studio 1.0.7** (ส่วน `KaizerMultiBar` ยังเป็น `2.2.0` ไม่มีการแก้ไข)
+- **Packet-Only Virtual Displays (`KaizerUI 1.2.2`)**: เปลี่ยนการแสดงผล Display ฝั่ง Java ทั้งหมด (`TextDisplay`, `ItemDisplay`, `camera`, `cursor`, `backdrop`, `tooltip`, `scroll_area` และการ์ด Gacha/Slot) จาก Entity จริงบนเซิร์ฟเวอร์เป็น Virtual Packet ผ่าน PacketEvents ทำให้ **ไม่สร้าง Display Entity บนเซิร์ฟเวอร์เลย (0 entities)** ลดภาระ TPS อย่างมาก พร้อม Netty Batching, รวมแพ็กเก็ตลบทั้งหมดครั้งเดียว, แคชค่า metadata, ล็อกมุมโปรโตคอล `1.40625°` แก้ปัญหาตัวอักษรปุ่มใหญ่ขาดครึ่งคำ, เพิ่มตั้งค่า `java.packet-displays: true` และ fallback อัตโนมัติเมื่อไม่มี PacketEvents
+- **ยกเครื่องระบบเรนเดอร์โมเดล 3D ด้วย WebGL (GUI Studio)**: เปลี่ยนตัวเรนเดอร์ 3D เป็น **Offscreen WebGL** (`DEPTH_TEST` + alpha cutout `discard` + `gl.NEAREST`) แก้กล่องดำโปร่งแสงและหน้าโมเดลกลับด้านใน-นอก, รองรับโครงสร้างกระดูก `.bbmodel` (`outliner` + `groups` + ซ่อน helper bones ของ ModelEngine), รองรับ `display.gui` (`rotZ -> rotY -> rotX` + `rescale`), ตัดภาพ animation strip `.mcmeta` เหลือ Frame 0, แก้การดึงไอคอน/โมเดล ItemsAdder 1.21.4+ (`items/*.json`, `resource.textures`, `graphics.textures`, stem fallback), แสดงผลโมเดล 3D แบบ WebGL สดบน Canvas และเพิ่มปุ่ม **Rebuild 3D Icons** ใน `Plugin Packs…`
+- **รองรับ Linux (`.AppImage` & `.deb`) + ระบบเวอร์ชันอัจฉริยะ**: เพิ่มตัวเปิดโฟลเดอร์/ลิงก์แบบ cross-platform (`xdg-open`), ตัวกันจอดำ WebKitGTK บน Wayland+NVIDIA, งาน CI/Release สำหรับสร้างไฟล์ `.AppImage` + `.deb` บน `ubuntu-22.04`, รองรับ Auto-Updater หลายระบบใน `latest.json` (`windows-x86_64` + `linux-x86_64`) และระบบเช็ก bump เวอร์ชันปลั๊กอินเฉพาะตัวที่มีการแก้ไขพร้อมป้าย `Updated`/`Unchanged`
+
 ## v1.0.6 (2026-11-27)
 
 ### English

@@ -12,7 +12,6 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.Levelled;
-import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Horse;
 import org.bukkit.entity.ItemDisplay;
@@ -64,7 +63,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class JavaSession {
 
     private static final double TEXT_PX = 0.025;      // blocks per text pixel at scale 1
-    private static final double LAYER = 0.0006;       // gap between layers, towards the camera
+    private static final double LAYER = 0.0008;       // gap between layers, towards the camera
     private static final double CAMERA_FORWARD = 0.4; // camera sits in front of the head model
 
     final KaizerUIPlugin plugin;
@@ -92,35 +91,35 @@ final class JavaSession {
     private long recenterSentMs;
     private long lastRecenterMs;
 
-    private ItemDisplay camera;
+    private DisplayHandle camera;
     private Entity vehicle;
     private ScheduledTask rotationTask;
     boolean closing;
-    private TextDisplay cursor;
+    private DisplayHandle cursor;
     private volatile int cursorEntityId = -1;
     private volatile float cursorYaw;
     private final Object inputLock = new Object();
     private final AtomicBoolean hoverSyncQueued = new AtomicBoolean(false);
-    private final List<Entity> menuEntities = new ArrayList<>();
-    private final Map<String, List<Entity>> elemEntities = new HashMap<>();
+    private final List<DisplayHandle> menuVisuals = new ArrayList<>();
+    private final Map<String, List<DisplayHandle>> elemVisuals = new HashMap<>();
     private final Set<String> hiddenElems = new HashSet<>();
-    private final List<Entity> deferredVisuals = new ArrayList<>();
+    private final List<DisplayHandle> deferredVisuals = new ArrayList<>();
     private boolean visualsShown;
     private final List<Location> fakeLights = new ArrayList<>();
     private final Set<String> fakeLightKeys = new HashSet<>();
-    private final Map<String, List<TextDisplay>> pictures = new HashMap<>();
-    private final Map<String, TextDisplay> labels = new HashMap<>();
-    private final Map<String, TextDisplay> texts = new HashMap<>();
+    private final Map<String, List<DisplayHandle>> pictures = new HashMap<>();
+    private final Map<String, DisplayHandle> labels = new HashMap<>();
+    private final Map<String, DisplayHandle> texts = new HashMap<>();
     /** Player Head / Model displays and the name whose skin each one shows */
     private final Map<String, Part> skinParts = new HashMap<>();
     private final Map<String, String> skinNames = new HashMap<>();
     /** Player Model in 3D (Mannequin) and Item displays, with the task that turns them */
     private final Map<String, ModelPart> models = new HashMap<>();
     private final Map<String, CustomModelPart> customModels = new HashMap<>();
-    private final Map<String, ItemDisplay> items = new HashMap<>();
-    private final Map<String, TextDisplay> inputLabels = new HashMap<>();
+    private final Map<String, DisplayHandle> items = new HashMap<>();
+    private final Map<String, DisplayHandle> inputLabels = new HashMap<>();
     private final Map<String, RoulettePart> roulettes = new HashMap<>();
-    private record ScrollNode(Entity entity, double ox, double oy, double depth, float yaw, float pitch, MenuDef.Element el, MenuDef.Element area) {}
+    private record ScrollNode(DisplayHandle visual, double ox, double oy, double depth, float yaw, float pitch, MenuDef.Element el, MenuDef.Element area) {}
     private final List<ScrollNode> scrollNodes = new ArrayList<>();
     private final Map<String, double[]> scrollOffsets = new HashMap<>();
     private volatile String panGrabbed;
@@ -141,7 +140,7 @@ final class JavaSession {
     private static final float DRAG_DEG_PER_DEG = 3f;
     private MenuDef.Element hovered;
     private MenuDef.Element tooltipEl;
-    private TextDisplay tooltipDisplay;
+    private DisplayHandle tooltipDisplay;
     private ScheduledTask refreshTask;
     private long lastClick;
     private long lastScrollMs;
@@ -155,17 +154,17 @@ final class JavaSession {
     private double[] menuState = Motion.rest();
     private ScheduledTask animTask;
     private long animTick;
-    private TextDisplay backdrop;
+    private DisplayHandle backdrop;
     private Color backdropColor;
 
     /** One display of an element: its entity origin in GUI px, base scale, and depth-adjusted GUI scale */
     private static final class Part {
-        final TextDisplay d;
+        final DisplayHandle d;
         final double ox, oy;
         final float k;
         final double sd;
         int opacity = 255;
-        Part(TextDisplay d, double ox, double oy, float k, double sd) { this.d = d; this.ox = ox; this.oy = oy; this.k = k; this.sd = sd; }
+        Part(DisplayHandle d, double ox, double oy, float k, double sd) { this.d = d; this.ox = ox; this.oy = oy; this.k = k; this.sd = sd; }
     }
 
     /** Motion state of one element */
@@ -190,7 +189,9 @@ final class JavaSession {
         this.world = player.getWorld();
         this.lock = player.getLocation().clone();
         Location eye = player.getEyeLocation();
-        this.yaw0 = eye.getYaw();
+        // Snap to Minecraft's exact 1/256-circle protocol yaw grid (1.40625° = 45/32, exact IEEE-754 float)
+        // so every display's SpawnEntity yaw matches the layout basis (f, r) with 0.000° error.
+        this.yaw0 = Math.round(eye.getYaw() * 256f / 360f) * 1.40625f;
         this.eyeX = eye.getX();
         this.eyeY = eye.getY();
         this.eyeZ = eye.getZ();
@@ -207,11 +208,7 @@ final class JavaSession {
 
     void start() {
         if (locked) {
-            camera = world.spawn(new Location(world, cam.getX(), cam.getY(), cam.getZ(), yaw0, 0f), ItemDisplay.class, d -> {
-                d.setVisibleByDefault(false);
-                d.setPersistent(false);
-            });
-            player.showEntity(plugin, camera);
+            camera = PacketDisplays.spawnCameraAnchor(plugin, player, new Location(world, cam.getX(), cam.getY(), cam.getZ(), yaw0, 0f));
             // the player sits on an invisible entity where they stand: a riding client keeps sending
             // its head rotation even while its camera is somewhere else
             vehicle = spawnVehicle();
@@ -254,7 +251,7 @@ final class JavaSession {
                         if (missing) vehicle.addPassenger(player);
                         if (missing || delay == 3) CameraHook.setPassenger(player, vehicle.getEntityId());
                     }
-                    if (camera != null && camera.isValid()) CameraHook.setCamera(player, camera.getEntityId());
+                    if (camera != null && camera.isValid()) CameraHook.setCamera(player, camera.entityId());
                     CameraHook.hideHands(player);
                     CameraHook.setSelfInvisible(player, true);
                 });
@@ -297,12 +294,29 @@ final class JavaSession {
         if (rotationTask != null) { rotationTask.cancel(); rotationTask = null; }
         clearMenu();
         cursorEntityId = -1;
-        if (cursor != null) { cursor.remove(); cursor = null; }
+        if (camera != null && locked && player.isOnline()) {
+            CameraHook.setCamera(player, player.getEntityId());
+        }
+        List<Integer> exitIds = new ArrayList<>(2);
+        if (cursor != null) {
+            if (cursor.isPacket() && cursor.isSpawned()) {
+                exitIds.add(cursor.entityId());
+                cursor.markDestroyedQuietly();
+            } else {
+                cursor.destroy();
+            }
+            cursor = null;
+        }
         if (camera != null) {
-            if (locked && player.isOnline()) CameraHook.setCamera(player, player.getEntityId());
-            camera.remove();
+            if (camera.isPacket() && camera.isSpawned()) {
+                exitIds.add(camera.entityId());
+                camera.markDestroyedQuietly();
+            } else {
+                camera.destroy();
+            }
             camera = null;
         }
+        PacketDisplays.destroyBatch(player, exitIds);
         if (locked && player.isOnline()) CameraHook.showHud(player);
         if (clearSessionData) {
             plugin.fireCloseEvent(player, menu.id, reason, false);
@@ -368,7 +382,8 @@ final class JavaSession {
         models.clear();
         for (CustomModelPart cmp : customModels.values()) cmp.destroy();
         customModels.clear();
-        for (RoulettePart rp : roulettes.values()) rp.destroy();
+        List<Integer> packetIds = new ArrayList<>();
+        for (RoulettePart rp : roulettes.values()) rp.collectAndDestroy(packetIds);
         roulettes.clear();
         scrollNodes.clear();
         scrollOffsets.clear();
@@ -382,11 +397,27 @@ final class JavaSession {
         openClip = null;
         deferredVisuals.clear();
         visualsShown = false;
-        if (tooltipDisplay != null) { tooltipDisplay.remove(); tooltipDisplay = null; }
+        if (tooltipDisplay != null) {
+            if (tooltipDisplay.isPacket()) {
+                if (tooltipDisplay.isSpawned()) packetIds.add(tooltipDisplay.entityId());
+                tooltipDisplay.markDestroyedQuietly();
+            } else {
+                tooltipDisplay.destroy();
+            }
+            tooltipDisplay = null;
+        }
         tooltipEl = null;
-        for (Entity e : menuEntities) if (e.isValid()) e.remove();
-        menuEntities.clear();
-        elemEntities.clear();
+        for (DisplayHandle h : menuVisuals) {
+            if (h.isPacket()) {
+                if (h.isSpawned()) packetIds.add(h.entityId());
+                h.markDestroyedQuietly();
+            } else {
+                h.destroy();
+            }
+        }
+        PacketDisplays.destroyBatch(player, packetIds);
+        menuVisuals.clear();
+        elemVisuals.clear();
         hiddenElems.clear();
         pictures.clear();
         labels.clear();
@@ -428,98 +459,104 @@ final class JavaSession {
                 animById.put(e.id, a);
             }
         }
-        if (m.fullscreen && m.backdropAlpha > 0) backdrop(m, d);
         double halfDeg = Math.toDegrees(Math.atan((m.height * s / 2) / d));
         double sensScale = plugin.autoSensitivity() ? plugin.sensitivity().scaleFor(player.getUniqueId()) : 1.0;
         pxPerDeg = (m.height / 2.0) / Math.max(1, halfDeg) * plugin.speedOf(player) * studio.sensitivity * sensScale;
 
-        boolean deferVisuals = openClip != null;
-        visualsShown = !deferVisuals;
-        int layer = 1;
-        for (MenuDef.Element e : m.elements) {
-            double depth = layer++ * LAYER;
-            Anim a = animById.get(e.id);
-            int startIdx = menuEntities.size();
-            switch (e.type) {
-                case IMAGE -> {
-                    if (!e.tiles.isEmpty()) pictures.put(e.id, picture(a, e.tiles, e.x, e.y, depth));
-                }
-                case BUTTON -> {
-                    List<MenuDef.Tile> bt = buttonTiles(e, false);
-                    if (!bt.isEmpty()) pictures.put(e.id, picture(a, bt, e.x, e.y, depth));
-                    String rawLabel = plugin.dynamicText(player, e.id);
-                    if (rawLabel == null) rawLabel = e.label;
-                    if (!rawLabel.isEmpty()) {
-                        labels.put(e.id, text(a, plugin.resolveText(player, rawLabel), e.labelColor, e.labelScale, e.labelShadow, "center",
-                                e.x, e.y, e.w, e.h, depth + LAYER / 2));
+        PacketDisplays.beginBatch(player);
+        try {
+            if (m.fullscreen && m.backdropAlpha > 0) backdrop(m, d);
+            boolean deferVisuals = openClip != null;
+            visualsShown = !deferVisuals;
+            int layer = 1;
+            for (MenuDef.Element e : m.elements) {
+                double depth = layer++ * LAYER;
+                Anim a = animById.get(e.id);
+                int startIdx = menuVisuals.size();
+                switch (e.type) {
+                    case IMAGE -> {
+                        if (!e.tiles.isEmpty()) pictures.put(e.id, picture(a, e.tiles, e.x, e.y, depth));
+                    }
+                    case BUTTON -> {
+                        List<MenuDef.Tile> bt = buttonTiles(e, false);
+                        if (!bt.isEmpty()) pictures.put(e.id, picture(a, bt, e.x, e.y, depth));
+                        String rawLabel = plugin.dynamicText(player, e.id);
+                        if (rawLabel == null) rawLabel = e.label;
+                        if (!rawLabel.isEmpty()) {
+                            labels.put(e.id, text(a, plugin.resolveText(player, rawLabel), e.labelColor, e.labelScale, e.labelShadow, "center",
+                                    e.x, e.y, e.w, e.h, depth + LAYER / 2));
+                        }
+                    }
+                    case TEXT -> {
+                        String rawText = plugin.dynamicText(player, e.id);
+                        if (rawText == null) rawText = e.text;
+                        texts.put(e.id, text(a, plugin.resolveText(player, rawText), e.color, e.scale, e.shadow, e.align,
+                                e.x, e.y, e.w, e.h, depth));
+                    }
+                    case PLAYER_HEAD -> playerPart(a, e, depth);
+                    case PLAYER_MODEL -> {
+                        if (e.java3d && plugin.models3d() && ModelPart.available()) model3d(e, depth, !deferVisuals);
+                        else playerPart(a, e, depth);
+                    }
+                    case ITEM -> itemPart(e, depth, !deferVisuals);
+                    case CUSTOM_MODEL -> customModelPart(e, depth, !deferVisuals);
+                    case INPUT -> inputPart(a, e, depth);
+                    case ROULETTE -> roulettes.put(e.id, new RoulettePart(this, e, depth));
+                    case SCROLL_AREA -> {
+                        scrollOffsets.putIfAbsent(e.id, new double[]{0, 0});
+                        scrollAreaPart(e, depth);
                     }
                 }
-                case TEXT -> {
-                    String rawText = plugin.dynamicText(player, e.id);
-                    if (rawText == null) rawText = e.text;
-                    texts.put(e.id, text(a, plugin.resolveText(player, rawText), e.color, e.scale, e.shadow, e.align,
-                            e.x, e.y, e.w, e.h, depth));
+                if (menuVisuals.size() > startIdx) {
+                    elemVisuals.put(e.id, new ArrayList<>(menuVisuals.subList(startIdx, menuVisuals.size())));
                 }
-                case PLAYER_HEAD -> playerPart(a, e, depth);
-                case PLAYER_MODEL -> {
-                    if (e.java3d && plugin.models3d() && ModelPart.available()) model3d(e, depth, !deferVisuals);
-                    else playerPart(a, e, depth);
-                }
-                case ITEM -> itemPart(e, depth, !deferVisuals);
-                case CUSTOM_MODEL -> customModelPart(e, depth, !deferVisuals);
-                case INPUT -> inputPart(a, e, depth);
-                case ROULETTE -> roulettes.put(e.id, new RoulettePart(this, e, depth));
-                case SCROLL_AREA -> {
-                    scrollOffsets.putIfAbsent(e.id, new double[]{0, 0});
-                    scrollAreaPart(e, depth);
-                }
-            }
-            if (menuEntities.size() > startIdx) {
-                elemEntities.put(e.id, new ArrayList<>(menuEntities.subList(startIdx, menuEntities.size())));
-            }
-            if (!e.scrollGroup.isEmpty() && menuEntities.size() > startIdx) {
-                MenuDef.Element area = scrollAreaOf(m, e);
-                if (area != null) {
-                    for (int ei = startIdx; ei < menuEntities.size(); ei++) {
-                        Entity ent = menuEntities.get(ei);
-                        if (ent instanceof Display disp) disp.setTeleportDuration(1);
-                        Vector rel = ent.getLocation().toVector().subtract(center);
-                        double eDepth = -rel.dot(f);
-                        double sd = sAt(eDepth);
-                        double ox = rel.dot(r) / sd + m.width / 2.0;
-                        double oy = m.height / 2.0 - rel.dot(u) / sd;
-                        scrollNodes.add(new ScrollNode(ent, ox, oy, eDepth, ent.getLocation().getYaw(), ent.getLocation().getPitch(), e, area));
+                if (!e.scrollGroup.isEmpty() && menuVisuals.size() > startIdx) {
+                    MenuDef.Element area = scrollAreaOf(m, e);
+                    if (area != null) {
+                        for (int ei = startIdx; ei < menuVisuals.size(); ei++) {
+                            DisplayHandle vh = menuVisuals.get(ei);
+                            vh.setTeleportDuration(1);
+                            Location vLoc = vh.location();
+                            Vector rel = vLoc.toVector().subtract(center);
+                            double eDepth = -rel.dot(f);
+                            double sd = sAt(eDepth);
+                            double ox = rel.dot(r) / sd + m.width / 2.0;
+                            double oy = m.height / 2.0 - rel.dot(u) / sd;
+                            scrollNodes.add(new ScrollNode(vh, ox, oy, eDepth, vLoc.getYaw(), vLoc.getPitch(), e, area));
+                        }
                     }
                 }
             }
-        }
-        applyAllScrolls();
-        syncVisibility();
-        if (!models.isEmpty() || !customModels.isEmpty() || items.keySet().stream().anyMatch(id -> elementById(m, id).spin)) {
-            turnTick = 0;
-            turnTask = Sched.entityRepeat(plugin, player, 1, this::turn);
-        }
-        if (!anims.isEmpty() || openClip != null) {
-            animTask = Sched.entityRepeat(plugin, player, 1, this::animate);
-        }
+            applyAllScrolls();
+            syncVisibility();
+            if (!models.isEmpty() || !customModels.isEmpty() || items.keySet().stream().anyMatch(id -> elementById(m, id).spin)) {
+                turnTick = 0;
+                turnTask = Sched.entityRepeat(plugin, player, 1, this::turn);
+            }
+            if (!anims.isEmpty() || openClip != null) {
+                animTask = Sched.entityRepeat(plugin, player, 1, this::animate);
+            }
 
-        if (locked && studio.cursorGlyph != null) {
-            // the cursor keeps its place between pages; it is respawned because the scale may change
-            cursorEntityId = -1;
-            if (cursor != null) { cursor.remove(); cursor = null; }
-            if (!cursorPlaced) { cx = m.width / 2.0; cy = m.height / 2.0; cursorPlaced = true; }
-            cx = clamp(cx, minX, maxX);
-            cy = clamp(cy, minY, maxY);
-            double cursorDepth = (menu.elements.size() + 3) * LAYER;
-            cursor = spawnText(cursorOrigin(), glyphComponent(studio.cursorGlyph), (float) (sAt(cursorDepth) / TEXT_PX), false);
-            cursor.setTeleportDuration(1);
-            cursorYaw = cursor.getLocation().getYaw();
-            cursorEntityId = cursor.getEntityId();
+            if (locked && studio.cursorGlyph != null) {
+                // the cursor keeps its place between pages; it is respawned because the scale may change
+                cursorEntityId = -1;
+                if (cursor != null) { cursor.destroy(); cursor = null; }
+                if (!cursorPlaced) { cx = m.width / 2.0; cy = m.height / 2.0; cursorPlaced = true; }
+                cx = clamp(cx, minX, maxX);
+                cy = clamp(cy, minY, maxY);
+                double cursorDepth = (menu.elements.size() + 3) * LAYER;
+                cursor = spawnText(cursorOrigin(), glyphComponent(studio.cursorGlyph), (float) (sAt(cursorDepth) / TEXT_PX), false);
+                cursor.setTeleportDuration(1);
+                cursorYaw = cursor.location().getYaw();
+                cursorEntityId = cursor.entityId();
+            }
+            if (m.refreshTicks > 0 && hasPlaceholders(m)) {
+                refreshTask = Sched.entityRepeat(plugin, player, m.refreshTicks, this::refreshTexts);
+            }
+            updateHover();
+        } finally {
+            PacketDisplays.endBatch(player);
         }
-        if (m.refreshTicks > 0 && hasPlaceholders(m)) {
-            refreshTask = Sched.entityRepeat(plugin, player, m.refreshTicks, this::refreshTexts);
-        }
-        updateHover();
     }
 
     private static boolean hasPlaceholders(MenuDef m) {
@@ -541,70 +578,80 @@ final class JavaSession {
 
     private void refreshTexts() {
         if (closed) return;
-        for (MenuDef.Element e : menu.elements) {
-            if (e.type == MenuDef.Type.TEXT) {
-                TextDisplay t = texts.get(e.id);
-                String dyn = plugin.dynamicText(player, e.id);
-                String raw = dyn != null ? dyn : e.text;
-                if (t != null && (dyn != null || raw.indexOf('%') >= 0 || raw.indexOf('{') >= 0)) {
-                    t.text(Texts.component(plugin.resolveText(player, raw), e.color));
-                }
-            } else if (e.type == MenuDef.Type.BUTTON) {
-                if (e.isToggle()) {
-                    List<TextDisplay> pic = pictures.get(e.id);
-                    List<MenuDef.Tile> tiles = buttonTiles(e, e == hovered);
-                    if (pic != null && !tiles.isEmpty()) {
-                        for (int i = 0; i < pic.size() && i < tiles.size(); i++) pic.get(i).text(glyphComponent(tiles.get(i).glyph()));
+        PacketDisplays.beginBatch(player);
+        try {
+            for (MenuDef.Element e : menu.elements) {
+                if (e.type == MenuDef.Type.TEXT) {
+                    DisplayHandle t = texts.get(e.id);
+                    String dyn = plugin.dynamicText(player, e.id);
+                    String raw = dyn != null ? dyn : e.text;
+                    if (t != null && (dyn != null || raw.indexOf('%') >= 0 || raw.indexOf('{') >= 0)) {
+                        t.setText(Texts.component(plugin.resolveText(player, raw), e.color));
                     }
+                } else if (e.type == MenuDef.Type.BUTTON) {
+                    if (e.isToggle()) {
+                        List<DisplayHandle> pic = pictures.get(e.id);
+                        List<MenuDef.Tile> tiles = buttonTiles(e, e == hovered);
+                        if (pic != null && !tiles.isEmpty()) {
+                            for (int i = 0; i < pic.size() && i < tiles.size(); i++) pic.get(i).setText(glyphComponent(tiles.get(i).glyph()));
+                        }
+                    }
+                    DisplayHandle t = labels.get(e.id);
+                    String dyn = plugin.dynamicText(player, e.id);
+                    String raw = dyn != null ? dyn : e.label;
+                    if (t != null && (dyn != null || raw.indexOf('%') >= 0 || raw.indexOf('{') >= 0)) {
+                        t.setText(Texts.component(plugin.resolveText(player, raw), e == hovered && !e.hasHover() ? plugin.labelHoverColor() : e.labelColor));
+                    }
+                } else if (e.type == MenuDef.Type.INPUT) {
+                    DisplayHandle t = inputLabels.get(e.id);
+                    if (t != null) {
+                        String curVal = plugin.getSessionVar(player.getUniqueId(), e.varName, e.defaultValue);
+                        String disp = (e.prefix != null ? e.prefix : "") + curVal + (e.suffix != null ? e.suffix : "") + " &7✎";
+                        t.setText(Texts.component(plugin.resolveText(player, disp), e.textColor));
+                    }
+                } else if (e.type == MenuDef.Type.PLAYER_MODEL && models.containsKey(e.id)) {
+                    models.get(e.id).refreshOutfit(player);
+                } else if (e.type == MenuDef.Type.ITEM && items.containsKey(e.id)) {
+                    ItemStack dyn = plugin.dynamicItem(player, e.id);
+                    if (dyn != null || Items.dynamic(e.item)) {
+                        DisplayHandle d = items.get(e.id);
+                        if (d.isValid()) d.setItemStack(dyn != null ? dyn : Items.resolve(plugin, player, e.item, e.glint));
+                    }
+                } else if (e.isPlayer() && skinParts.containsKey(e.id)) {
+                    // e.g. a leaderboard: the name behind the placeholder changed → show the new skin
+                    String name = skinName(e);
+                    if (!name.equalsIgnoreCase(skinNames.getOrDefault(e.id, ""))) showSkin(e, name);
                 }
-                TextDisplay t = labels.get(e.id);
-                String dyn = plugin.dynamicText(player, e.id);
-                String raw = dyn != null ? dyn : e.label;
-                if (t != null && (dyn != null || raw.indexOf('%') >= 0 || raw.indexOf('{') >= 0)) {
-                    t.text(Texts.component(plugin.resolveText(player, raw), e == hovered && !e.hasHover() ? plugin.labelHoverColor() : e.labelColor));
-                }
-            } else if (e.type == MenuDef.Type.INPUT) {
-                TextDisplay t = inputLabels.get(e.id);
-                if (t != null) {
-                    String curVal = plugin.getSessionVar(player.getUniqueId(), e.varName, e.defaultValue);
-                    String disp = (e.prefix != null ? e.prefix : "") + curVal + (e.suffix != null ? e.suffix : "") + " &7✎";
-                    t.text(Texts.component(plugin.resolveText(player, disp), e.textColor));
-                }
-            } else if (e.type == MenuDef.Type.PLAYER_MODEL && models.containsKey(e.id)) {
-                models.get(e.id).refreshOutfit(player);
-            } else if (e.type == MenuDef.Type.ITEM && items.containsKey(e.id)) {
-                ItemStack dyn = plugin.dynamicItem(player, e.id);
-                if (dyn != null || Items.dynamic(e.item)) {
-                    ItemDisplay d = items.get(e.id);
-                    if (d.isValid()) d.setItemStack(dyn != null ? dyn : Items.resolve(plugin, player, e.item, e.glint));
-                }
-            } else if (e.isPlayer() && skinParts.containsKey(e.id)) {
-                // e.g. a leaderboard: the name behind the placeholder changed → show the new skin
-                String name = skinName(e);
-                if (!name.equalsIgnoreCase(skinNames.getOrDefault(e.id, ""))) showSkin(e, name);
             }
-        }
-        syncVisibility();
-        if (tooltipEl != null && tooltipDisplay != null && tooltipDisplay.isValid()) {
-            tooltipDisplay.text(Texts.component(plugin.resolveText(player, tooltipEl.tooltip)));
+            syncVisibility();
+            if (tooltipEl != null && tooltipDisplay != null && tooltipDisplay.isValid()) {
+                tooltipDisplay.setText(Texts.component(plugin.resolveText(player, tooltipEl.tooltip)));
+            }
+        } finally {
+            PacketDisplays.endBatch(player);
         }
     }
 
     private void syncVisibility() {
         if (closed || menu == null) return;
-        for (MenuDef.Element e : menu.elements) {
-            if (e.visibility.isEmpty()) continue;
-            boolean vis = ConditionEval.all(plugin, player, e.visibility);
-            boolean wasHidden = hiddenElems.contains(e.id);
-            if (vis && wasHidden) hiddenElems.remove(e.id);
-            else if (!vis && !wasHidden) hiddenElems.add(e.id);
-            List<Entity> ents = elemEntities.get(e.id);
-            if (ents == null) continue;
-            for (Entity ent : ents) {
-                if (!ent.isValid()) continue;
-                if (!vis) player.hideEntity(plugin, ent);
-                else if (visualsShown && !isClippedOut(ent)) player.showEntity(plugin, ent);
+        PacketDisplays.beginBatch(player);
+        try {
+            for (MenuDef.Element e : menu.elements) {
+                if (e.visibility.isEmpty()) continue;
+                boolean vis = ConditionEval.all(plugin, player, e.visibility);
+                boolean wasHidden = hiddenElems.contains(e.id);
+                if (vis && wasHidden) hiddenElems.remove(e.id);
+                else if (!vis && !wasHidden) hiddenElems.add(e.id);
+                List<DisplayHandle> ents = elemVisuals.get(e.id);
+                if (ents == null) continue;
+                for (DisplayHandle ent : ents) {
+                    if (!ent.isValid()) continue;
+                    if (!vis) ent.hide();
+                    else if (visualsShown && !isClippedOut(ent)) ent.show();
+                }
             }
+        } finally {
+            PacketDisplays.endBatch(player);
         }
     }
 
@@ -668,8 +715,9 @@ final class JavaSession {
         Location feetLoc = new Location(world, feet.getX(), feet.getY(), feet.getZ());
         ModelPart mp = new ModelPart(plugin, player, world, feetLoc, k, yaw,
                 skinName(e), isViewer(e), e.outfit, e.crouch, showNow);
-        menuEntities.add(mp.handle());
-        if (!showNow) deferredVisuals.add(mp.handle());
+        DisplayHandle vh = DisplayHandle.wrapEntity(plugin, player, mp.handle());
+        menuVisuals.add(vh);
+        if (!showNow) deferredVisuals.add(vh);
         models.put(e.id, mp);
         dragYaw.put(e.id, yaw);
         if (plugin.light3dModels()) {
@@ -713,18 +761,14 @@ final class JavaSession {
         float k = (float) (Math.min(e.w, e.h) * sAt(dEff));
         Vector pos = world(e.x + e.w / 2.0, e.y + e.h / 2.0, dEff);
         float yaw = facingYaw() + (plugin.itemFlip() ? 0f : 180f);
-        ItemDisplay d = world.spawn(new Location(world, pos.getX(), pos.getY(), pos.getZ(), yaw, 0f), ItemDisplay.class, x -> {
-            x.setVisibleByDefault(false);
-            x.setPersistent(false);
-            x.setItemStack(stack);
-            x.setItemDisplayTransform(e.item3d ? ItemDisplay.ItemDisplayTransform.NONE : ItemDisplay.ItemDisplayTransform.GUI);
-            x.setBillboard(Display.Billboard.FIXED);
-            x.setBrightness(new Display.Brightness(15, 15));
-            x.setTransformation(new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(k, k, e.item3d ? k : k * 0.05f), new AxisAngle4f()));
-        });
-        if (showNow) player.showEntity(plugin, d);
-        else deferredVisuals.add(d);
-        menuEntities.add(d);
+        DisplayHandle d = PacketDisplays.spawnItem(
+                plugin, player, new Location(world, pos.getX(), pos.getY(), pos.getZ(), yaw, 0f),
+                stack,
+                e.item3d ? ItemDisplay.ItemDisplayTransform.NONE : ItemDisplay.ItemDisplayTransform.GUI,
+                new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(k, k, e.item3d ? k : k * 0.05f), new AxisAngle4f()),
+                0, showNow);
+        if (!showNow) deferredVisuals.add(d);
+        menuVisuals.add(d);
         items.put(e.id, d);
     }
 
@@ -735,8 +779,9 @@ final class JavaSession {
         float yaw = facingYaw() + (float) e.angle;
         CustomModelPart cmp = CustomModelPart.spawn(plugin, player, new Location(world, feet.getX(), feet.getY(), feet.getZ(), yaw, 0f), e, resolvedId, worldScale, showNow);
         if (cmp == null) return;
-        if (!showNow) deferredVisuals.add(cmp.host);
-        menuEntities.add(cmp.host);
+        DisplayHandle vh = DisplayHandle.wrapEntity(plugin, player, cmp.host);
+        if (!showNow) deferredVisuals.add(vh);
+        menuVisuals.add(vh);
         customModels.put(e.id, cmp);
         if (plugin.light3dModels()) {
             placeFakeLight(cmp.host.getLocation());
@@ -754,20 +799,11 @@ final class JavaSession {
         Vector origin = world(e.x + e.w / 2.0, e.y + e.h / 2.0, depth)
                 .subtract(r.clone().multiply(0.5 * TEXT_PX * sx))
                 .subtract(u.clone().multiply(5.5 * TEXT_PX * sy));
-        TextDisplay box = world.spawn(toLocation(origin), TextDisplay.class, x -> {
-            x.setVisibleByDefault(false);
-            x.setPersistent(false);
-            x.text(Component.text(" "));
-            x.setBillboard(Display.Billboard.FIXED);
-            x.setDefaultBackground(false);
-            x.setBackgroundColor(bgCol);
-            x.setShadowed(false);
-            x.setSeeThrough(false);
-            x.setBrightness(new Display.Brightness(15, 15));
-            x.setTransformation(new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(sx, sy, 1f), new AxisAngle4f()));
-        });
-        player.showEntity(plugin, box);
-        menuEntities.add(box);
+        DisplayHandle box = PacketDisplays.spawnText(
+                plugin, player, toLocation(origin), Component.text(" "),
+                new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(sx, sy, 1f), new AxisAngle4f()),
+                (byte) -1, bgCol, false, TextDisplay.TextAlignment.CENTER, 200, 0, true);
+        menuVisuals.add(box);
 
         // Bottom accent bar
         double sdBar = sAt(depth + LAYER * 0.25);
@@ -776,20 +812,11 @@ final class JavaSession {
         Vector barOrigin = world(e.x + e.w / 2.0, e.y + e.h - 0.75, depth + LAYER * 0.25)
                 .subtract(r.clone().multiply(0.5 * TEXT_PX * barSx))
                 .subtract(u.clone().multiply(5.5 * TEXT_PX * barH));
-        TextDisplay bar = world.spawn(toLocation(barOrigin), TextDisplay.class, x -> {
-            x.setVisibleByDefault(false);
-            x.setPersistent(false);
-            x.text(Component.text(" "));
-            x.setBillboard(Display.Billboard.FIXED);
-            x.setDefaultBackground(false);
-            x.setBackgroundColor(brCol);
-            x.setShadowed(false);
-            x.setSeeThrough(false);
-            x.setBrightness(new Display.Brightness(15, 15));
-            x.setTransformation(new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(barSx, barH, 1f), new AxisAngle4f()));
-        });
-        player.showEntity(plugin, bar);
-        menuEntities.add(bar);
+        DisplayHandle bar = PacketDisplays.spawnText(
+                plugin, player, toLocation(barOrigin), Component.text(" "),
+                new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(barSx, barH, 1f), new AxisAngle4f()),
+                (byte) -1, brCol, false, TextDisplay.TextAlignment.CENTER, 200, 0, true);
+        menuVisuals.add(bar);
 
         String curVal = plugin.getSessionVar(player.getUniqueId(), e.varName, e.defaultValue);
         String disp = (e.prefix != null ? e.prefix : "") + curVal + (e.suffix != null ? e.suffix : "") + " &7✎";
@@ -805,20 +832,11 @@ final class JavaSession {
         Vector origin = world(e.x + e.w / 2.0, e.y + e.h / 2.0, depth)
                 .subtract(r.clone().multiply(0.5 * TEXT_PX * sx))
                 .subtract(u.clone().multiply(5.5 * TEXT_PX * sy));
-        TextDisplay box = world.spawn(toLocation(origin), TextDisplay.class, x -> {
-            x.setVisibleByDefault(false);
-            x.setPersistent(false);
-            x.text(Component.text(" "));
-            x.setBillboard(Display.Billboard.FIXED);
-            x.setDefaultBackground(false);
-            x.setBackgroundColor(bgCol);
-            x.setShadowed(false);
-            x.setSeeThrough(false);
-            x.setBrightness(new Display.Brightness(15, 15));
-            x.setTransformation(new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(sx, sy, 1f), new AxisAngle4f()));
-        });
-        player.showEntity(plugin, box);
-        menuEntities.add(box);
+        DisplayHandle box = PacketDisplays.spawnText(
+                plugin, player, toLocation(origin), Component.text(" "),
+                new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(sx, sy, 1f), new AxisAngle4f()),
+                (byte) -1, bgCol, false, TextDisplay.TextAlignment.CENTER, 200, 0, true);
+        menuVisuals.add(box);
     }
 
     double guiScale() { return s; }
@@ -918,16 +936,21 @@ final class JavaSession {
 
     private void applyScroll(MenuDef.Element area) {
         double[] off = scrollOffsets.getOrDefault(area.id, new double[]{0, 0});
-        for (ScrollNode n : scrollNodes) {
-            if (!area.id.equals(n.area.id) || !n.entity.isValid()) continue;
-            Vector p = world(n.ox - off[0], n.oy - off[1], n.depth);
-            n.entity.teleportAsync(new Location(world, p.getX(), p.getY(), p.getZ(), n.yaw, n.pitch));
-            boolean vis = isVisibleInArea(n.el, area, off[0], off[1]);
-            if (!vis) {
-                player.hideEntity(plugin, n.entity);
-            } else if (visualsShown || !deferredVisuals.contains(n.entity)) {
-                player.showEntity(plugin, n.entity);
+        PacketDisplays.beginBatch(player);
+        try {
+            for (ScrollNode n : scrollNodes) {
+                if (!area.id.equals(n.area.id) || !n.visual.isValid()) continue;
+                Vector p = world(n.ox - off[0], n.oy - off[1], n.depth);
+                n.visual.teleport(p.getX(), p.getY(), p.getZ(), n.yaw, n.pitch);
+                boolean vis = isVisibleInArea(n.el, area, off[0], off[1]);
+                if (!vis) {
+                    n.visual.hide();
+                } else if (visualsShown || !deferredVisuals.contains(n.visual)) {
+                    n.visual.show();
+                }
             }
+        } finally {
+            PacketDisplays.endBatch(player);
         }
     }
 
@@ -937,9 +960,9 @@ final class JavaSession {
         return cxEl >= area.x && cxEl <= area.x + area.w && cyEl >= area.y && cyEl <= area.y + area.h;
     }
 
-    private boolean isClippedOut(Entity ent) {
+    private boolean isClippedOut(DisplayHandle ent) {
         for (ScrollNode n : scrollNodes) {
-            if (n.entity == ent) {
+            if (n.visual == ent) {
                 double[] off = scrollOffsets.getOrDefault(n.area.id, new double[]{0, 0});
                 return !isVisibleInArea(n.el, n.area, off[0], off[1]);
             }
@@ -1032,15 +1055,20 @@ final class JavaSession {
             }
         }
         if (t % 2 == 0) {
-            for (Map.Entry<String, ItemDisplay> en : items.entrySet()) {
-                MenuDef.Element e = elementById(menu, en.getKey());
-                ItemDisplay d = en.getValue();
-                if (!e.spin || !d.isValid()) continue;
-                Transformation old = d.getTransformation();
-                float ang = (float) Math.toRadians((t * 6) % 360);   // 60° a second
-                d.setInterpolationDelay(0);
-                d.setInterpolationDuration(2);
-                d.setTransformation(new Transformation(old.getTranslation(), new AxisAngle4f(ang, 0, 1, 0), old.getScale(), new AxisAngle4f()));
+            PacketDisplays.beginBatch(player);
+            try {
+                for (Map.Entry<String, DisplayHandle> en : items.entrySet()) {
+                    MenuDef.Element e = elementById(menu, en.getKey());
+                    DisplayHandle d = en.getValue();
+                    if (!e.spin || !d.isValid()) continue;
+                    Transformation old = d.getTransformation();
+                    float ang = (float) Math.toRadians((t * 6) % 360);   // 60° a second
+                    d.setTransformationAnimated(
+                            new Transformation(old.getTranslation(), new AxisAngle4f(ang, 0, 1, 0), old.getScale(), new AxisAngle4f()),
+                            0, 2);
+                }
+            } finally {
+                PacketDisplays.endBatch(player);
             }
             for (Map.Entry<String, CustomModelPart> en : customModels.entrySet()) {
                 MenuDef.Element e = elementById(menu, en.getKey());
@@ -1059,7 +1087,7 @@ final class JavaSession {
             if (closed) return;
             Part part = skinParts.get(e.id);
             if (part == null || !part.d.isValid() || !name.equals(skinNames.get(e.id))) return;
-            part.d.text(Skins.text(skinPixels(e, skin), Key.key(studio.skinFont)));
+            part.d.setText(Skins.text(skinPixels(e, skin), Key.key(studio.skinFont)));
         }));
     }
 
@@ -1088,8 +1116,8 @@ final class JavaSession {
     }
 
     /** One TextDisplay per tile of the picture at x, y */
-    private List<TextDisplay> picture(Anim a, List<MenuDef.Tile> tiles, int x, int y, double depth) {
-        List<TextDisplay> out = new ArrayList<>(tiles.size());
+    private List<DisplayHandle> picture(Anim a, List<MenuDef.Tile> tiles, int x, int y, double depth) {
+        List<DisplayHandle> out = new ArrayList<>(tiles.size());
         for (MenuDef.Tile t : tiles) {
             // entity origin (GUI px) that puts the glyph's centre on the tile's centre
             double ox = x + t.x() + t.w() / 2.0 - 0.5;
@@ -1118,14 +1146,14 @@ final class JavaSession {
         }
         Part real = new Part(spawnText(world(ox, oy, depth), text, tf, (byte) op, shadow), ox, oy, kd, sd);
         real.opacity = op;
-        menuEntities.add(real.d);
+        menuVisuals.add(real.d);
         if (a != null) a.parts.add(real);
         return real;
     }
 
     /** A line of normal text inside the box x,y,w,h (vertically centred; aligned left / centre / right) */
-    private TextDisplay text(Anim a, String content, String color, double scale, boolean shadow, String align,
-                             int x, int y, int w, int h, double depth) {
+    private DisplayHandle text(Anim a, String content, String color, double scale, boolean shadow, String align,
+                               int x, int y, int w, int h, double depth) {
         double k = Math.max(0.1, scale);
         double width = Fonts.width(content) * k;      // GUI px, approximate for unusual characters
         double centreX = switch (align == null ? "center" : align) {
@@ -1159,20 +1187,11 @@ final class JavaSession {
         }
         backdropColor = col;
         final Color bg = openClip != null ? withAlpha(col, menuState[Motion.ALPHA] / 100) : col;
-        TextDisplay t = world.spawn(toLocation(origin), TextDisplay.class, x -> {
-            x.setVisibleByDefault(false);
-            x.setPersistent(false);
-            x.text(Component.text(" "));
-            x.setBillboard(Display.Billboard.FIXED);
-            x.setDefaultBackground(false);
-            x.setBackgroundColor(bg);
-            x.setShadowed(false);
-            x.setSeeThrough(false);
-            x.setBrightness(new Display.Brightness(15, 15));
-            x.setTransformation(new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(sx, sy, 1f), new AxisAngle4f()));
-        });
-        player.showEntity(plugin, t);
-        menuEntities.add(t);
+        DisplayHandle t = PacketDisplays.spawnText(
+                plugin, player, toLocation(origin), Component.text(" "),
+                new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(sx, sy, 1f), new AxisAngle4f()),
+                (byte) -1, bg, false, TextDisplay.TextAlignment.CENTER, 200, 0, true);
+        menuVisuals.add(t);
         backdrop = t;
     }
 
@@ -1189,27 +1208,14 @@ final class JavaSession {
         return new Location(world, v.getX(), v.getY(), v.getZ(), yaw, 0f);
     }
 
-    private TextDisplay spawnText(Vector pos, Component text, float scale, boolean shadow) {
+    private DisplayHandle spawnText(Vector pos, Component text, float scale, boolean shadow) {
         return spawnText(pos, text, new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(scale, scale, scale), new AxisAngle4f()), (byte) -1, shadow);
     }
 
-    private TextDisplay spawnText(Vector pos, Component text, Transformation tf, byte opacity, boolean shadow) {
-        TextDisplay t = world.spawn(toLocation(pos), TextDisplay.class, d -> {
-            d.setVisibleByDefault(false);
-            d.setPersistent(false);
-            d.text(text);
-            d.setBillboard(Display.Billboard.FIXED);
-            d.setDefaultBackground(false);
-            d.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
-            d.setShadowed(shadow);
-            d.setSeeThrough(false);
-            d.setLineWidth(100000);
-            d.setBrightness(new Display.Brightness(15, 15));
-            d.setTextOpacity(opacity);
-            d.setTransformation(tf);
-        });
-        player.showEntity(plugin, t);
-        return t;
+    private DisplayHandle spawnText(Vector pos, Component text, Transformation tf, byte opacity, boolean shadow) {
+        return PacketDisplays.spawnText(
+                plugin, player, toLocation(pos), text, tf, opacity,
+                Color.fromARGB(0, 0, 0, 0), shadow, TextDisplay.TextAlignment.CENTER, 100000, 0, true);
     }
 
     /* ───────────── motion ───────────── */
@@ -1245,46 +1251,49 @@ final class JavaSession {
         if (tick < ANIM_LEAD) return;
         double t = (tick - ANIM_LEAD) / 20.0;
         double[] ms = openClip != null ? openClip.sample(t) : Motion.rest();
-        if (!visualsShown && !deferredVisuals.isEmpty() && (ms[Motion.ALPHA] >= 25.0 || tick >= ANIM_LEAD + 2)) {
-            visualsShown = true;
-            for (Entity ent : deferredVisuals) {
-                if (ent.isValid() && !isClippedOut(ent)) player.showEntity(plugin, ent);
+        PacketDisplays.beginBatch(player);
+        try {
+            if (!visualsShown && !deferredVisuals.isEmpty() && (ms[Motion.ALPHA] >= 25.0 || tick >= ANIM_LEAD + 2)) {
+                visualsShown = true;
+                for (DisplayHandle ent : deferredVisuals) {
+                    if (ent.isValid() && !isClippedOut(ent)) ent.show();
+                }
+                deferredVisuals.clear();
             }
-            deferredVisuals.clear();
-        }
-        boolean menuMoved = !Motion.same(ms, menuState);
-        menuState = ms;
-        if (menuMoved && backdrop != null && backdrop.isValid() && backdropColor != null) {
-            backdrop.setInterpolationDelay(0);
-            backdrop.setInterpolationDuration(1);
-            backdrop.setBackgroundColor(withAlpha(backdropColor, ms[Motion.ALPHA] / 100));
-        }
-        for (Anim a : anims) {
-            MenuDef.Element e = a.el;
-            if (e.hover != null) {
-                double step = e.hover.length > 0 ? 0.05 / e.hover.length : 1;
-                a.hoverW = a.hoverOn ? Math.min(1, a.hoverW + step) : Math.max(0, a.hoverW - step);
+            boolean menuMoved = !Motion.same(ms, menuState);
+            menuState = ms;
+            if (menuMoved && backdrop != null && backdrop.isValid() && backdropColor != null) {
+                backdrop.setBackgroundColorAnimated(withAlpha(backdropColor, ms[Motion.ALPHA] / 100), 0, 1);
             }
-            boolean fast = menuMoved || busy(a, t);
-            // slow loops are sent every other tick (2-tick glide); everything else every tick
-            if (fast || tick % 2 == 0) {
-                double[] es = elementState(a, t);
-                if (menuMoved || !Motion.same(es, a.last)) {
-                    a.last = es;
-                    int dur = fast ? 1 : 2;
-                    int op = opacity(es, ms);
-                    for (Part p : a.parts) push(p, transform(p, e, es, ms), op, dur);
+            for (Anim a : anims) {
+                MenuDef.Element e = a.el;
+                if (e.hover != null) {
+                    double step = e.hover.length > 0 ? 0.05 / e.hover.length : 1;
+                    a.hoverW = a.hoverOn ? Math.min(1, a.hoverW + step) : Math.max(0, a.hoverW - step);
+                }
+                boolean fast = menuMoved || busy(a, t);
+                // slow loops are sent every other tick (2-tick glide); everything else every tick
+                if (fast || tick % 2 == 0) {
+                    double[] es = elementState(a, t);
+                    if (menuMoved || !Motion.same(es, a.last)) {
+                        a.last = es;
+                        int dur = fast ? 1 : 2;
+                        int op = opacity(es, ms);
+                        for (Part p : a.parts) push(p, transform(p, e, es, ms), op, dur);
+                    }
+                }
+                // animated picture (the hover picture wins while the cursor is on it)
+                if (!e.frames.isEmpty() && !(a.hoverOn && e.hasHover())) {
+                    int fi = (int) Math.floor(t * e.fps) % e.frames.size();
+                    if (fi != a.frame) {
+                        a.frame = fi;
+                        List<MenuDef.Tile> ts = e.frames.get(fi);
+                        for (int i = 0; i < a.picture.size() && i < ts.size(); i++) a.picture.get(i).d.setText(glyphComponent(ts.get(i).glyph()));
+                    }
                 }
             }
-            // animated picture (the hover picture wins while the cursor is on it)
-            if (!e.frames.isEmpty() && !(a.hoverOn && e.hasHover())) {
-                int fi = (int) Math.floor(t * e.fps) % e.frames.size();
-                if (fi != a.frame) {
-                    a.frame = fi;
-                    List<MenuDef.Tile> ts = e.frames.get(fi);
-                    for (int i = 0; i < a.picture.size() && i < ts.size(); i++) a.picture.get(i).d.text(glyphComponent(ts.get(i).glyph()));
-                }
-            }
+        } finally {
+            PacketDisplays.endBatch(player);
         }
     }
 
@@ -1293,10 +1302,8 @@ final class JavaSession {
         // opacity is a signed byte on the client and is interpolated as one: crossing 127 ↔ 128
         // would sweep through every value in between, so that one step is sent without a glide
         boolean flip = (p.opacity > 127) != (op > 127);
-        p.d.setInterpolationDelay(0);
-        p.d.setInterpolationDuration(flip ? 0 : dur);
-        p.d.setTransformation(tf);
-        if (op != p.opacity) { p.d.setTextOpacity((byte) op); p.opacity = op; }
+        p.d.setTransformationAndOpacity(tf, (byte) op, op != p.opacity, 0, flip ? 0 : dur);
+        if (op != p.opacity) p.opacity = op;
     }
 
     /** Text opacity for a state: 0 % → 8 (hidden; 0–3 would draw fully opaque), else 26..255 */
@@ -1489,7 +1496,10 @@ final class JavaSession {
                 if (dy == 0 && dp == 0) return;
                 cx = clamp(cx + dy * pxPerDeg, minX, maxX);
                 cy = clamp(cy + dp * pxPerDeg, minY, maxY);
-                if (cursor != null && cursor.isValid()) cursor.teleportAsync(toLocation(cursorOrigin()));
+                if (cursor != null && cursor.isValid()) {
+                    Location cLoc = toLocation(cursorOrigin());
+                    cursor.teleport(cLoc.getX(), cLoc.getY(), cLoc.getZ(), cLoc.getYaw(), cLoc.getPitch());
+                }
             } else {
                 // crosshair mode: where the look ray meets the panel
                 double yr = Math.toRadians(yaw), pr = Math.toRadians(pitch);
@@ -1540,47 +1550,40 @@ final class JavaSession {
     }
 
     private void updateHover() {
-        MenuDef.Element now = hoveredButtonAt(cx, cy);
-        if (now != hovered) {
-            if (hovered != null) setHover(hovered, false);
-            hovered = now;
-            if (now != null) {
-                setHover(now, true);
-                String snd = !now.hoverSound.isBlank() ? now.hoverSound : studio.hoverSound;
-                Actions.playSound(player, snd);
-            }
-        }
-        MenuDef.Element tip = hoveredTooltipAt(cx, cy);
-        if (tip != tooltipEl) {
-            tooltipEl = tip;
-            if (tip == null) {
-                if (tooltipDisplay != null) { tooltipDisplay.remove(); tooltipDisplay = null; }
-            } else {
-                Component txt = Texts.component(plugin.resolveText(player, tip.tooltip));
-                if (tooltipDisplay == null || !tooltipDisplay.isValid()) {
-                    float scale = (float) (sAt((menu.elements.size() + 2) * LAYER) * 0.85 / TEXT_PX);
-                    Vector pos = tooltipWorldPos();
-                    tooltipDisplay = world.spawn(toLocation(pos), TextDisplay.class, d -> {
-                        d.setVisibleByDefault(false);
-                        d.setPersistent(false);
-                        d.text(txt);
-                        d.setBillboard(Display.Billboard.FIXED);
-                        d.setAlignment(TextDisplay.TextAlignment.LEFT);
-                        d.setDefaultBackground(false);
-                        d.setBackgroundColor(Color.fromARGB(235, 16, 0, 16));
-                        d.setShadowed(true);
-                        d.setSeeThrough(false);
-                        d.setLineWidth(220);
-                        d.setBrightness(new Display.Brightness(15, 15));
-                        d.setTransformation(new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(scale, scale, scale), new AxisAngle4f()));
-                        d.setTeleportDuration(1);
-                    });
-                    player.showEntity(plugin, tooltipDisplay);
-                } else {
-                    tooltipDisplay.text(txt);
-                    updateTooltipPosition();
+        PacketDisplays.beginBatch(player);
+        try {
+            MenuDef.Element now = hoveredButtonAt(cx, cy);
+            if (now != hovered) {
+                if (hovered != null) setHover(hovered, false);
+                hovered = now;
+                if (now != null) {
+                    setHover(now, true);
+                    String snd = !now.hoverSound.isBlank() ? now.hoverSound : studio.hoverSound;
+                    Actions.playSound(player, snd);
                 }
             }
+            MenuDef.Element tip = hoveredTooltipAt(cx, cy);
+            if (tip != tooltipEl) {
+                tooltipEl = tip;
+                if (tip == null) {
+                    if (tooltipDisplay != null) { tooltipDisplay.destroy(); tooltipDisplay = null; }
+                } else {
+                    Component txt = Texts.component(plugin.resolveText(player, tip.tooltip));
+                    if (tooltipDisplay == null || !tooltipDisplay.isValid()) {
+                        float scale = (float) (sAt((menu.elements.size() + 2) * LAYER) * 0.85 / TEXT_PX);
+                        Vector pos = tooltipWorldPos();
+                        tooltipDisplay = PacketDisplays.spawnText(
+                                plugin, player, toLocation(pos), txt,
+                                new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(scale, scale, scale), new AxisAngle4f()),
+                                (byte) -1, Color.fromARGB(235, 16, 0, 16), true, TextDisplay.TextAlignment.LEFT, 220, 1, true);
+                    } else {
+                        tooltipDisplay.setText(txt);
+                        updateTooltipPosition();
+                    }
+                }
+            }
+        } finally {
+            PacketDisplays.endBatch(player);
         }
     }
 
@@ -1595,12 +1598,12 @@ final class JavaSession {
     private void updateTooltipPosition() {
         if (tooltipDisplay == null || !tooltipDisplay.isValid()) return;
         Location loc = toLocation(tooltipWorldPos());
-        tooltipDisplay.teleportAsync(loc);
+        tooltipDisplay.teleport(loc.getX(), loc.getY(), loc.getZ(), loc.getYaw(), loc.getPitch());
     }
 
     private void setCursorGrabbing(boolean on) {
         if (cursor == null || !cursor.isValid() || studio.cursorGlyph == null) return;
-        cursor.text(Component.text(studio.cursorGlyph)
+        cursor.setText(Component.text(studio.cursorGlyph)
                 .font(Key.key(studio.font))
                 .color(on ? NamedTextColor.GOLD : NamedTextColor.WHITE));
     }
@@ -1619,16 +1622,16 @@ final class JavaSession {
     private void setHover(MenuDef.Element e, boolean on) {
         Anim a = animById.get(e.id);
         if (a != null) a.hoverOn = on;
-        List<TextDisplay> pic = pictures.get(e.id);
+        List<DisplayHandle> pic = pictures.get(e.id);
         if (pic != null && (e.hasHover() || e.isToggle())) {
             List<MenuDef.Tile> tiles = buttonTiles(e, on);
-            for (int i = 0; i < pic.size() && i < tiles.size(); i++) pic.get(i).text(glyphComponent(tiles.get(i).glyph()));
+            for (int i = 0; i < pic.size() && i < tiles.size(); i++) pic.get(i).setText(glyphComponent(tiles.get(i).glyph()));
         }
-        TextDisplay lab = labels.get(e.id);
+        DisplayHandle lab = labels.get(e.id);
         if (lab != null && !e.hasHover()) {
             String dyn = plugin.dynamicText(player, e.id);
             String raw = dyn != null ? dyn : e.label;
-            lab.text(Texts.component(plugin.resolveText(player, raw), on ? plugin.labelHoverColor() : e.labelColor));
+            lab.setText(Texts.component(plugin.resolveText(player, raw), on ? plugin.labelHoverColor() : e.labelColor));
         }
     }
 

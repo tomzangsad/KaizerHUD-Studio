@@ -98,6 +98,7 @@ public final class KaizerUIPlugin extends JavaPlugin implements Listener {
 
         getLogger().info("Loaded " + menus.size() + " menus. Camera lock: "
                 + (CameraHook.available() ? "on (PacketEvents)" : "off — install PacketEvents for a mouse cursor; the crosshair is used instead")
+                + ". Displays: " + (PacketDisplays.enabled(this) ? "packet (0 server entities)" : "bukkit")
                 + ". Bedrock: " + (bedrock != null && bedrock.available() ? "on" : "off (no Floodgate / Geyser)"));
     }
 
@@ -471,6 +472,8 @@ public final class KaizerUIPlugin extends JavaPlugin implements Listener {
     boolean light3dModels() { return getConfig().getBoolean("java.light-3d-models", true); }
 
     boolean autoSensitivity() { return getConfig().getBoolean("java.auto-sensitivity", true); }
+
+    boolean packetDisplays() { return getConfig().getBoolean("java.packet-displays", true); }
 
     boolean hideActionBar() { return getConfig().getBoolean("java.hide-hud.action-bar", true); }
 

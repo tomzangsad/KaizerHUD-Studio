@@ -91,6 +91,30 @@ impl Vfs {
             .find(|f| f.path.to_ascii_lowercase().ends_with(&needle))
     }
 
+    fn find_by_stem_in_ns(&self, ns: &str, stem: &str) -> Option<&VirtualFile> {
+        let last = stem.rsplit('/').next().unwrap_or(stem);
+        let clean_stem = last.strip_suffix(".png").unwrap_or(last).to_ascii_lowercase();
+        if clean_stem.is_empty() {
+            return None;
+        }
+        let target_end = format!("/{}.png", clean_stem);
+        let ns_needle = if ns.is_empty() {
+            String::new()
+        } else {
+            format!("/{}/textures/", ns.to_ascii_lowercase())
+        };
+        let ns_alt = if ns.is_empty() {
+            String::new()
+        } else {
+            format!("assets/{}/textures/", ns.to_ascii_lowercase())
+        };
+        self.files.iter().find(|f| {
+            let l = f.path.to_ascii_lowercase();
+            l.ends_with(&target_end)
+                && (ns.is_empty() || l.contains(&ns_needle) || l.contains(&ns_alt) || l.contains("/textures/"))
+        })
+    }
+
     fn text(&self, f: &VirtualFile) -> Option<String> {
         std::str::from_utf8(&f.bytes).ok().map(|s| s.to_string())
     }
@@ -231,6 +255,7 @@ fn read_vfs_from_path(target: &Path) -> Result<(Vfs, String), String> {
                     || lower.ends_with(".yaml")
                     || lower.ends_with(".png")
                     || lower.ends_with(".json")
+                    || lower.ends_with(".mcmeta")
                     || lower.ends_with(".bbmodel"))
                 {
                     continue;
@@ -261,6 +286,7 @@ fn read_vfs_from_path(target: &Path) -> Result<(Vfs, String), String> {
                     || lower.ends_with(".yaml")
                     || lower.ends_with(".png")
                     || lower.ends_with(".json")
+                    || lower.ends_with(".mcmeta")
                     || lower.ends_with(".bbmodel"))
                 {
                     continue;
@@ -283,7 +309,7 @@ fn read_vfs_from_path(target: &Path) -> Result<(Vfs, String), String> {
     Ok((Vfs::from_entries(entries), label))
 }
 
-fn find_texture_png<'a>(vfs: &'a Vfs, ns_hint: &str, tex_ref: &str) -> Option<&'a [u8]> {
+fn find_texture_with_mcmeta<'a>(vfs: &'a Vfs, ns_hint: &str, tex_ref: &str) -> Option<(&'a [u8], Option<String>)> {
     let clean = tex_ref.trim().trim_start_matches('/').replace('\\', "/");
     if clean.is_empty() {
         return None;
@@ -298,15 +324,130 @@ fn find_texture_png<'a>(vfs: &'a Vfs, ns_hint: &str, tex_ref: &str) -> Option<&'
     if !ns.is_empty() {
         candidates.push(format!("assets/{}/textures/{}.png", ns, no_ext));
         candidates.push(format!("assets/{}/textures/item/{}.png", ns, no_ext));
+        candidates.push(format!("assets/{}/textures/items/{}.png", ns, no_ext));
         candidates.push(format!("assets/{}/textures/block/{}.png", ns, no_ext));
+        candidates.push(format!("assets/{}/textures/icons/{}.png", ns, no_ext));
+        candidates.push(format!("assets/{}/textures/armor/{}.png", ns, no_ext));
         candidates.push(format!("resourcepack/assets/{}/textures/{}.png", ns, no_ext));
+        candidates.push(format!("resourcepack/assets/{}/textures/item/{}.png", ns, no_ext));
         candidates.push(format!("contents/{}/resourcepack/{}/textures/{}.png", ns, ns, no_ext));
     }
     candidates.push(format!("{}.png", no_ext));
     candidates.push(format!("textures/{}.png", no_ext));
+    candidates.push(format!("textures/item/{}.png", no_ext));
+    let mut found_file: Option<&VirtualFile> = None;
     for c in candidates {
         if let Some(f) = vfs.get_suffix(&c) {
-            return Some(&f.bytes);
+            found_file = Some(f);
+            break;
+        }
+    }
+    if found_file.is_none() {
+        found_file = vfs.find_by_stem_in_ns(ns, no_ext);
+    }
+    let f = found_file?;
+    let mcmeta_path = format!("{}.mcmeta", f.path);
+    let mcmeta = vfs.get_suffix(&mcmeta_path).and_then(|mf| vfs.text(mf));
+    Some((&f.bytes, mcmeta))
+}
+
+fn find_texture_png<'a>(vfs: &'a Vfs, ns_hint: &str, tex_ref: &str) -> Option<&'a [u8]> {
+    find_texture_with_mcmeta(vfs, ns_hint, tex_ref).map(|(b, _)| b)
+}
+
+fn crop_animation_frame0(png_bytes: &[u8], mcmeta_json: Option<&str>) -> Vec<u8> {
+    let Ok(img) = image::load_from_memory(png_bytes) else {
+        return png_bytes.to_vec();
+    };
+    let rgba = img.to_rgba8();
+    let (w, h) = rgba.dimensions();
+    if w == 0 || h == 0 {
+        return png_bytes.to_vec();
+    }
+    let mut frame_w = w;
+    let mut frame_h = w;
+    let mut explicit_anim = false;
+    if let Some(raw) = mcmeta_json {
+        if let Ok(v) = serde_json::from_str::<Value>(raw) {
+            if let Some(anim) = v.get("animation") {
+                explicit_anim = true;
+                if let Some(aw) = anim.get("width").and_then(|x| x.as_u64()) {
+                    if aw > 0 && aw <= w as u64 { frame_w = aw as u32; }
+                }
+                if let Some(ah) = anim.get("height").and_then(|x| x.as_u64()) {
+                    if ah > 0 && ah < h as u64 { frame_h = ah as u32; }
+                }
+            }
+        }
+    }
+    let is_strip = h >= w * 2 && h % w == 0;
+    if !explicit_anim && !is_strip {
+        return png_bytes.to_vec();
+    }
+    if frame_h >= h && frame_w >= w {
+        return png_bytes.to_vec();
+    }
+    let cw = frame_w.min(w);
+    let ch = frame_h.min(h);
+    let cropped = image::imageops::crop_imm(&rgba, 0, 0, cw, ch).to_image();
+    let mut out = Vec::new();
+    if image::DynamicImage::ImageRgba8(cropped)
+        .write_to(&mut Cursor::new(&mut out), image::ImageFormat::Png)
+        .is_ok()
+    {
+        return out;
+    }
+    png_bytes.to_vec()
+}
+
+fn extract_item_def_model_ref(v: &Value) -> Option<String> {
+    if let Some(s) = v.as_str() {
+        let clean = s.trim();
+        if !clean.is_empty() { return Some(clean.to_string()); }
+    }
+    if let Some(s) = v.get("model").and_then(|m| m.as_str()) {
+        let clean = s.trim();
+        if !clean.is_empty() { return Some(clean.to_string()); }
+    }
+    for k in ["model", "fallback", "on_false", "on_true"] {
+        if let Some(child) = v.get(k) {
+            if let Some(r) = extract_item_def_model_ref(child) {
+                return Some(r);
+            }
+        }
+    }
+    if let Some(cases) = v.get("cases").and_then(|c| c.as_array()) {
+        for case in cases {
+            if let Some(r) = extract_item_def_model_ref(case) {
+                return Some(r);
+            }
+        }
+    }
+    if let Some(entries) = v.get("entries").and_then(|e| e.as_array()) {
+        for ent in entries {
+            if let Some(r) = extract_item_def_model_ref(ent) {
+                return Some(r);
+            }
+        }
+    }
+    None
+}
+
+fn resolve_item_definition_model(vfs: &Vfs, ns: &str, id: &str) -> Option<String> {
+    let clean_id = id.trim().strip_suffix(".json").unwrap_or(id.trim());
+    let candidates = [
+        format!("assets/{}/items/{}.json", ns, clean_id),
+        format!("resourcepack/assets/{}/items/{}.json", ns, clean_id),
+    ];
+    for c in candidates {
+        if let Some(f) = vfs.get_suffix(&c) {
+            if let Some(txt) = vfs.text(f) {
+                if let Ok(v) = serde_json::from_str::<Value>(&txt) {
+                    if let Some(m) = extract_item_def_model_ref(&v) {
+                        return Some(m);
+                    }
+                }
+            }
         }
     }
     None
@@ -389,11 +530,12 @@ fn resolve_json_model_tree(vfs: &Vfs, ns_hint: &str, model_ref: &str) -> Option<
                 break;
             }
         }
-        if let Some(bytes) = find_texture_png(vfs, ns_hint, &cur) {
+        if let Some((bytes, mcmeta)) = find_texture_with_mcmeta(vfs, ns_hint, &cur) {
+            let clean_bytes = crop_animation_frame0(bytes, mcmeta.as_deref());
             if first_tex_bytes.is_none() {
-                first_tex_bytes = Some(bytes.to_vec());
+                first_tex_bytes = Some(clean_bytes.clone());
             }
-            let url = format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes));
+            let url = format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&clean_bytes));
             embedded_textures.insert(k.clone(), url);
         }
     }
@@ -475,12 +617,14 @@ fn scan_bbmodels(
             })
             .unwrap_or_default();
 
-        // Compact model JSON keeping resolution, elements, outliner, and textures for GS.BbModel
+        // Compact model JSON keeping resolution, elements, outliner/groups hierarchy, and textures for GS.BbModel
         let compact = json!({
             "kind": "bbmodel",
             "name": disp,
             "resolution": bb.get("resolution").cloned().unwrap_or_else(|| json!({ "width": 16, "height": 16 })),
             "elements": bb.get("elements").cloned().unwrap_or_else(|| json!([])),
+            "outliner": bb.get("outliner").cloned().unwrap_or_else(|| json!([])),
+            "groups": bb.get("groups").cloned().unwrap_or(Value::Null),
             "textures": bb.get("textures").and_then(|t| t.as_array()).map(|arr| {
                 arr.iter().map(|tx| json!({
                     "id": tx.get("id").cloned().unwrap_or(Value::Null),
@@ -489,6 +633,10 @@ fn scan_bbmodels(
                     "source": tx.get("source").cloned().unwrap_or(Value::Null),
                     "width": tx.get("width").cloned().unwrap_or(Value::Null),
                     "height": tx.get("height").cloned().unwrap_or(Value::Null),
+                    "uv_width": tx.get("uv_width").cloned().unwrap_or(Value::Null),
+                    "uv_height": tx.get("uv_height").cloned().unwrap_or(Value::Null),
+                    "frame_time": tx.get("frame_time").cloned().unwrap_or(Value::Null),
+                    "frame_height": tx.get("frame_height").cloned().unwrap_or(Value::Null),
                 })).collect::<Vec<_>>()
             }).unwrap_or_else(Vec::new),
             "animations": animations,
@@ -508,6 +656,38 @@ fn scan_bbmodels(
             model_file,
         });
     }
+}
+
+fn first_yaml_tex(node: &serde_yaml::Value, keys: &[&str]) -> Option<String> {
+    for k in keys {
+        if let Some(sub) = node.get(*k) {
+            if let Some(s) = sub.as_str() {
+                let t = s.trim();
+                if !t.is_empty() { return Some(t.to_string()); }
+            }
+            if let Some(seq) = sub.as_sequence() {
+                if let Some(s) = seq.first().and_then(|x| x.as_str()) {
+                    let t = s.trim();
+                    if !t.is_empty() { return Some(t.to_string()); }
+                }
+            }
+            if let Some(map) = sub.as_mapping() {
+                for tk in ["layer0", "all", "texture", "icon", "north", "front"] {
+                    if let Some(s) = map.get(serde_yaml::Value::String(tk.into())).and_then(|x| x.as_str()) {
+                        let t = s.trim();
+                        if !t.is_empty() { return Some(t.to_string()); }
+                    }
+                }
+                for (_, val) in map {
+                    if let Some(s) = val.as_str() {
+                        let t = s.trim();
+                        if !t.is_empty() { return Some(t.to_string()); }
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 fn scan_itemsadder(
@@ -547,25 +727,30 @@ fn scan_itemsadder(
 
             let res = val.get("resource").unwrap_or(&serde_yaml::Value::Null);
             let gfx = val.get("graphics").unwrap_or(&serde_yaml::Value::Null);
+            let armor_spec = val
+                .get("specific_properties")
+                .and_then(|sp| sp.get("armor"))
+                .unwrap_or(&serde_yaml::Value::Null);
 
-            let icon_ref = yaml_str(gfx, &["icon", "texture"])
-                .or_else(|| yaml_str(res, &["texture"]))
-                .or_else(|| {
-                    gfx.get("textures")
-                        .and_then(|t| t.as_sequence())
-                        .and_then(|s| s.first())
-                        .and_then(|x| x.as_str())
-                });
+            let icon_ref = first_yaml_tex(gfx, &["icon", "texture", "textures"])
+                .or_else(|| first_yaml_tex(res, &["texture", "textures"]))
+                .or_else(|| first_yaml_tex(val, &["icon", "texture", "textures"]))
+                .or_else(|| yaml_str(armor_spec, &["custom_armor"]).map(|s| format!("item/{}", key.trim_start_matches(s))));
             let model_ref = yaml_str(res, &["model_path"])
-                .or_else(|| yaml_str(gfx, &["model"]));
+                .map(|s| s.to_string())
+                .or_else(|| yaml_str(gfx, &["model"]).map(|s| s.to_string()))
+                .or_else(|| gfx.get("models").and_then(|gm| yaml_str(gm, &["normal", "default"])).map(|s| s.to_string()))
+                .or_else(|| yaml_str(val, &["item_model"]).map(|s| s.to_string()))
+                .or_else(|| resolve_item_definition_model(vfs, &ns, key));
 
             let mut icon_file = icon_ref
+                .as_deref()
                 .and_then(|r| find_texture_png(vfs, &ns, r))
                 .and_then(|b| save_icon_bytes(root, &item_id, b));
 
             let mut model_file = None;
             if let Some(mr) = model_ref {
-                if let Some(tree) = resolve_json_model_tree(vfs, &ns, mr) {
+                if let Some(tree) = resolve_json_model_tree(vfs, &ns, &mr) {
                     if icon_file.is_none() {
                         if let Some(b64) = tree.get("flatBytesB64").and_then(|v| v.as_str()) {
                             if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(b64) {
@@ -580,9 +765,16 @@ fn scan_itemsadder(
             }
 
             if icon_file.is_none() && model_file.is_none() {
-                // Best-effort match by key name inside namespace textures
-                if let Some(b) = find_texture_png(vfs, &ns, key) {
-                    icon_file = save_icon_bytes(root, &item_id, b);
+                for probe in [
+                    key.to_string(),
+                    format!("item/{}", key),
+                    format!("armor/{}", key),
+                    format!("icons/{}", key),
+                ] {
+                    if let Some(b) = find_texture_png(vfs, &ns, &probe) {
+                        icon_file = save_icon_bytes(root, &item_id, b);
+                        if icon_file.is_some() { break; }
+                    }
                 }
             }
 
@@ -1032,6 +1224,25 @@ pub async fn custom_assets_pick_and_import(
 }
 
 #[tauri::command]
+pub fn custom_assets_clear_model_icons(state: State<CustomAssetsState>) -> Result<Value, String> {
+    let root = state.root();
+    let mut cat = read_catalog(&root);
+    let mut cleared = 0usize;
+    for it in cat.items.iter_mut() {
+        if it.has_model {
+            if let Some(ic) = it.icon_file.take() {
+                let _ = fs::remove_file(root.join("icons").join(ic));
+                cleared += 1;
+            }
+        }
+    }
+    if cleared > 0 {
+        write_catalog(&root, &cat)?;
+    }
+    Ok(json!({ "ok": true, "cleared": cleared }))
+}
+
+#[tauri::command]
 pub fn custom_assets_remove_source(
     state: State<CustomAssetsState>,
     source_id: String,
@@ -1172,6 +1383,102 @@ mod tests {
         let ce_item = cat.items.iter().find(|i| i.id == "craftengine:my_pack:frost_blade").unwrap();
         assert_eq!(ce_item.name, "Frost Blade");
         assert!(ce_item.icon_file.is_some());
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn crops_mcmeta_strip_preserves_outliner_and_handles_ia_item_defs() {
+        let tmp = std::env::temp_dir().join(format!("kz_3d_upgrade_test_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        let cache = tmp.join("cache");
+
+        // 1. Animated 16x96 strip + .mcmeta + 1.21.4 items/*.json + resource.textures list
+        let ia_dir = tmp.join("ItemsAdder");
+        fs::create_dir_all(ia_dir.join("contents/wings/configs")).unwrap();
+        fs::create_dir_all(ia_dir.join("contents/wings/resourcepack/assets/wings/items")).unwrap();
+        fs::create_dir_all(ia_dir.join("contents/wings/resourcepack/assets/wings/models/item")).unwrap();
+        fs::create_dir_all(ia_dir.join("contents/wings/resourcepack/assets/wings/textures/item")).unwrap();
+        fs::write(
+            ia_dir.join("contents/wings/configs/items.yml"),
+            "info:\n  namespace: wings\nitems:\n  seraph_wing:\n    display_name: '&6Seraph Wing'\n  ruby_helm:\n    display_name: '&cRuby Helm'\n    resource:\n      textures:\n        - item/ruby_helm\n",
+        )
+        .unwrap();
+        fs::write(
+            ia_dir.join("contents/wings/resourcepack/assets/wings/items/seraph_wing.json"),
+            json!({ "model": { "type": "minecraft:model", "model": "wings:item/seraph_wing" } }).to_string(),
+        )
+        .unwrap();
+        fs::write(
+            ia_dir.join("contents/wings/resourcepack/assets/wings/models/item/seraph_wing.json"),
+            json!({
+                "textures": { "0": "wings:item/seraph_strip" },
+                "display": { "gui": { "rotation": [15, -35, 0], "scale": [0.7, 0.7, 0.7] } },
+                "elements": [{ "from": [0, 0, 7], "to": [16, 16, 8], "faces": { "north": { "uv": [0, 0, 16, 16], "texture": "#0" } } }]
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let strip = image::RgbaImage::from_pixel(16, 96, image::Rgba([40, 200, 255, 255]));
+        let mut strip_buf = Vec::new();
+        image::DynamicImage::ImageRgba8(strip)
+            .write_to(&mut Cursor::new(&mut strip_buf), image::ImageFormat::Png)
+            .unwrap();
+        fs::write(
+            ia_dir.join("contents/wings/resourcepack/assets/wings/textures/item/seraph_strip.png"),
+            strip_buf,
+        )
+        .unwrap();
+        fs::write(
+            ia_dir.join("contents/wings/resourcepack/assets/wings/textures/item/seraph_strip.png.mcmeta"),
+            "{\"animation\":{\"frametime\":2}}",
+        )
+        .unwrap();
+        fs::write(
+            ia_dir.join("contents/wings/resourcepack/assets/wings/textures/item/ruby_helm.png"),
+            tiny_png(),
+        )
+        .unwrap();
+
+        let ia_res = scan_path(&cache, &ia_dir, None).unwrap();
+        assert_eq!(ia_res["count"], 2);
+        let cat = read_catalog(&cache);
+        let wing = cat.items.iter().find(|i| i.id == "ia:wings:seraph_wing").unwrap();
+        assert!(wing.has_model);
+        let helm = cat.items.iter().find(|i| i.id == "ia:wings:ruby_helm").unwrap();
+        assert!(helm.icon_file.is_some());
+
+        let wing_raw = fs::read_to_string(cache.join("models").join(wing.model_file.as_ref().unwrap())).unwrap();
+        let wing_json: Value = serde_json::from_str(&wing_raw).unwrap();
+        let tex_b64 = wing_json["textures"]["0"].as_str().unwrap().split_once(',').unwrap().1;
+        let tex_bytes = base64::engine::general_purpose::STANDARD.decode(tex_b64).unwrap();
+        let decoded = image::load_from_memory(&tex_bytes).unwrap();
+        assert_eq!((decoded.width(), decoded.height()), (16, 16));
+
+        // 2. Blockbench .bbmodel outliner & groups preservation
+        let bb_dir = tmp.join("ModelEngine/blueprints");
+        fs::create_dir_all(&bb_dir).unwrap();
+        fs::write(
+            bb_dir.join("wraith.bbmodel"),
+            json!({
+                "name": "Wraith",
+                "resolution": { "width": 64, "height": 64 },
+                "elements": [{ "uuid": "c1", "name": "body", "from": [-4, 0, -4], "to": [4, 16, 4], "faces": {} }],
+                "outliner": [{ "name": "root", "uuid": "g1", "origin": [0, 8, 0], "rotation": [10, 20, 0], "children": ["c1"] }],
+                "groups": [{ "name": "root", "uuid": "g1", "origin": [0, 8, 0], "rotation": [10, 20, 0] }],
+                "textures": []
+            })
+            .to_string(),
+        )
+        .unwrap();
+        scan_path(&cache, &bb_dir, None).unwrap();
+        let cat2 = read_catalog(&cache);
+        let wraith = cat2.items.iter().find(|i| i.id == "meg:wraith").unwrap();
+        let wr_raw = fs::read_to_string(cache.join("models").join(wraith.model_file.as_ref().unwrap())).unwrap();
+        let wr_json: Value = serde_json::from_str(&wr_raw).unwrap();
+        assert!(wr_json["outliner"].is_array() && wr_json["outliner"].as_array().unwrap().len() == 1);
+        assert!(wr_json["groups"].is_array());
 
         let _ = fs::remove_dir_all(&tmp);
     }
